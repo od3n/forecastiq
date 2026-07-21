@@ -1,0 +1,2 @@
+- Each deliverable file uses a two-digit numeric prefix (`01-`, `02-`, …) to enforce a fixed reading order across the Phase 0 artifact set.
+- Key phase outcomes are presented as numbered tables (Decisions D1–D10, Risks R-01 to R-08, Questions Q1–Q10, Assumptions A1–A5) with consistent columns for rationale/impact/mitigation and ownership.

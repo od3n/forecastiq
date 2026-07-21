@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: ""
+title: ForecastIQ Phase 0 — Business Analysis & Requirements
+scope:
+    - docs/phase-0-business-analysis/
+source_files: []
+depends_on: []
+related_to: []

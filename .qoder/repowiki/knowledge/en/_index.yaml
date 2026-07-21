@@ -1,0 +1,16 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
+nodes_managed: true
+exported_at: "2026-07-21T14:47:23Z"
+modules:
+    "":
+        dir_name: ForecastIQ Phase 0 — Business Analysis & Requirements
+        title: ForecastIQ Phase 0 — Business Analysis & Requirements
+        scope:
+            - docs/phase-0-business-analysis/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
