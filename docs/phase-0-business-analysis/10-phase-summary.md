@@ -1,5 +1,10 @@
 # ForecastIQ — Phase 0 Summary: Business Analysis
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** Retained for the historical record
+> only. Authoritative: `docs/reviews/02-phase-0-amendment-summary.md` and
+> `docs/reviews/01-architecture-review-response.md`. All open questions Q1–Q10 are
+> resolved there.
+
 **Phase**: 0 — Business Analysis  
 **Status**: Complete  
 **Date**: July 2026  

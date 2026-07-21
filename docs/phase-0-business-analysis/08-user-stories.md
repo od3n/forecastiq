@@ -1,5 +1,10 @@
 # ForecastIQ — User Stories
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** Retained for the historical record
+> only. Authoritative: `docs/requirements/03-user-stories.md` and
+> `docs/planning/02-revised-mvp-estimate.md`. See
+> `docs/reviews/02-phase-0-amendment-summary.md`.
+
 **Version**: 1.0  
 **Status**: Draft  
 

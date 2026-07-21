@@ -1,5 +1,10 @@
 # ForecastIQ — Product Vision
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** This draft is retained for the
+> historical record only. The authoritative document is
+> `docs/product/01-product-vision.md`. See
+> `docs/reviews/02-phase-0-amendment-summary.md` for the mapping and rationale.
+
 ## Tagline
 
 > Measure. Compare. Improve weather forecast accuracy.

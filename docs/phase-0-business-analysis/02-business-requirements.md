@@ -1,5 +1,10 @@
 # ForecastIQ — Business Requirements Document (BRD)
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** Retained for the historical record
+> only. Authoritative: `docs/product/02-business-requirements.md`,
+> `docs/product/05-business-rules.md`, `docs/risk/01-risk-register.md`. See
+> `docs/reviews/02-phase-0-amendment-summary.md`.
+
 **Version**: 1.0  
 **Status**: Draft  
 **Author**: Cross-functional Engineering Team  

@@ -1,5 +1,9 @@
 # ForecastIQ — Use Case Diagram & Specifications
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** Retained for the historical record
+> only. Authoritative: `docs/product/04-personas-and-user-journeys.md`. See
+> `docs/reviews/02-phase-0-amendment-summary.md`.
+
 **Version**: 1.0  
 **Status**: Draft  
 

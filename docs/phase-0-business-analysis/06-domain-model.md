@@ -1,5 +1,10 @@
 # ForecastIQ — Domain Model
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** Retained for the historical record
+> only. Authoritative: `docs/domain/01-domain-model.md`,
+> `docs/domain/02-data-lineage.md`, `docs/domain/03-metric-methodology.md`. See
+> `docs/reviews/02-phase-0-amendment-summary.md`.
+
 **Version**: 1.0  
 **Status**: Draft  
 

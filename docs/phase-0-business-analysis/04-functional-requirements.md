@@ -1,5 +1,10 @@
 # ForecastIQ — Functional Requirements
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** Retained for the historical record
+> only. Authoritative: `docs/requirements/01-functional-requirements.md` and
+> `docs/api/00-api-requirements.md`. See
+> `docs/reviews/02-phase-0-amendment-summary.md`.
+
 **Version**: 1.0  
 **Status**: Draft  
 

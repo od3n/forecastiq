@@ -1,5 +1,9 @@
 # ForecastIQ — Acceptance Criteria (Detailed)
 
+> **⚠️ SUPERSEDED (2026-07-22, Phase 0 Amendment).** Retained for the historical record
+> only. Authoritative: `docs/requirements/04-acceptance-criteria.md` (AC-3.2 corrected;
+> "hit rate" removed). See `docs/reviews/02-phase-0-amendment-summary.md`.
+
 **Version**: 1.0  
 **Status**: Draft  
 
