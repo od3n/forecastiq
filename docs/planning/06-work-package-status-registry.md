@@ -15,7 +15,7 @@ State model: Not Started → Prototype Exists → Partially Implemented → Impl
 | 01 | Repository + dev env | Accepted (bootstrap) | 2026-07-22 | Repository Bootstrap final report; `make dev-up`, CI green |
 | 02 | DB foundation | Accepted (bootstrap) | 2026-07-22 | Migrations 20260801000001..05; integration suite |
 | 03 | Identity + workspace | Not Started | 2026-07-22 | Audit recorder seam exists (used by WP-04); JWKS/API keys pending |
-| 04 | Location management | Ready for confirmatory re-review | 2026-07-23 | DRB-WP04-001..005 verified **RESOLVED** at re-review (advisory-lock dedup proven vs real PostgreSQL; fp-tolerant boundary; mandatory override reason; restricted status lifecycle; doc corrections). RR-001/RR-002 resolved and **green in CI**. Two deferred mandatory CI gates now **RESOLVED** (CI-WP04-001 backend-checks, CI-WP04-002 security): **all six mandatory CI jobs green on `b277fba`** (run 29952013546). Awaiting board confirmatory re-review; **not yet Accepted**. Report: `docs/reviews/work-packages/WP-04-delivery-re-review.md` (§A, §B). |
+| 04 | Location management | **Accepted** | 2026-07-23 | DRB-WP04-001..005 verified **RESOLVED** at re-review (advisory-lock dedup proven vs real PostgreSQL; fp-tolerant boundary; mandatory override reason; restricted status lifecycle; doc corrections). RR-001/RR-002 resolved and **green in CI**. Two deferred mandatory CI gates **RESOLVED** (CI-WP04-001 backend-checks, CI-WP04-002 security). **Confirmatory re-review 2026-07-23: ACCEPTED** — all six mandatory CI jobs green on `15b8faa` (run 29952834878); commit identity, remote SHA, and CI headSha independently verified; no regression. Report: `docs/reviews/work-packages/WP-04-delivery-re-review.md` (§A, §B). |
 | 05 | Adapter framework | Prototype Exists | 2026-07-22 | First-slice collection pipeline + Open-Meteo adapter; hardening pending |
 | 06 | First provider (Open-Meteo) | Prototype Exists | 2026-07-22 | Adapter + fixtures exist; full contract matrix pending |
 | 07 | Second provider (OpenWeather) | Not Started | 2026-07-22 | |
@@ -79,6 +79,12 @@ Status: **READY FOR CONFIRMATORY RE-REVIEW** (report addendum: `docs/reviews/wor
 - **CI evidence.** Run `29952013546` (`pull_request`, headSha `b277fba`): **all six mandatory jobs green** (`backend-checks`, `security`, `backend-integration`, `migrations`, `api-contract`, `image`). Prior baseline `701a0ed` run `29946041618` had `backend-checks`+`security` red. <https://github.com/od3n/forecastiq/actions/runs/29952013546>
 
 Next action: re-convene the Delivery Review Board for the short confirmatory re-review. **Only the board may mark WP-04 Accepted. WP-05 must not be selected until WP-04 is Accepted.**
+
+## WP-04 Delivery Review Board confirmatory re-review outcome (2026-07-23)
+
+Decision: **ACCEPTED** (report: `docs/reviews/work-packages/WP-04-delivery-re-review.md`). The board independently verified: commit `15b8faa` (local HEAD == `git ls-remote origin` == CI headSha); CI run **29952834878** (`pull_request`, headSha `15b8faa`) **completed success** with all six mandatory jobs green (`backend-checks`, `api-contract`, `image`, `backend-integration`, `migrations`, `security`) — no required job skipped or cancelled (all jobs unconditional/blocking in `ci.yml`). DRB-WP04-001..005 remain **RESOLVED** (remediation code artifacts present in-tree; no regression); RR-001/RR-002 remain **RESOLVED**; TC-04 **SATISFIED** (branch pushed, remote SHA verified, CI evidence, commit identity confirmed). `15b8faa` is documentation-only over the code-fix tip `b277fba`, so the CI surface is unchanged. Documentation is consistent; local build + catalog unit tests pass. No new Critical/High issue. **WP-04 dependency contracts (LocationManager, active-location queries) are stable and hardened — WP-05 may now depend on WP-04.**
+
+**Package transition:** READY FOR CONFIRMATORY RE-REVIEW → **Accepted**. WP-05 may be selected for implementation (not started by the board).
 
 ## Deferred items recorded during WP-04
 
