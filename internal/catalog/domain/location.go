@@ -13,6 +13,14 @@ import (
 // duplicates unless the caller supplies the override flag.
 const DedupThresholdDegrees = 0.05
 
+// dedupTolerance is the IEEE-754 guard band applied to the threshold comparison.
+// Haversine computation can round a mathematically exact 0.05° separation to
+// 0.04999999999999716° (DRB-WP04-002). By subtracting this epsilon before
+// comparing, pairs at exact 0.05° separation are always permitted regardless of
+// coordinate representation. 1e-9 degrees ≈ 0.0001 mm at the equator — well
+// below any operationally meaningful precision.
+const dedupTolerance = 1e-9
+
 // Location is the catalog aggregate root for a forecast/observation site.
 // Coordinates, country, timezone, and workspace are immutable after creation
 // (a moved location is a new location — preserves historical data integrity).
@@ -70,9 +78,11 @@ func isAlpha(s string) bool {
 }
 
 // IsNearDuplicate reports whether distanceDegrees falls inside the BR-LOC-01
-// boundary (strictly less than the threshold; exactly 0.05° is permitted).
+// boundary. A tolerance of 1e-9 degrees is applied so that a mathematically
+// exact 0.05° separation is always permitted regardless of IEEE-754 rounding
+// (DRB-WP04-002). Effectively: duplicate iff dist < 0.05 - 1e-9.
 func IsNearDuplicate(distanceDegrees float64) bool {
-	return distanceDegrees < DedupThresholdDegrees
+	return distanceDegrees < DedupThresholdDegrees-dedupTolerance
 }
 
 // HaversineDegrees returns the great-circle central angle between two

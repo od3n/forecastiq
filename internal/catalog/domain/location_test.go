@@ -58,3 +58,38 @@ func TestIsNearDuplicate_Boundary(t *testing.T) {
 	assert.False(t, domain.IsNearDuplicate(domain.DedupThresholdDegrees))
 	assert.False(t, domain.IsNearDuplicate(0.06))
 }
+
+// TestIsNearDuplicate_BoundaryTable verifies the documented boundary semantics
+// ("exactly 0.05° permitted") hold for coordinate pairs at exact 0.05°
+// separation regardless of representation luck (DRB-WP04-002). Covers equator,
+// mid-latitude, high latitude, and both meridional and zonal offsets.
+func TestIsNearDuplicate_BoundaryTable(t *testing.T) {
+	cases := []struct {
+		name                   string
+		lat1, lon1, lat2, lon2 float64
+		expectDuplicate        bool
+	}{
+		// Meridional (latitude) offsets — exact 0.05° separation → permitted.
+		{"equator meridional exact", 0, 0, 0.05, 0, false},
+		{"mid-lat meridional exact", 1.4927, 103.7414, 1.5427, 103.7414, false},
+		{"high-lat meridional exact", 60.0, 10.0, 60.05, 10.0, false},
+		// The exact pair from DRB-WP04-002 that was incorrectly rejected live.
+		{"DRB pair 20.001→20.051", 20.001, 60.0, 20.051, 60.0, false},
+		// Zonal (longitude) offsets at equator — exact 0.05° separation → permitted.
+		{"equator zonal exact", 0, 0, 0, 0.05, false},
+		// 0.049° separation → rejected (inside boundary).
+		{"equator meridional 0.049", 0, 0, 0.049, 0, true},
+		{"mid-lat meridional 0.049", 1.4927, 103.7414, 1.5417, 103.7414, true},
+		{"DRB pair 20.001→20.050", 20.001, 60.0, 20.050, 60.0, true},
+		// 0.051° separation → permitted (outside boundary).
+		{"equator meridional 0.051", 0, 0, 0.051, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dist := domain.HaversineDegrees(tc.lat1, tc.lon1, tc.lat2, tc.lon2)
+			got := domain.IsNearDuplicate(dist)
+			assert.Equal(t, tc.expectDuplicate, got,
+				"dist=%.15f, expected duplicate=%v", dist, tc.expectDuplicate)
+		})
+	}
+}
