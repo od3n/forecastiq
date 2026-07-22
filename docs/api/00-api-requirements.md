@@ -73,7 +73,7 @@ Every ranking/accuracy payload includes:
 | GET | `/locations` | public | filters: `bbox`, `active` |
 | POST | `/locations` | admin | Idempotency-Key; dedup check BR-LOC-01 → 409 `duplicate` with existing location reference |
 | GET | `/locations/{id}` | public | ETag |
-| PUT | `/locations/{id}` | admin | mutable fields only (name, timezone, status) |
+| PUT | `/locations/{id}` | admin | mutable fields only (name; coordinates, country_code, and timezone are immutable after creation per domain architecture §2.3) |
 | PATCH | `/locations/{id}/status` | admin | enable/disable (soft) |
 
 ### 4.2 Data
