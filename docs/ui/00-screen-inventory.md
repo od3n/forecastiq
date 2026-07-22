@@ -1,8 +1,16 @@
 # ForecastIQ — Screen Inventory
 
-**Version**: 1.0 (Phase 0 Amendment)
-**Status**: Authoritative — input for the UI design phase
+**Version**: 1.1 (Phase 0 Amendment + UI ↔ Backend Reconciliation)
+**Status**: Authoritative — input for the UI design phase; amended by the Reconciliation Board
 **Resolves**: UX completeness amendment (all mandated states), ARB §15 UI gaps
+**Reconciliation (v1.1)**: Confirmed as the authoritative screen inventory by the UI ↔ Backend
+Reconciliation Board (`docs/reviews/04-ui-backend-reconciliation-report.md`). Amendments:
+S-01 gains a provenance-labeled observation context line (C-01/C-04 — context, not a weather
+display); S-03/S-05 API mappings corrected (§4); Alerts/Reports/Live Weather confirmed
+absent from MVP navigation (C-05). `docs/ui/03-operational-dashboard-design.md` is
+reclassified as design exploration; where it conflicts with this document, this document
+governs. Binding companion documents: `docs/ui/04-approved-information-architecture.md`,
+`05-screen-specifications.md`, `06-ui-state-contracts.md`, `08-ui-backend-traceability.md`.
 
 This is a **specification, not a design**. No high-fidelity UI is produced in Phase 0.
 A design agent can work from this document without inventing business rules: every
@@ -71,11 +79,11 @@ Additional mandated behaviors:
 
 | Screen | Primary endpoints |
 |--------|-------------------|
-| S-01 | `/rankings`, `/locations`, `/admin/health`-derived freshness (public subset) |
+| S-01 | `/rankings` (incl. `observation_context` block), `/locations` |
 | S-02 | `/accuracy/summary`, `/rankings`, `/observations` (provenance) |
-| S-03 | `/accuracy`, `/forecast-collections` (public health subset) |
+| S-03 | `/accuracy`, `/accuracy/summary?provider_id=` (collection window + grid; C-08), `/rankings` |
 | S-04 | `/accuracy` (aggregated) |
-| S-05 | `/forecasts`, `/observations` |
+| S-05 | `/forecast-comparison` (public, bounded — C-19; raw `/forecasts`+`/observations` remain user+) |
 | S-06 | `/rankings/methodology` + static content |
 | S-09 | `/me`, `/api-keys`, `/me/export`, `/me` (DELETE) |
 | S-10..S-14 | `/admin/*` |
