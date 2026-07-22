@@ -6,12 +6,17 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/url"
+	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -52,9 +57,24 @@ func testConfig(connStr string) config.Config {
 	}
 }
 
-// startPostgres launches a PostgreSQL 16 container and returns its URL.
-func startPostgres(ctx context.Context, t *testing.T) string {
-	t.Helper()
+// adminConnStr is the connection string for the single, package-wide PostgreSQL
+// container's default database. It is used only to CREATE/DROP the per-test
+// databases carved out of the shared container; tests never run against it
+// directly. Populated once by TestMain.
+var adminConnStr string
+
+// dbCounter yields a process-unique suffix for per-test database names.
+var dbCounter atomic.Int64
+
+// TestMain owns the lifecycle of a single PostgreSQL 16 container shared by the
+// whole integration package. Previously every test started and terminated its
+// own container (~28 per run); under constrained CI the asynchronous teardown
+// of one container overlapped the startup of the next, causing nondeterministic
+// readiness timeouts and connection resets in unrelated tests (DRB-WP04-RR-002).
+// A single container removes that churn while per-test databases (see
+// startPostgres) preserve full isolation.
+func TestMain(m *testing.M) {
+	ctx := context.Background()
 	container, err := postgres.RunContainer(ctx,
 		testcontainers.WithImage("postgres:16-alpine"),
 		postgres.WithDatabase("forecastiq"),
@@ -65,12 +85,61 @@ func startPostgres(ctx context.Context, t *testing.T) string {
 				WithOccurrence(2).
 				WithStartupTimeout(60*time.Second)),
 	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: start shared postgres: %v\n", err)
+		os.Exit(1)
+	}
 
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	adminConnStr, err = container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		_ = container.Terminate(context.Background())
+		fmt.Fprintf(os.Stderr, "integration: connection string: %v\n", err)
+		os.Exit(1)
+	}
+
+	code := m.Run()
+
+	// Terminate once, synchronously, after all tests complete.
+	_ = container.Terminate(context.Background())
+	os.Exit(code)
+}
+
+// startPostgres provisions a fresh, uniquely-named database inside the shared
+// container and returns its connection string. Each test therefore gets a
+// pristine, fully-isolated database (migrated and seeded independently) without
+// the cost and teardown races of a per-test container. The database is dropped
+// on test cleanup with FORCE so any lingering connections cannot block removal.
+func startPostgres(ctx context.Context, t *testing.T) string {
+	t.Helper()
+	dbName := fmt.Sprintf("it_%d_%d", os.Getpid(), dbCounter.Add(1))
+
+	admin, err := pgx.Connect(ctx, adminConnStr)
 	require.NoError(t, err)
-	return connStr
+	_, err = admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{dbName}.Sanitize())
+	require.NoError(t, err)
+	require.NoError(t, admin.Close(ctx))
+
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		c, err := pgx.Connect(cleanupCtx, adminConnStr)
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.Close(cleanupCtx) }()
+		_, _ = c.Exec(cleanupCtx,
+			"DROP DATABASE IF EXISTS "+pgx.Identifier{dbName}.Sanitize()+" WITH (FORCE)")
+	})
+
+	return connStrForDB(t, adminConnStr, dbName)
+}
+
+// connStrForDB rewrites the database path of a base connection string.
+func connStrForDB(t *testing.T, base, dbName string) string {
+	t.Helper()
+	u, err := url.Parse(base)
+	require.NoError(t, err)
+	u.Path = "/" + dbName
+	return u.String()
 }
 
 // migrate applies all migrations to the database at connStr.
