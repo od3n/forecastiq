@@ -65,7 +65,12 @@ func TestAPI_DuplicateOverrideWithReason(t *testing.T) {
 		`SELECT details FROM audit_events WHERE action = 'location.create'
 		 AND details->>'name' = 'JB Harbour'`).Scan(&details)
 	require.NoError(t, err)
-	assert.Equal(t, "true", details["allow_near_duplicate"])
+	// The audit payload stores allow_near_duplicate as a JSON boolean, so it
+	// decodes into a Go bool — not the string "true". Assert on the type to
+	// guard against a missing field, a false value, or a stringified flag.
+	allow, ok := details["allow_near_duplicate"].(bool)
+	require.Truef(t, ok, "allow_near_duplicate must be a JSON boolean, got %T", details["allow_near_duplicate"])
+	assert.True(t, allow, "override flag must be recorded as true")
 	assert.Equal(t, "distinct harbour monitoring site", details["override_reason"])
 }
 
