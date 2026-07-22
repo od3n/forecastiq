@@ -148,7 +148,8 @@ func (h *Handlers) UpdateLocation(c *gin.Context) {
 // SetLocationStatus godoc
 // @Summary      Enable or disable a location (admin)
 // @Description  Soft status change (BR-LOC-03): disabling stops future
-// @Description  collection; historical data remains queryable.
+// @Description  collection; historical data remains queryable. Only active
+// @Description  and disabled are settable; archived is reserved.
 // @Tags         catalog
 // @Accept       json
 // @Produce      json
@@ -157,6 +158,7 @@ func (h *Handlers) UpdateLocation(c *gin.Context) {
 // @Success      200 {object} respond.Envelope
 // @Failure      401 {object} respond.Problem
 // @Failure      404 {object} respond.Problem
+// @Failure      409 {object} respond.Problem
 // @Failure      422 {object} respond.Problem
 // @Router       /locations/{id}/status [patch]
 func (h *Handlers) SetLocationStatus(c *gin.Context) {

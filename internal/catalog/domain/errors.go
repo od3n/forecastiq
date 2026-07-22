@@ -79,3 +79,16 @@ type NameConflictError struct {
 func (e *NameConflictError) Error() string {
 	return fmt.Sprintf("an active location named %q already exists in this workspace", e.Name)
 }
+
+// StatusTransitionError signals an invalid or no-op status transition
+// (409 conflict). The approved lifecycle is active ↔ disabled; archived is
+// reserved and same-state transitions are rejected (DRB-WP04-004).
+type StatusTransitionError struct {
+	From Status
+	To   Status
+}
+
+// Error implements error.
+func (e *StatusTransitionError) Error() string {
+	return fmt.Sprintf("invalid status transition %s → %s", e.From, e.To)
+}

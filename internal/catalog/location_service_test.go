@@ -51,6 +51,8 @@ func newFakeLocationRepo() *fakeLocationRepo {
 	return &fakeLocationRepo{rows: map[uuid.UUID]*domain.Location{}}
 }
 
+func (r *fakeLocationRepo) AcquireDedupLock(_ context.Context, _ dbtx.DBTX) error { return nil }
+
 func (r *fakeLocationRepo) Insert(_ context.Context, _ dbtx.DBTX, l *domain.Location) error {
 	cp := *l
 	r.rows[l.ID] = &cp
@@ -235,6 +237,48 @@ func TestCreateLocation_OverrideWithReason(t *testing.T) {
 	assert.Equal(t, loc.ID, *rec.events[1].ResourceID)
 }
 
+// DRB-WP04-003: override reason is mandatory when allow_near_duplicate is set.
+func TestCreateLocation_OverrideWithoutReason_Rejected(t *testing.T) {
+	repo := newFakeLocationRepo()
+	svc := newService(repo, &fakeAudit{})
+
+	_, err := svc.CreateLocation(context.Background(), jbInput())
+	require.NoError(t, err)
+
+	near := jbInput()
+	near.Name = "JB Copy"
+	near.Latitude = 1.5027
+	near.AllowNearDuplicate = true
+	near.OverrideReason = "" // missing
+
+	_, err = svc.CreateLocation(context.Background(), near)
+	require.Error(t, err)
+	var ve *domain.ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Error(), "override_reason")
+	assert.Len(t, repo.rows, 1, "must not persist")
+}
+
+func TestCreateLocation_OverrideWithWhitespaceReason_Rejected(t *testing.T) {
+	repo := newFakeLocationRepo()
+	svc := newService(repo, &fakeAudit{})
+
+	_, err := svc.CreateLocation(context.Background(), jbInput())
+	require.NoError(t, err)
+
+	near := jbInput()
+	near.Name = "JB Copy"
+	near.Latitude = 1.5027
+	near.AllowNearDuplicate = true
+	near.OverrideReason = "   " // whitespace only
+
+	_, err = svc.CreateLocation(context.Background(), near)
+	require.Error(t, err)
+	var ve *domain.ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Error(), "override_reason")
+}
+
 func TestCreateLocation_DisabledLocationsNotDeduped(t *testing.T) {
 	repo := newFakeLocationRepo()
 	svc := newService(repo, &fakeAudit{})
@@ -327,6 +371,68 @@ func TestSetLocationStatus_Invalid(t *testing.T) {
 	require.Error(t, err)
 	var ve *domain.ValidationError
 	assert.ErrorAs(t, err, &ve)
+}
+
+// DRB-WP04-004: archived is reserved and must not be settable via the API.
+func TestSetLocationStatus_ArchivedRejected(t *testing.T) {
+	repo := newFakeLocationRepo()
+	svc := newService(repo, &fakeAudit{})
+
+	created, err := svc.CreateLocation(context.Background(), jbInput())
+	require.NoError(t, err)
+
+	_, err = svc.SetLocationStatus(context.Background(), created.ID, domain.StatusArchived, catalog.Actor{Name: "op"})
+	require.Error(t, err)
+	var ve *domain.ValidationError
+	require.ErrorAs(t, err, &ve)
+	assert.Contains(t, ve.Error(), "status")
+}
+
+// DRB-WP04-004: no-op transitions (same → same) are rejected with 409.
+func TestSetLocationStatus_NoOpRejected(t *testing.T) {
+	repo := newFakeLocationRepo()
+	rec := &fakeAudit{}
+	svc := newService(repo, rec)
+
+	created, err := svc.CreateLocation(context.Background(), jbInput())
+	require.NoError(t, err)
+
+	// active → active is a no-op.
+	_, err = svc.SetLocationStatus(context.Background(), created.ID, domain.StatusActive, catalog.Actor{Name: "op"})
+	require.Error(t, err)
+	var transErr *domain.StatusTransitionError
+	require.ErrorAs(t, err, &transErr)
+	assert.Equal(t, domain.StatusActive, transErr.From)
+	assert.Equal(t, domain.StatusActive, transErr.To)
+
+	// disabled → disabled is a no-op.
+	_, err = svc.SetLocationStatus(context.Background(), created.ID, domain.StatusDisabled, catalog.Actor{Name: "op"})
+	require.NoError(t, err)
+	_, err = svc.SetLocationStatus(context.Background(), created.ID, domain.StatusDisabled, catalog.Actor{Name: "op"})
+	require.Error(t, err)
+	require.ErrorAs(t, err, &transErr)
+
+	// No extra audit events for rejected transitions.
+	assert.Len(t, rec.events, 2, "create + one valid disable; no-ops must not audit")
+}
+
+// DRB-WP04-004: valid transitions active→disabled and disabled→active succeed.
+func TestSetLocationStatus_ValidTransitions(t *testing.T) {
+	repo := newFakeLocationRepo()
+	svc := newService(repo, &fakeAudit{})
+
+	created, err := svc.CreateLocation(context.Background(), jbInput())
+	require.NoError(t, err)
+
+	// active → disabled.
+	updated, err := svc.SetLocationStatus(context.Background(), created.ID, domain.StatusDisabled, catalog.Actor{Name: "op"})
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusDisabled, updated.Status)
+
+	// disabled → active.
+	updated, err = svc.SetLocationStatus(context.Background(), created.ID, domain.StatusActive, catalog.Actor{Name: "op"})
+	require.NoError(t, err)
+	assert.Equal(t, domain.StatusActive, updated.Status)
 }
 
 func TestSetLocationStatus_NotFound(t *testing.T) {

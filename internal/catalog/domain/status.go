@@ -22,5 +22,16 @@ func (s Status) Valid() bool {
 	return false
 }
 
+// Settable reports whether the status can be set via the public API.
+// The approved lifecycle is active ↔ disabled (enable/disable per API doc and
+// UI spec S-12); archived is reserved for a future package (DRB-WP04-004).
+func (s Status) Settable() bool {
+	switch s {
+	case StatusActive, StatusDisabled:
+		return true
+	}
+	return false
+}
+
 // Active reports whether the entity participates in operations.
 func (s Status) Active() bool { return s == StatusActive }

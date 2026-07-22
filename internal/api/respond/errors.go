@@ -115,6 +115,16 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		return p.Status, p
 	}
 
+	var transErr *catalogdomain.StatusTransitionError
+	if errors.As(err, &transErr) {
+		p.Type = errorBase + "conflict"
+		p.Title = "Invalid Status Transition"
+		p.Status = http.StatusConflict
+		p.Detail = transErr.Error()
+		p.Retryable = false
+		return p.Status, p
+	}
+
 	var circuitErr *collectiondomain.CircuitOpenError
 	if errors.As(err, &circuitErr) {
 		p.Type = errorBase + "conflict"

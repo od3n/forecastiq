@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -53,8 +54,21 @@ func (s *LocationService) CreateLocation(ctx context.Context, in CreateLocationI
 	if err := loc.ValidateCreation(); err != nil {
 		return nil, err
 	}
+	// DRB-WP04-003: override reason is mandatory when the dedup bypass is used,
+	// so every near-duplicate acceptance in the audit trail is accountable.
+	if in.AllowNearDuplicate && strings.TrimSpace(in.OverrideReason) == "" {
+		return nil, &domain.ValidationError{Fields: []domain.FieldError{
+			{Field: "override_reason", Message: "required when allow_near_duplicate is true"},
+		}}
+	}
 
 	err := s.tx.Run(ctx, func(ctx context.Context, tx dbtx.DBTX) error {
+		// Serialize the dedup window: the advisory lock prevents concurrent
+		// creates from both passing the proximity check before either commits
+		// (DRB-WP04-001). Released automatically on commit/rollback.
+		if err := s.repo.AcquireDedupLock(ctx, tx); err != nil {
+			return err
+		}
 		active, err := s.repo.ListActive(ctx, tx)
 		if err != nil {
 			return err
@@ -179,11 +193,12 @@ func (s *LocationService) UpdateLocation(ctx context.Context, id uuid.UUID, in U
 }
 
 // SetLocationStatus enables/disables a location and audits. Disabling stops
-// future collection; historical data remains (BR-LOC-03).
+// future collection; historical data remains (BR-LOC-03). Only active ↔
+// disabled transitions are permitted; archived is reserved (DRB-WP04-004).
 func (s *LocationService) SetLocationStatus(ctx context.Context, id uuid.UUID, status domain.Status, actor Actor) (*domain.Location, error) {
-	if !status.Valid() {
+	if !status.Settable() {
 		return nil, &domain.ValidationError{Fields: []domain.FieldError{
-			{Field: "status", Message: "must be one of active|disabled|archived"},
+			{Field: "status", Message: "must be one of active|disabled"},
 		}}
 	}
 	var updated *domain.Location
@@ -191,6 +206,10 @@ func (s *LocationService) SetLocationStatus(ctx context.Context, id uuid.UUID, s
 		loc, err := s.repo.GetByID(ctx, tx, id)
 		if err != nil {
 			return err
+		}
+		// Reject no-op transitions (DRB-WP04-004): they pollute the audit trail.
+		if loc.Status == status {
+			return &domain.StatusTransitionError{From: loc.Status, To: status}
 		}
 		if err := s.repo.UpdateStatus(ctx, tx, id, status); err != nil {
 			return err

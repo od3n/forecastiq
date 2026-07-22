@@ -25,6 +25,22 @@ type LocationRepository struct{}
 // NewLocationRepository returns a LocationRepository.
 func NewLocationRepository() *LocationRepository { return &LocationRepository{} }
 
+// dedupLockKey is the fixed advisory-lock key serializing the BR-LOC-01
+// proximity-check window. The value is arbitrary but stable; it scopes to the
+// transaction (pg_advisory_xact_lock) so it is released on commit/rollback.
+const dedupLockKey int64 = 0x4C4F43_44454450 // "LOC_DEDP" in hex ASCII
+
+// AcquireDedupLock implements ports.LocationRepository. It takes a
+// transaction-scoped advisory lock so concurrent location creates are
+// serialized through the haversine dedup check (DRB-WP04-001).
+func (r *LocationRepository) AcquireDedupLock(ctx context.Context, tx dbtx.DBTX) error {
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, dedupLockKey)
+	if err != nil {
+		return fmt.Errorf("acquire dedup lock: %w", err)
+	}
+	return nil
+}
+
 const locationColumns = `id, workspace_id, name, latitude, longitude, country_code, timezone, status, created_at, updated_at`
 
 func scanLocation(row pgx.Row) (*domain.Location, error) {

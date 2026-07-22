@@ -24,6 +24,10 @@ type LocationFilter struct {
 
 // LocationRepository persists Location aggregates.
 type LocationRepository interface {
+	// AcquireDedupLock serializes the BR-LOC-01 proximity-check window within
+	// the caller's transaction (pg_advisory_xact_lock). Prevents concurrent
+	// creates from both passing the haversine check before either commits.
+	AcquireDedupLock(ctx context.Context, tx dbtx.DBTX) error
 	Insert(ctx context.Context, tx dbtx.DBTX, l *domain.Location) error
 	GetByID(ctx context.Context, tx dbtx.DBTX, id uuid.UUID) (*domain.Location, error)
 	// List returns up to filter.Limit+1 rows (the extra detects has_more).

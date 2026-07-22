@@ -100,6 +100,7 @@
           "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
           "401": { "$ref": "#/components/responses/Problem" },
           "404": { "$ref": "#/components/responses/Problem" },
+          "409": { "$ref": "#/components/responses/Problem" },
           "422": { "$ref": "#/components/responses/Problem" }
         }
       }
@@ -280,7 +281,7 @@
           "country_code": { "type": "string", "pattern": "^[A-Z]{2}$" },
           "timezone": { "type": "string" },
           "allow_near_duplicate": { "type": "boolean", "default": false },
-          "override_reason": { "type": "string", "maxLength": 500, "description": "Operator justification for accepting a near-duplicate (BR-LOC-01 override; audited)" }
+          "override_reason": { "type": "string", "maxLength": 500, "description": "Operator justification for accepting a near-duplicate (BR-LOC-01 override; audited). Required when allow_near_duplicate is true." }
         }
       },
       "UpdateLocationRequest": {
@@ -294,7 +295,7 @@
         "type": "object",
         "required": ["status"],
         "properties": {
-          "status": { "type": "string", "enum": ["active", "disabled", "archived"] }
+          "status": { "type": "string", "enum": ["active", "disabled"], "description": "Target status. Only active and disabled are settable; archived is reserved." }
         }
       },
       "TriggerCollectionRequest": {
