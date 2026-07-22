@@ -1,0 +1,264 @@
+//go:build integration
+
+// Package integration holds database + API integration tests that run against
+// a real PostgreSQL 16 (testcontainers). Run with: make test-integration.
+package integration
+
+import (
+	"context"
+	"log/slog"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/forecastiq/forecastiq/adapters/payloadstore"
+	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
+	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
+	"github.com/forecastiq/forecastiq/adapters/persistence/collectionpg"
+	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
+	"github.com/forecastiq/forecastiq/internal/api"
+	"github.com/forecastiq/forecastiq/internal/api/handlers"
+	"github.com/forecastiq/forecastiq/internal/audit"
+	"github.com/forecastiq/forecastiq/internal/catalog"
+	catalogdomain "github.com/forecastiq/forecastiq/internal/catalog/domain"
+	"github.com/forecastiq/forecastiq/internal/collection"
+	collectiondomain "github.com/forecastiq/forecastiq/internal/collection/domain"
+	"github.com/forecastiq/forecastiq/internal/collection/ports"
+	"github.com/forecastiq/forecastiq/internal/platform/clock"
+	"github.com/forecastiq/forecastiq/internal/platform/config"
+	"github.com/forecastiq/forecastiq/internal/platform/db"
+	"github.com/forecastiq/forecastiq/internal/platform/dbtx"
+	"github.com/forecastiq/forecastiq/internal/platform/events"
+	"github.com/forecastiq/forecastiq/internal/platform/health"
+	"github.com/forecastiq/forecastiq/internal/platform/metrics"
+	"github.com/forecastiq/forecastiq/internal/platform/ratelimit"
+	"github.com/forecastiq/forecastiq/migrations"
+)
+
+// testConfig builds a minimal config for the test pool.
+func testConfig(connStr string) config.Config {
+	return config.Config{
+		DatabaseURL:   connStr,
+		DBMaxConns:    5,
+		DBMinConns:    1,
+		DBMaxConnLife: time.Hour,
+	}
+}
+
+// startPostgres launches a PostgreSQL 16 container and returns its URL.
+func startPostgres(ctx context.Context, t *testing.T) string {
+	t.Helper()
+	container, err := postgres.RunContainer(ctx,
+		testcontainers.WithImage("postgres:16-alpine"),
+		postgres.WithDatabase("forecastiq"),
+		postgres.WithUsername("forecastiq"),
+		postgres.WithPassword("forecastiq"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(60*time.Second)),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
+	require.NoError(t, err)
+	return connStr
+}
+
+// migrate applies all migrations to the database at connStr.
+func migrate(t *testing.T, connStr string) {
+	t.Helper()
+	require.NoError(t, db.Migrate(migrations.FS, connStr, "schema_migrations", 0))
+}
+
+// newPool returns a pinged pool for connStr.
+func newPool(ctx context.Context, t *testing.T, connStr string) *pgxpool.Pool {
+	t.Helper()
+	pool, err := db.NewPool(ctx, testConfig(connStr))
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+// fakeAdapter is a deterministic forecast provider for integration tests. It
+// builds `count` snapshots at issuedAt+(i+1)h so target_time > issued_at always
+// holds regardless of the wall clock.
+type fakeAdapter struct {
+	count      int
+	outcome    ports.Outcome
+	rawPayload []byte
+}
+
+func (f *fakeAdapter) Slug() string           { return "open-meteo" }
+func (f *fakeAdapter) SchemaVersion() string  { return "openmeteo-v1" }
+func (f *fakeAdapter) AdapterVersion() string { return "1.0.0-test" }
+func (f *fakeAdapter) FetchForecast(_ context.Context, req ports.ForecastRequest) (*ports.ForecastResult, error) {
+	raw := f.rawPayload
+	if raw == nil {
+		raw = []byte(`{"hourly":"test"}`)
+	}
+	res := &ports.ForecastResult{
+		RawPayload: raw, Checksum: ports.Checksum(raw),
+		HTTPStatusCode: 200, SchemaVersion: "openmeteo-v1", AdapterVersion: "1.0.0-test",
+		IssuedAt: req.IssuedAt, RecordsReceived: f.count, Outcome: f.outcome,
+	}
+	if f.outcome == ports.OutcomeSuccess || f.outcome == ports.OutcomePartial {
+		for i := 0; i < f.count; i++ {
+			temp := 30.0 + float64(i)
+			res.Snapshots = append(res.Snapshots, &collectiondomain.ForecastSnapshot{
+				ID:                       uuid.Must(uuid.NewV7()),
+				ProviderID:               req.ProviderID,
+				LocationID:               req.LocationID,
+				IssuedAt:                 req.IssuedAt,
+				TargetTime:               req.IssuedAt.Add(time.Duration(i+1) * time.Hour),
+				ForecastHorizonMinutes:   (i + 1) * 60,
+				TemperatureC:             &temp,
+				CanonicalConditionCode:   collectiondomain.ConditionCloudy,
+				ConditionTaxonomyVersion: collectiondomain.ConditionTaxonomyVersion,
+			})
+		}
+	}
+	return res, nil
+}
+
+// newSuccessAdapter returns a fake adapter producing `count` valid snapshots.
+func newSuccessAdapter(count int) *fakeAdapter {
+	return &fakeAdapter{count: count, outcome: ports.OutcomeSuccess}
+}
+
+// testEnv is a fully-wired test environment backed by a real database.
+type testEnv struct {
+	pool      *pgxpool.Pool
+	tx        *dbtx.Runner
+	locations catalog.LocationManager
+	providers catalog.ProviderCatalog
+	configs   catalog.ConfigurationManager
+	circuits  catalog.CircuitState
+	collector collection.ForecastCollector
+	reader    collection.ForecastReader
+	slots     *schedulerpgSlotRepo
+	router    *gin.Engine
+	adapter   *fakeAdapter
+}
+
+// schedulerpgSlotRepo aliases the concrete slot repo type for tests.
+type schedulerpgSlotRepo = schedulerpg.SlotRepository
+
+// newTestEnv wires services against a fresh migrated database with a fake adapter.
+func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fakeAdapter) *testEnv {
+	t.Helper()
+	pool := newPool(ctx, t, connStr)
+	tx := dbtx.NewRunner(pool)
+	clk := clock.Real{}
+	logger := slog.New(slog.NewTextHandler(io_discard{}, nil))
+
+	locationRepo := catalogpg.NewLocationRepository()
+	providerRepo := catalogpg.NewProviderRepository()
+	configRepo := catalogpg.NewConfigurationRepository()
+	circuitRepo := catalogpg.NewCircuitRepository()
+	collectionRepo := collectionpg.NewCollectionRepository()
+	snapshotRepo := collectionpg.NewSnapshotRepository()
+	recorder := audit.NewRecorder(auditpg.NewStore())
+
+	locations := catalog.NewLocationService(locationRepo, tx, pool, recorder, clk, logger)
+	providers := catalog.NewProviderService(providerRepo, pool)
+	configs := catalog.NewConfigurationService(configRepo, pool)
+	circuits := catalog.NewCircuitService(circuitRepo, tx)
+
+	store, err := payloadstore.NewFilesystemStore(t.TempDir())
+	require.NoError(t, err)
+
+	bus := events.NewSyncBus(logger)
+	m := metrics.New()
+
+	adapters := map[string]ports.ForecastProviderAdapter{"open-meteo": adapter}
+	collector := collection.NewCollectService(adapters, collectionRepo, snapshotRepo, store, circuits,
+		bus, m, recorder, clk, logger, tx, pool, func(string) string { return "" })
+	reader := collection.NewReaderService(collectionRepo, snapshotRepo, pool)
+
+	checker := health.NewChecker()
+	h := &handlers.Handlers{
+		Locations: locations, Providers: providers, Configs: configs,
+		Collector: collector, Reader: reader, Health: checker, Logger: logger,
+	}
+	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)
+	router := api.NewRouter(h, m, logger, api.RouterConfig{
+		DevAdminToken: "test-admin-token",
+		RateLimiter:   limiter,
+	})
+
+	return &testEnv{
+		pool: pool, tx: tx, locations: locations, providers: providers, configs: configs,
+		circuits: circuits, collector: collector, reader: reader,
+		slots: schedulerpg.NewSlotRepository(), router: router, adapter: adapter,
+	}
+}
+
+// seedCatalog inserts the system workspace, open-meteo provider + config, and
+// the JB location (mirrors cmd seed; idempotent).
+func (e *testEnv) seedCatalog(ctx context.Context, t *testing.T) {
+	t.Helper()
+	now := time.Now().UTC()
+	_, err := e.pool.Exec(ctx,
+		`INSERT INTO workspaces (id, name, slug, status, created_at, updated_at)
+		 VALUES ($1, 'System', 'system', 'active', $2, $2)
+		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+		catalogdomain.SystemWorkspaceID, now)
+	require.NoError(t, err)
+
+	providerRepo := catalogpg.NewProviderRepository()
+	require.NoError(t, providerRepo.Upsert(ctx, e.pool, &catalogdomain.Provider{
+		ID: catalogdomain.OpenMeteoProviderID, Name: "Open-Meteo", Slug: "open-meteo",
+		APIBaseURL: "https://api.open-meteo.com", Status: catalogdomain.StatusActive,
+		AttributionText: "Weather data by Open-Meteo.com", AttributionURL: "https://open-meteo.com/",
+		CreatedAt: now, UpdatedAt: now,
+	}))
+
+	configRepo := catalogpg.NewConfigurationRepository()
+	require.NoError(t, configRepo.Upsert(ctx, e.pool, &catalogdomain.ProviderConfiguration{
+		ID: catalogdomain.OpenMeteoConfigID, WorkspaceID: catalogdomain.SystemWorkspaceID,
+		ProviderID: catalogdomain.OpenMeteoProviderID, Status: catalogdomain.StatusActive,
+		CollectionSchedule: catalogdomain.DefaultSchedule(), AdapterVersion: "1.0.0-test",
+		ValidationState: "unvalidated", CreatedAt: now, UpdatedAt: now,
+	}))
+
+	locationRepo := catalogpg.NewLocationRepository()
+	require.NoError(t, locationRepo.Insert(ctx, e.pool, &catalogdomain.Location{
+		ID: catalogdomain.JohorBahruLocationID, WorkspaceID: catalogdomain.SystemWorkspaceID,
+		Name: "Johor Bahru", Latitude: 1.4927, Longitude: 103.7414,
+		CountryCode: "MY", Timezone: "Asia/Kuala_Lumpur", Status: catalogdomain.StatusActive,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+}
+
+// io_discard is a minimal slog sink that discards output.
+type io_discard struct{}
+
+func (io_discard) Write(p []byte) (int, error) { return len(p), nil }
+
+// mustUUIDv7 returns a fresh UUIDv7 (test helper).
+func mustUUIDv7() uuid.UUID { return uuid.Must(uuid.NewV7()) }
+
+// monthStartsOf returns the distinct first-of-month instants covering the
+// snapshots' target times (for partition creation).
+func monthStartsOf(snaps []*collectiondomain.ForecastSnapshot) []time.Time {
+	seen := map[time.Time]struct{}{}
+	var out []time.Time
+	for _, s := range snaps {
+		tt := s.TargetTime.UTC()
+		ms := time.Date(tt.Year(), tt.Month(), 1, 0, 0, 0, 0, time.UTC)
+		if _, ok := seen[ms]; !ok {
+			seen[ms] = struct{}{}
+			out = append(out, ms)
+		}
+	}
+	return out
+}

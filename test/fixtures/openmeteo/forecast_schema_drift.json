@@ -1,0 +1,10 @@
+{
+  "latitude": 1.4927,
+  "longitude": 103.7414,
+  "timezone": "UTC",
+  "hourly_units": { "datetime": "iso8601" },
+  "hourly": {
+    "datetime": ["2026-07-22T11:00", "2026-07-22T12:00"],
+    "temp_2m": [31.2, 31.8]
+  }
+}
