@@ -31,6 +31,7 @@ Severity = Probability × Impact. Review cadence: monthly with the Phase 0 regis
 | R-32 | Single-maintainer knowledge concentration | High | Med | **High** | Complete architecture package (this set); ADRs for all material decisions; runbooks; onboarding target < 2 d (NFR-M08); sealed-envelope secrets procedure | Onboarding drill with second party (quarterly) | Eng | Med |
 | R-33 | Migration complexity at promotion time (Redis/NATS/etc.) exceeds plan | Low | Med | **Low** | Seams built in Phase 1 (cache port, event seam, SKIP LOCKED, scheme-prefixed keys); each promotion ADR-supervised with measured trigger; migration paths documented per technology | Promotion review at trigger | Architect | Low |
 | R-34 | Dashboard query performance degrades with data age | Low | Med | **Low** | Pre-computed projections for all aggregates; indexed access paths verified (Q-01..Q-11 + QX); PT-7 quarterly baselines; LRU/ETag absorption | PT runs; pg_stat_statements review | Eng | Low |
+| R-35 | Location dedup (BR-LOC-01) bypassed under concurrent creates — check-then-insert TOCTOU (found DRB-WP04-001, reproduced) | Low | Med | **Med** | Remediation required in WP-04: serialize create tx (`pg_advisory_xact_lock` or SERIALIZABLE + 40001 retry) + concurrency integration test; duplicate rows detectable via proximity query for manual cleanup | Re-review gate (WP-04 cannot be Accepted open); admin audit trail (`location.create` rows) | Eng | Open — blocking WP-04 acceptance |
 
 ## 2. Gates Carried Forward (launch-blocking)
 
