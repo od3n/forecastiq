@@ -1,0 +1,25 @@
+# air — hot-reload configuration for the dev container (docker-compose `app`).
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/forecastiq ./cmd/forecastiq"
+bin = "./tmp/forecastiq serve --mode=all"
+delay = 500
+exclude_dir = ["tools", "bin", "dist", "data", "payloads", "docs", "web", "tmp", "coverage"]
+exclude_regex = ["_test\\.go$", "\\.sql$"]
+include_ext = ["go"]
+kill_delay = "5s"
+send_interrupt = true
+
+[log]
+time = true
+
+[color]
+build = "yellow"
+main = "magenta"
+runner = "green"
+watcher = "cyan"
+
+[misc]
+clean_on_exit = true

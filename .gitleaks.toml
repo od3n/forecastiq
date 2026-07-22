@@ -1,0 +1,23 @@
+# gitleaks configuration — secret scanning gate (CI + pre-commit).
+# Extends the default ruleset; allowlists documented synthetic values used
+# in fixtures, examples, and local dev so the gate stays noise-free.
+title = "ForecastIQ gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented synthetic / example values (not real secrets)"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)test/fixtures/''',
+  '''(^|/)docs/''',
+  '''(^|/)\.gitleaks\.toml$''',
+  '''go\.(mod|sum)$''',
+]
+regexes = [
+  '''dev-admin-token''',
+  '''forecastiq:forecastiq''',
+  '''EXAMPLE[_-]?KEY''',
+  '''test-key''',
+]

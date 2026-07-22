@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────────────
+# ForecastIQ — local development stack
+#   make dev-up   → postgres + app (auto-migrate + idempotent seed, hot reload)
+#   make dev-down → stop (keeps volumes)
+#   make dev-reset→ destroy volumes + restart clean
+# Secrets come from .env.local (gitignored; copy from .env.example).
+# ─────────────────────────────────────────────────────────────────────
+name: forecastiq
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: forecastiq
+      POSTGRES_USER: forecastiq
+      POSTGRES_PASSWORD: forecastiq
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forecastiq -d forecastiq"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      target: dev
+    env_file:
+      - .env.local
+    environment:
+      # Compose-network overrides (service DNS, not localhost)
+      FIQ_DATABASE_URL: postgres://forecastiq:forecastiq@postgres:5432/forecastiq?sslmode=disable
+      FIQ_PAYLOAD_STORE_DIR: /var/lib/forecastiq/payloads
+      FIQ_METRICS_ADDR: 0.0.0.0:9090
+      FIQ_AUTO_MIGRATE: "true"
+      FIQ_AUTO_SEED: "true"
+      FIQ_ENV: development
+    ports:
+      - "8080:8080"   # API
+      - "9090:9090"   # metrics (dev convenience; prod binds localhost)
+    volumes:
+      - .:/src
+      - payloads:/var/lib/forecastiq/payloads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["air"]
+
+volumes:
+  pgdata:
+  payloads:

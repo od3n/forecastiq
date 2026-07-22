@@ -1,0 +1,42 @@
+# ── Secrets & local config (NEVER committed) ─────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ── Build artifacts ───────────────────────────────────────────────────
+/bin/
+/dist/
+/forecastiq
+*.exe
+
+# ── Test & coverage ───────────────────────────────────────────────────
+/coverage/
+*.out
+*.prof
+
+# ── Local runtime data ────────────────────────────────────────────────
+/data/
+/payloads/
+/tmp/
+/.pgdata/
+
+# ── Tooling caches ────────────────────────────────────────────────────
+/tools/bin/
+.cache/
+
+# ── Generated OpenAPI (regenerated via `make docs`; committed copy lives in api/openapi) ──
+/docs.go
+/docs/docs.go
+
+# ── OS / editor ───────────────────────────────────────────────────────
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# ── Frontend (reserved for WP-20) ─────────────────────────────────────
+node_modules/
+web/.next/
+web/out/
