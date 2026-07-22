@@ -105,6 +105,16 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		return p.Status, p
 	}
 
+	var nameErr *catalogdomain.NameConflictError
+	if errors.As(err, &nameErr) {
+		p.Type = errorBase + "conflict"
+		p.Title = "Name Conflict"
+		p.Status = http.StatusConflict
+		p.Detail = nameErr.Error()
+		p.Retryable = true
+		return p.Status, p
+	}
+
 	var circuitErr *collectiondomain.CircuitOpenError
 	if errors.As(err, &circuitErr) {
 		p.Type = errorBase + "conflict"

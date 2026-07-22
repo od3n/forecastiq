@@ -47,6 +47,8 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 		admin := v1.Group("", RequireAdmin(cfg.DevAdminToken))
 		{
 			admin.POST("/locations", h.CreateLocation)
+			admin.PUT("/locations/:id", h.UpdateLocation)
+			admin.PATCH("/locations/:id/status", h.SetLocationStatus)
 			admin.POST("/admin/collections/trigger", h.TriggerCollection)
 			admin.GET("/forecast-collections", h.ListCollections)
 			admin.GET("/forecast-collections/:id", h.GetCollection)

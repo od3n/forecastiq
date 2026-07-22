@@ -148,6 +148,18 @@ type CreateLocationRequest struct {
 	CountryCode        string  `json:"country_code" binding:"required"`
 	Timezone           string  `json:"timezone" binding:"required"`
 	AllowNearDuplicate bool    `json:"allow_near_duplicate"`
+	OverrideReason     string  `json:"override_reason"`
+}
+
+// UpdateLocationRequest is the PUT /locations/{id} body. Only mutable fields
+// (name); immutable fields are not accepted (domain architecture §2.3).
+type UpdateLocationRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
+// SetLocationStatusRequest is the PATCH /locations/{id}/status body.
+type SetLocationStatusRequest struct {
+	Status string `json:"status" binding:"required"`
 }
 
 // TriggerCollectionRequest is the POST /admin/collections/trigger body.

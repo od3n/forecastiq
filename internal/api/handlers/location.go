@@ -92,6 +92,7 @@ func (h *Handlers) CreateLocation(c *gin.Context) {
 		CountryCode:        req.CountryCode,
 		Timezone:           req.Timezone,
 		AllowNearDuplicate: req.AllowNearDuplicate,
+		OverrideReason:     req.OverrideReason,
 		Actor:              actor(c),
 	})
 	if err != nil {
@@ -107,3 +108,71 @@ type badField struct{ detail string }
 func (e *badField) Error() string   { return e.detail }
 func (e *badField) Field() string   { return "body" }
 func (e *badField) Message() string { return e.detail }
+
+// UpdateLocation godoc
+// @Summary      Update a location (admin)
+// @Description  Updates mutable fields (name only; coordinates, country, and
+// @Description  timezone are immutable after creation — domain architecture §2.3).
+// @Tags         catalog
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "location id"
+// @Param        body body UpdateLocationRequest true "location"
+// @Success      200 {object} respond.Envelope
+// @Failure      401 {object} respond.Problem
+// @Failure      404 {object} respond.Problem
+// @Failure      409 {object} respond.Problem
+// @Failure      422 {object} respond.Problem
+// @Router       /locations/{id} [put]
+func (h *Handlers) UpdateLocation(c *gin.Context) {
+	id, ok := pathUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req UpdateLocationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond.Error(c, &badField{detail: err.Error()}, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	loc, err := h.Locations.UpdateLocation(c.Request.Context(), id, catalog.UpdateLocationInput{
+		Name:  &req.Name,
+		Actor: actor(c),
+	})
+	if err != nil {
+		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	respond.OK(c, locationDTO(loc), respond.Options{RequestID: respond.RequestID(c)})
+}
+
+// SetLocationStatus godoc
+// @Summary      Enable or disable a location (admin)
+// @Description  Soft status change (BR-LOC-03): disabling stops future
+// @Description  collection; historical data remains queryable.
+// @Tags         catalog
+// @Accept       json
+// @Produce      json
+// @Param        id path string true "location id"
+// @Param        body body SetLocationStatusRequest true "status"
+// @Success      200 {object} respond.Envelope
+// @Failure      401 {object} respond.Problem
+// @Failure      404 {object} respond.Problem
+// @Failure      422 {object} respond.Problem
+// @Router       /locations/{id}/status [patch]
+func (h *Handlers) SetLocationStatus(c *gin.Context) {
+	id, ok := pathUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req SetLocationStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond.Error(c, &badField{detail: err.Error()}, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	loc, err := h.Locations.SetLocationStatus(c.Request.Context(), id, catalog.Status(req.Status), actor(c))
+	if err != nil {
+		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	respond.OK(c, locationDTO(loc), respond.Options{RequestID: respond.RequestID(c), Timezone: loc.Timezone})
+}
