@@ -1,17 +1,19 @@
+// Package openmeteo implements the Open-Meteo forecast provider adapter behind
+// the collection module's ForecastProviderAdapter port. Transport hardening,
+// FC-08 retry, and FC-13 classification live in the shared providerhttp helper;
+// this package owns only Open-Meteo's request shape, schema (openmeteo-v1),
+// normalization, and WMO→canonical condition mapping.
 package openmeteo
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"io"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
+	"github.com/forecastiq/forecastiq/adapters/forecastproviders/providerhttp"
 	"github.com/forecastiq/forecastiq/internal/collection/ports"
 	"github.com/forecastiq/forecastiq/internal/platform/ratelimit"
 )
@@ -41,37 +43,27 @@ type Config struct {
 	RetryBaseDelay   time.Duration // backoff base (1s); ±20% jitter
 }
 
-// Adapter implements ports.ForecastProviderAdapter for Open-Meteo.
+// Adapter implements ports.ForecastProviderAdapter (and ports.ReplayDecoder)
+// for Open-Meteo.
 type Adapter struct {
-	client       *http.Client
-	limiter      *ratelimit.Limiter
-	logger       *slog.Logger
-	maxRespBytes int64
-	maxRetries   int
-	retryBase    time.Duration
+	transport *providerhttp.Client
+	logger    *slog.Logger
 }
 
-// New builds an Open-Meteo adapter.
+// New builds an Open-Meteo adapter over the shared hardened transport.
 func New(cfg Config) *Adapter {
-	if cfg.Client == nil {
-		cfg.Client = &http.Client{Timeout: 10 * time.Second}
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
 	}
-	if cfg.Logger == nil {
-		cfg.Logger = slog.Default()
-	}
-	if cfg.MaxResponseBytes <= 0 {
-		cfg.MaxResponseBytes = 10 << 20 // 10 MB
-	}
-	if cfg.MaxRetries <= 0 {
-		cfg.MaxRetries = 5
-	}
-	if cfg.RetryBaseDelay <= 0 {
-		cfg.RetryBaseDelay = time.Second
-	}
-	return &Adapter{
-		client: cfg.Client, limiter: cfg.Limiter, logger: cfg.Logger,
-		maxRespBytes: cfg.MaxResponseBytes, maxRetries: cfg.MaxRetries, retryBase: cfg.RetryBaseDelay,
-	}
+	transport := providerhttp.New(providerhttp.Config{
+		HTTPClient:       cfg.Client,
+		Limiter:          cfg.Limiter,
+		MaxResponseBytes: cfg.MaxResponseBytes,
+		MaxAttempts:      cfg.MaxRetries,
+		RetryBaseDelay:   cfg.RetryBaseDelay,
+	})
+	return &Adapter{transport: transport, logger: logger}
 }
 
 // Slug implements ports.ForecastProviderAdapter.
@@ -82,6 +74,17 @@ func (a *Adapter) SchemaVersion() string { return SchemaVersion }
 
 // AdapterVersion implements ports.ForecastProviderAdapter.
 func (a *Adapter) AdapterVersion() string { return AdapterVersion }
+
+// Capabilities implements ports.ForecastProviderAdapter. Open-Meteo needs no
+// credential and supports deterministic replay from stored payloads.
+func (a *Adapter) Capabilities() ports.Capabilities {
+	return ports.Capabilities{
+		MaxForecastHorizon: forecastDays * 24 * time.Hour,
+		HourlyResolution:   true,
+		RequiresCredential: false,
+		SupportsReplay:     true,
+	}
+}
 
 // ── Response schema (openmeteo-v1) ────────────────────────────────────
 
@@ -107,7 +110,9 @@ type hourlyData struct {
 }
 
 // FetchForecast implements the provider call → validate → decompose →
-// normalize chain (workflow §2). Retries retryable failures with backoff.
+// normalize chain (workflow §2). Retry/rate-limit/classification are handled by
+// the shared transport; this method maps a classified failure onto the result
+// or, on success, decomposes the payload.
 func (a *Adapter) FetchForecast(ctx context.Context, req ports.ForecastRequest) (*ports.ForecastResult, error) {
 	result := &ports.ForecastResult{
 		SchemaVersion:      SchemaVersion,
@@ -116,106 +121,52 @@ func (a *Adapter) FetchForecast(ctx context.Context, req ports.ForecastRequest) 
 		UnmappedConditions: map[string]int{},
 	}
 
-	raw, status, latencyMS, err := a.fetchWithRetry(ctx, req)
-	result.HTTPStatusCode = status
-	result.LatencyMS = latencyMS
-	result.RawPayload = raw
-	if len(raw) > 0 {
-		result.Checksum = ports.Checksum(raw)
+	header := http.Header{}
+	if req.Credential != "" {
+		header.Set("Authorization", "Bearer "+req.Credential)
 	}
 
-	// Transport / HTTP-level outcomes (no parseable success body).
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
-			result.Outcome = ports.OutcomeTimeout
-			result.ErrorCode = "timeout"
-		} else {
-			result.Outcome = ports.OutcomeFailed
-			result.ErrorCode = "network"
-		}
-		result.Err = err
-		return result, nil
+	resp, ferr := a.transport.Get(ctx, a.buildURL(req), header)
+	result.HTTPStatusCode = resp.StatusCode
+	result.LatencyMS = resp.LatencyMS
+	result.RawPayload = resp.Body
+	result.ProviderRequestID = resp.RequestID
+	result.RateLimit = resp.RateLimit
+	if len(resp.Body) > 0 {
+		result.Checksum = ports.Checksum(resp.Body)
 	}
-	switch {
-	case status == http.StatusTooManyRequests:
-		result.Outcome = ports.OutcomeRateLimited
-		result.ErrorCode = "rate_limited"
-		return result, nil
-	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		result.Outcome = ports.OutcomeAuthFailed
-		result.ErrorCode = "invalid_credentials"
-		return result, nil
-	case status >= 400:
-		result.Outcome = ports.OutcomeFailed
-		result.ErrorCode = "http_" + strconv.Itoa(status)
+
+	if ferr != nil {
+		result.Outcome = ferr.Outcome()
+		result.ErrorCode = ferr.Code.String()
+		result.Err = ferr
+		if result.RateLimit == nil {
+			result.RateLimit = ferr.RateLimit
+		}
 		return result, nil
 	}
 
 	// Parse + validate + decompose + normalize.
-	a.decompose(raw, req, result)
+	a.decompose(resp.Body, req, result)
 	return result, nil
 }
 
-// fetchWithRetry performs the HTTP GET with rate-limit awareness and FC-08
-// backoff (1,2,4,8,16 s ±20% jitter; retryable: network, timeout, 5xx, 429).
-func (a *Adapter) fetchWithRetry(ctx context.Context, req ports.ForecastRequest) (raw []byte, status, latencyMS int, err error) {
-	endpoint := a.buildURL(req)
-	var lastErr error
-	for attempt := 0; attempt < a.maxRetries; attempt++ {
-		if attempt > 0 {
-			if werr := a.backoff(ctx, attempt); werr != nil {
-				return nil, 0, 0, werr
-			}
-		}
-		if a.limiter != nil {
-			if werr := a.limiter.Wait(ctx); werr != nil {
-				return nil, 0, 0, werr
-			}
-		}
-		body, code, latency, rerr := a.doOnce(ctx, endpoint, req.Credential)
-		if rerr == nil && code >= 200 && code < 300 {
-			return body, code, latency, nil
-		}
-		lastErr = rerr
-		status, latencyMS = code, latency
-		if body != nil {
-			raw = body
-		}
-		if !retryable(code, rerr) {
-			return raw, code, latency, rerr
-		}
+// DecodeStored implements ports.ReplayDecoder: deterministically re-derive a
+// result from a previously stored payload with no network call (domain §4.8).
+// HTTP metadata (status/latency) is intentionally absent on replay.
+func (a *Adapter) DecodeStored(_ context.Context, req ports.ForecastRequest, raw []byte) (*ports.ForecastResult, error) {
+	result := &ports.ForecastResult{
+		SchemaVersion:      SchemaVersion,
+		AdapterVersion:     AdapterVersion,
+		IssuedAt:           req.IssuedAt,
+		UnmappedConditions: map[string]int{},
+		RawPayload:         raw,
 	}
-	if lastErr == nil && status >= 500 {
-		lastErr = fmt.Errorf("provider returned %d after %d attempts", status, a.maxRetries)
+	if len(raw) > 0 {
+		result.Checksum = ports.Checksum(raw)
 	}
-	return raw, status, latencyMS, lastErr
-}
-
-func (a *Adapter) doOnce(ctx context.Context, endpoint, credential string) (body []byte, status, latencyMS int, err error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	httpReq.Header.Set("Accept", "application/json")
-	if credential != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+credential)
-	}
-	start := time.Now()
-	resp, err := a.client.Do(httpReq)
-	latencyMS = int(time.Since(start).Milliseconds())
-	if err != nil {
-		return nil, 0, latencyMS, err
-	}
-	defer resp.Body.Close()
-	limited := io.LimitReader(resp.Body, a.maxRespBytes+1)
-	body, err = io.ReadAll(limited)
-	if err != nil {
-		return nil, resp.StatusCode, latencyMS, err
-	}
-	if int64(len(body)) > a.maxRespBytes {
-		return nil, resp.StatusCode, latencyMS, fmt.Errorf("response exceeds %d bytes", a.maxRespBytes)
-	}
-	return body, resp.StatusCode, latencyMS, nil
+	a.decompose(raw, req, result)
+	return result, nil
 }
 
 func (a *Adapter) buildURL(req ports.ForecastRequest) string {
@@ -231,28 +182,4 @@ func (a *Adapter) buildURL(req ports.ForecastRequest) string {
 	q.Set("forecast_days", strconv.Itoa(forecastDays))
 	q.Set("timezone", "UTC") // BR-PROV-01: normalize to UTC at the source
 	return u + "?" + q.Encode()
-}
-
-func (a *Adapter) backoff(ctx context.Context, attempt int) error {
-	base := float64(a.retryBase) * float64(int(1)<<(attempt-1)) // 1,2,4,8,16...
-	jitter := 1.0 + (rand.Float64()*0.4 - 0.2)                  // ±20%
-	delay := time.Duration(base * jitter)
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(delay):
-		return nil
-	}
-}
-
-func retryable(status int, err error) bool {
-	if err != nil {
-		return true // network / timeout
-	}
-	return status == http.StatusTooManyRequests || status >= 500
-}
-
-func isTimeout(err error) bool {
-	var netErr interface{ Timeout() bool }
-	return errors.As(err, &netErr) && netErr.Timeout()
 }

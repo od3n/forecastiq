@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"github.com/forecastiq/forecastiq/internal/audit"
 	"github.com/forecastiq/forecastiq/internal/catalog"
 	"github.com/forecastiq/forecastiq/internal/collection"
-	collectionports "github.com/forecastiq/forecastiq/internal/collection/ports"
 	"github.com/forecastiq/forecastiq/internal/platform/clock"
 	"github.com/forecastiq/forecastiq/internal/platform/config"
 	"github.com/forecastiq/forecastiq/internal/platform/db"
@@ -119,13 +119,25 @@ func buildApp(ctx context.Context) (*App, error) {
 		MaxRetries:       5,
 		RetryBaseDelay:   time.Second,
 	})
-	adapters := map[string]collectionports.ForecastProviderAdapter{
-		openmeteo.ProviderSlug: omAdapter,
+	// Provider registry: validates identity/versions and rejects duplicate
+	// slugs at startup (WP-05). Add future providers here.
+	registry := collection.NewRegistry()
+	if err := registry.Register(omAdapter); err != nil {
+		return nil, fmt.Errorf("register provider adapter: %w", err)
+	}
+	for _, d := range registry.Descriptors() {
+		logger.Info("provider.registered",
+			slog.String("provider", d.Slug),
+			slog.String("schema_version", d.SchemaVersion),
+			slog.String("adapter_version", d.AdapterVersion),
+			slog.Duration("max_forecast_horizon", d.Capabilities.MaxForecastHorizon),
+			slog.Bool("requires_credential", d.Capabilities.RequiresCredential),
+			slog.Bool("supports_replay", d.Capabilities.SupportsReplay))
 	}
 
 	// Collection services.
 	collector := collection.NewCollectService(
-		adapters, collectionRepo, snapshotRepo, payloadStore, circuits,
+		registry.Adapters(), collectionRepo, snapshotRepo, payloadStore, circuits,
 		bus, m, recorder, clk, logger, tx, pool, cfg.ResolveCredential)
 	reader := collection.NewReaderService(collectionRepo, snapshotRepo, pool)
 

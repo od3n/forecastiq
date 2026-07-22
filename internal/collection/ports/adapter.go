@@ -59,9 +59,21 @@ type ForecastResult struct {
 	InvalidCount       int
 	InvalidReasons     []string
 	UnmappedConditions map[string]int // provider condition codes with no canonical mapping (FC-15)
+	RateLimit          *RateLimit     // normalized provider rate-limit metadata (nil when unsignalled)
 	Outcome            Outcome
 	ErrorCode          string // classified (FC-13); e.g. schema_drift, invalid_credentials
 	Err                error  // underlying error for failed outcomes
+}
+
+// Capabilities declares what a provider adapter supports so the composition
+// root, operators, and future scheduling can reason about a provider without
+// provider-specific knowledge (architecture §2.4). Declared statically by each
+// adapter; recorded in the registry.
+type Capabilities struct {
+	MaxForecastHorizon time.Duration // furthest-out prediction the adapter emits
+	HourlyResolution   bool          // emits hourly (vs coarser) periods
+	RequiresCredential bool          // needs a resolved credential to call
+	SupportsReplay     bool          // implements ReplayDecoder (decode from stored bytes)
 }
 
 // ForecastProviderAdapter fetches and normalizes one provider's forecast.
@@ -71,5 +83,14 @@ type ForecastProviderAdapter interface {
 	Slug() string
 	SchemaVersion() string
 	AdapterVersion() string
+	Capabilities() Capabilities
 	FetchForecast(ctx context.Context, req ForecastRequest) (*ForecastResult, error)
+}
+
+// ReplayDecoder is an optional adapter capability: deterministically decode a
+// previously stored raw payload into a ForecastResult WITHOUT any network call
+// (domain §4.8 replay). Adapters that set Capabilities.SupportsReplay MUST
+// implement it. The result carries no HTTP metadata (status/latency).
+type ReplayDecoder interface {
+	DecodeStored(ctx context.Context, req ForecastRequest, raw []byte) (*ForecastResult, error)
 }

@@ -169,6 +169,9 @@ type fakeAdapter struct {
 func (f *fakeAdapter) Slug() string           { return "open-meteo" }
 func (f *fakeAdapter) SchemaVersion() string  { return "openmeteo-v1" }
 func (f *fakeAdapter) AdapterVersion() string { return "1.0.0-test" }
+func (f *fakeAdapter) Capabilities() ports.Capabilities {
+	return ports.Capabilities{MaxForecastHorizon: 7 * 24 * time.Hour, HourlyResolution: true}
+}
 func (f *fakeAdapter) FetchForecast(_ context.Context, req ports.ForecastRequest) (*ports.ForecastResult, error) {
 	raw := f.rawPayload
 	if raw == nil {

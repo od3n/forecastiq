@@ -139,11 +139,29 @@ func TestFetch_UnmappedCondition(t *testing.T) {
 }
 
 func TestFetch_RateLimited(t *testing.T) {
-	srv := serve(t, []byte(`{"error":"too many requests"}`), http.StatusTooManyRequests)
+	srv := serveRateLimited(t)
 	a := newAdapter(t, srv.URL)
 	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
 	require.NoError(t, err)
 	assert.Equal(t, ports.OutcomeRateLimited, res.Outcome)
+	assert.Equal(t, "rate_limited", res.ErrorCode)
+	// Rate-limit metadata is normalized and surfaced on the result.
+	require.NotNil(t, res.RateLimit)
+	require.NotNil(t, res.RateLimit.RetryAfter)
+	assert.Equal(t, 45*time.Second, *res.RateLimit.RetryAfter)
+}
+
+// serveRateLimited returns a 429 with standard rate-limit headers.
+func serveRateLimited(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "45")
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"too many requests"}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func TestFetch_AuthFailed(t *testing.T) {
@@ -161,6 +179,39 @@ func TestFetch_ServerError(t *testing.T) {
 	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
 	require.NoError(t, err)
 	assert.Equal(t, ports.OutcomeFailed, res.Outcome)
+	assert.Equal(t, "provider_5xx", res.ErrorCode)
+}
+
+func TestCapabilities(t *testing.T) {
+	a := newAdapter(t, "")
+	caps := a.Capabilities()
+	assert.Equal(t, 7*24*time.Hour, caps.MaxForecastHorizon)
+	assert.True(t, caps.HourlyResolution)
+	assert.False(t, caps.RequiresCredential)
+	assert.True(t, caps.SupportsReplay)
+	// The adapter must satisfy the optional replay interface it advertises.
+	_, ok := interface{}(a).(ports.ReplayDecoder)
+	assert.True(t, ok)
+}
+
+// TestDecodeStored_ReplayDeterminism: DecodeStored re-derives an identical
+// result from stored bytes with NO network call (domain §4.8).
+func TestDecodeStored_ReplayDeterminism(t *testing.T) {
+	body := loadFixture(t, "forecast_success_v1.json")
+	a := newAdapter(t, "")
+
+	res1, err := a.DecodeStored(context.Background(), newRequest(""), body)
+	require.NoError(t, err)
+	res2, err := a.DecodeStored(context.Background(), newRequest(""), body)
+	require.NoError(t, err)
+
+	assert.Equal(t, ports.OutcomeSuccess, res1.Outcome)
+	assert.Equal(t, ports.Checksum(body), res1.Checksum)
+	assert.Equal(t, res1.Checksum, res2.Checksum)
+	assert.Equal(t, len(res1.Snapshots), len(res2.Snapshots))
+	// Replay carries no HTTP metadata.
+	assert.Zero(t, res1.HTTPStatusCode)
+	assert.Zero(t, res1.LatencyMS)
 }
 
 // TestReplayDeterminism: fetching the same payload twice yields identical
