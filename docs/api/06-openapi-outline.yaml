@@ -1,0 +1,240 @@
+# ForecastIQ — OpenAPI 3.1 Outline (Phase 1)
+# This is a structural outline, not the complete generated spec.
+# The authoritative spec is generated from code annotations at build time
+# (API-11) and served at /api/v1/openapi.json. CI enforces zero drift
+# (openapi-diff against main; breaking changes fail).
+
+openapi: 3.1.0
+info:
+  title: ForecastIQ API
+  version: 1.0.0
+  description: |
+    Weather forecast accuracy comparison platform.
+    All derived payloads carry methodology_version, weights_version,
+    freshness, provenance, and attribution per docs/api/02-response-conventions.md.
+  contact:
+    name: ForecastIQ
+servers:
+  - url: https://api.forecastiq.example/api/v1
+
+security: []  # default public; per-operation overrides below
+
+tags:
+  - name: analysis
+  - name: catalog
+  - name: data
+  - name: identity
+  - name: admin
+  - name: operations
+
+paths:
+  # ── Analysis (public) ──────────────────────────────────────────────
+  /rankings:
+    get:
+      tags: [analysis]
+      operationId: getRankings
+      parameters:
+        - { name: location_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: horizon_minutes, in: query, schema: { type: integer, enum: [60,180,360,720,1440,4320,10080] } }
+        - { name: horizon_profile, in: query, schema: { type: string, enum: [uniform, short_term, daily_planning] } }
+        - { name: period_days, in: query, schema: { type: integer, default: 30, maximum: 90 } }
+        - { name: min_sample_count, in: query, schema: { type: integer, default: 30 } }
+        - { name: weights, in: query, schema: { type: string }, description: custom weights JSON }
+      responses:
+        "200": { $ref: "#/components/responses/Rankings" }
+        "304": { description: Not Modified }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /rankings/methodology:
+    get:
+      tags: [analysis]
+      operationId: getMethodology
+      responses:
+        "200": { $ref: "#/components/responses/Methodology" }
+  /accuracy/summary:
+    get:
+      tags: [analysis]
+      operationId: getAccuracySummary
+      parameters:
+        - { name: location_id, in: query, schema: { type: string, format: uuid } }
+        - { name: provider_id, in: query, schema: { type: string, format: uuid } }
+        - { name: horizon_minutes, in: query, schema: { type: integer } }
+        - { name: period_days, in: query, schema: { type: integer, default: 30 } }
+      responses:
+        "200": { $ref: "#/components/responses/AccuracySummary" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /accuracy:
+    get:
+      tags: [analysis]
+      operationId: getAccuracyTrend
+      parameters:
+        - { name: provider_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: location_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: horizon_minutes, in: query, required: true, schema: { type: integer } }
+        - { name: variable, in: query, required: true, schema: { type: string, enum: [temperature, precipitation, wind_speed, humidity, pressure] } }
+        - { name: metric_type, in: query, required: true, schema: { type: string } }
+        - { name: period_start, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: period_end, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: aggregation, in: query, schema: { type: string, enum: [daily, weekly, monthly], default: daily } }
+        - { name: tz, in: query, schema: { type: string }, description: IANA zone for bucketing }
+      responses:
+        "200": { $ref: "#/components/responses/AccuracyTrend" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /forecast-comparison:
+    get:
+      tags: [analysis]
+      operationId: getForecastComparison
+      parameters:
+        - { name: location_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+        - { name: variable, in: query, required: true, schema: { type: string } }
+        - { name: horizon_minutes, in: query, required: true, schema: { type: integer } }
+        - { name: providers, in: query, schema: { type: string }, description: CSV of provider UUIDs }
+      responses:
+        "200": { $ref: "#/components/responses/ForecastComparison" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  # ── Catalog ────────────────────────────────────────────────────────
+  /providers:
+    get: { tags: [catalog], operationId: listProviders, responses: { "200": { $ref: "#/components/responses/ProviderList" } } }
+  /providers/{id}:
+    get: { tags: [catalog], operationId: getProvider, parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Provider" }, "404": { $ref: "#/components/responses/NotFound" } } }
+  /locations:
+    get: { tags: [catalog], operationId: listLocations, parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}, {name: active, in: query, schema: {type: boolean}}], responses: { "200": { $ref: "#/components/responses/LocationList" } } }
+    post:
+      tags: [catalog]
+      operationId: createLocation
+      security: [{ bearerAuth: [], adminRole: [] }]
+      parameters: [{$ref: "#/components/parameters/IdempotencyKey"}]
+      requestBody: { $ref: "#/components/requestBodies/LocationCreate" }
+      responses:
+        "201": { $ref: "#/components/responses/Location" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /locations/{id}:
+    get: { tags: [catalog], operationId: getLocation, parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Location" }, "404": { $ref: "#/components/responses/NotFound" } } }
+    put: { tags: [catalog], operationId: updateLocation, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Location" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+  /locations/{id}/status:
+    patch: { tags: [catalog], operationId: setLocationStatus, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Location" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+
+  # ── Data (user+) ───────────────────────────────────────────────────
+  /forecasts:
+    get: { tags: [data], operationId: listForecasts, security: [{ bearerAuth: [] }, { apiKeyAuth: [] }], parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}], responses: { "200": { $ref: "#/components/responses/ForecastList" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+  /forecasts/{id}:
+    get: { tags: [data], operationId: getForecast, security: [{ bearerAuth: [] }, { apiKeyAuth: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Forecast" }, "404": { $ref: "#/components/responses/NotFound" } } }
+  /observations:
+    get: { tags: [data], operationId: listObservations, security: [{ bearerAuth: [] }, { apiKeyAuth: [] }], parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}], responses: { "200": { $ref: "#/components/responses/ObservationList" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+  /observations/{id}:
+    get: { tags: [data], operationId: getObservation, security: [{ bearerAuth: [] }, { apiKeyAuth: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Observation" }, "404": { $ref: "#/components/responses/NotFound" } } }
+
+  # ── Identity ───────────────────────────────────────────────────────
+  /me:
+    get: { tags: [identity], operationId: getMe, security: [{ bearerAuth: [] }], responses: { "200": { $ref: "#/components/responses/Me" }, "401": { $ref: "#/components/responses/Unauthorized" } } }
+    patch: { tags: [identity], operationId: patchMe, security: [{ bearerAuth: [] }], responses: { "200": { $ref: "#/components/responses/Me" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+  /api-keys:
+    get: { tags: [identity], operationId: listApiKeys, security: [{ bearerAuth: [] }], responses: { "200": { $ref: "#/components/responses/ApiKeyList" } } }
+    post: { tags: [identity], operationId: createApiKey, security: [{ bearerAuth: [] }], parameters: [{$ref: "#/components/parameters/IdempotencyKey"}], responses: { "201": { $ref: "#/components/responses/ApiKeyCreated" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+  /api-keys/{id}:
+    delete: { tags: [identity], operationId: revokeApiKey, security: [{ bearerAuth: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "204": { description: Revoked }, "404": { $ref: "#/components/responses/NotFound" } } }
+  /me/export:
+    post: { tags: [identity], operationId: requestExport, security: [{ bearerAuth: [] }], responses: { "202": { $ref: "#/components/responses/ExportJob" }, "409": { $ref: "#/components/responses/Conflict" } } }
+  /me:  # DELETE (merged under /me above in generated spec)
+    # delete: account deletion; 409 sole-admin guard
+
+  # ── Admin ──────────────────────────────────────────────────────────
+  /admin/health:
+    get: { tags: [admin], operationId: getAdminHealth, security: [{ bearerAuth: [], adminRole: [] }], responses: { "200": { $ref: "#/components/responses/AdminHealth" } } }
+  /admin/collections/trigger:
+    post: { tags: [admin], operationId: triggerCollection, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdempotencyKey"}], responses: { "200": { $ref: "#/components/responses/Collection" }, "409": { $ref: "#/components/responses/Conflict" }, "429": { $ref: "#/components/responses/RateLimited" } } }
+  /forecast-collections:
+    get: { tags: [admin], operationId: listCollections, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}], responses: { "200": { $ref: "#/components/responses/CollectionList" } } }
+  /admin/collections/{id}/replay:
+    post: { tags: [admin], operationId: replayCollection, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Collection" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+  /admin/rankings/recompute:
+    post: { tags: [admin], operationId: recomputeRankings, security: [{ bearerAuth: [], adminRole: [] }], responses: { "202": { $ref: "#/components/responses/BatchAccepted" } } }
+  /admin/providers/{id}/status:
+    patch: { tags: [admin], operationId: setProviderStatus, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/Provider" } } }
+  /admin/provider-configurations/{id}:
+    put: { tags: [admin], operationId: updateProviderConfiguration, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/ProviderConfiguration" }, "422": { $ref: "#/components/responses/ValidationError" } } }
+  /admin/users:
+    get: { tags: [admin], operationId: listUsers, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}], responses: { "200": { $ref: "#/components/responses/UserList" } } }
+  /admin/users/{id}/status:
+    patch: { tags: [admin], operationId: setUserStatus, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "200": { $ref: "#/components/responses/User" }, "409": { $ref: "#/components/responses/Conflict" } } }
+  /admin/users/{id}:
+    delete: { tags: [admin], operationId: deleteUser, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "202": { description: Deletion initiated }, "409": { $ref: "#/components/responses/Conflict" } } }
+  /admin/users/{id}/export:
+    post: { tags: [admin], operationId: adminExport, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/IdPath"}], responses: { "202": { $ref: "#/components/responses/ExportJob" }, "409": { $ref: "#/components/responses/Conflict" } } }
+  /admin/audit-events:
+    get: { tags: [admin], operationId: listAuditEvents, security: [{ bearerAuth: [], adminRole: [] }], parameters: [{$ref: "#/components/parameters/Cursor"}, {$ref: "#/components/parameters/Limit"}], responses: { "200": { $ref: "#/components/responses/AuditList" } } }
+
+  # ── Operations ─────────────────────────────────────────────────────
+  # /healthz, /readyz served outside /api/v1 prefix (no version).
+  # /metrics bound to localhost only (not in public spec).
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT, description: Supabase access token }
+    apiKeyAuth: { type: apiKey, in: header, name: X-API-Key }
+    adminRole: { type: apiKey, in: header, name: X-Role-Required, description: marker — enforced server-side from JWT role claim }
+
+  parameters:
+    IdPath: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 128 } }
+
+  responses:
+    # All 2xx responses share the envelope schema (data/metadata/freshness/
+    # provenance/attribution/partial_result/warnings/pagination per
+    # docs/api/02-response-conventions.md). Named responses below are
+    # placeholders expanded in the generated spec.
+    Rankings: { description: see docs/api/01-screen-api-contracts.md §1 }
+    Methodology: { description: methodology registry }
+    AccuracySummary: { description: location or provider mode }
+    AccuracyTrend: { description: bucketed series }
+    ForecastComparison: { description: day payload }
+    ProviderList: { description: providers }
+    Provider: { description: single provider }
+    LocationList: { description: locations }
+    Location: { description: single location }
+    ForecastList: { description: snapshots }
+    Forecast: { description: snapshot + collection provenance }
+    ObservationList: { description: observations }
+    Observation: { description: observation + supersession }
+    Me: { description: profile }
+    ApiKeyList: { description: caller keys }
+    ApiKeyCreated: { description: key shown once }
+    ExportJob: { description: job status }
+    AdminHealth: { description: health assembly }
+    Collection: { description: collection row }
+    CollectionList: { description: collections }
+    BatchAccepted: { description: recompute accepted }
+    ProviderConfiguration: { description: configuration (no credential) }
+    UserList: { description: users }
+    User: { description: user }
+    AuditList: { description: audit events }
+    ValidationError: { description: RFC 7807 validation, content: application/problem+json }
+    Unauthorized: { description: RFC 7807 unauthorized }
+    NotFound: { description: RFC 7807 not_found }
+    Conflict: { description: RFC 7807 conflict/duplicate }
+    RateLimited: { description: RFC 7807 rate_limited + Retry-After }
+
+  requestBodies:
+    LocationCreate:
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, latitude, longitude, country_code, timezone]
+            properties:
+              name: { type: string, maxLength: 120 }
+              latitude: { type: number, minimum: -90, maximum: 90 }
+              longitude: { type: number, minimum: -180, maximum: 180 }
+              country_code: { type: string, pattern: "^[A-Z]{2}$" }
+              timezone: { type: string, description: IANA zone }
+              allow_near_duplicate: { type: boolean, default: false }
+
+# NOTE: This outline defines structure and governance. Full schemas for the
+# 2xx envelopes are generated from Go struct annotations at build time;
+# the generated file is the served artifact and CI-checked for drift.
