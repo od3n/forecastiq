@@ -175,3 +175,44 @@ Companion: `WP-04-delivery-re-review.md`. Decision: **BLOCKED** (all code findin
 | WP-08 | `ListActiveLocations` for slot generation | Functionally yes; gated | Scheduler-eligibility tests pass |
 
 WP-05 is included for readiness only; it was **not** reviewed or implemented during the re-review.
+
+---
+
+## 8. Team final-remediation traceability (2026-07-23)
+
+Companion: `WP-04-delivery-re-review.md` §A1–A6. Records the implementation team's closure of the two evidence blockers (RR-001, RR-002) and the TC-04 CI evidence, within strict scope (test-only + test-harness; no production/CI changes). Branch `fix/wp04-final-review`, tip `1fa9105`.
+
+### 8.1 Remediation-finding traceability
+
+| Finding | Acceptance condition | Remediation evidence | Test evidence (executed) | Result |
+|---------|----------------------|----------------------|--------------------------|--------|
+| DRB-WP04-RR-001 | Assert audit boolean, not string; production payload unchanged | `location_test.go` type-asserts `bool` + `true` (`bf694a0`) | `go test -tags integration -run TestAPI_DuplicateOverrideWithReason ./test/integration/` — **PASS** | **RESOLVED** |
+| DRB-WP04-RR-002 | Stabilise suite; preserve isolation; ≥5 consecutive green; no retries/skips | Shared `TestMain` container + per-test fresh DB dropped `WITH (FORCE)` (`b7f2479`) | 5 consecutive `make test-integration` green (~40 s→~7 s); `backend-integration` red→green in CI | **RESOLVED** |
+
+### 8.2 CI traceability (TC-04) — superseding §7.3
+
+Pushed-branch CI is now inspectable (SSH credentials working). Run **29945014559** (`pull_request`, headSha `1fa9105`): <https://github.com/od3n/forecastiq/actions/runs/29945014559>.
+
+| Required CI check | Commit tested | Result | Evidence |
+|-------------------|---------------|--------|----------|
+| backend-integration | `1fa9105` | **PASS** | red on `main` `fc72f08` → green on `1fa9105`; RR-001+RR-002 verified in CI |
+| api-contract (OpenAPI) | `1fa9105` | **PASS** | run 29945014559 |
+| migrations | `1fa9105` | **PASS** | build + migrate up + verify + seed ×2 |
+| image (container build) | `1fa9105` | **PASS** | distroless prod build |
+| backend-checks | `1fa9105` | **FAIL (pre-existing, out of scope)** | `govulncheck` Go 1.23.x stdlib CVEs (GO-2025-4007/4008) + `x/net@v0.25.0` (GO-2025-3595); also red on `main`; gofmt/lint/unit-race pass |
+| security (gitleaks) | `1fa9105` | **FAIL (pre-existing, out of scope)** | HTTP 403 `Resource not accessible by integration` on `pull_request` event; passes on `main` push; not a detected secret |
+| Local == remote SHA | `1fa9105` | **PASS** | `git ls-remote --heads origin fix/wp04-final-review` = `1fa9105` |
+
+### 8.3 Documentation traceability
+
+| Document / contract | Required update | Actual update | Result |
+|---------------------|-----------------|---------------|--------|
+| `WP-04-delivery-re-review.md` | Addendum: RR-001/RR-002 resolved + TC-04 CI evidence + final status | Applied (§A1–A6) | PASS |
+| `WP-04-findings.md` | RR-001/RR-002 cards → Resolved with evidence | Applied | PASS |
+| `docs/planning/06-work-package-status-registry.md` | Team final-remediation subsection (PARTIALLY COMPLETE) | Applied | PASS |
+| `docs/risk/02-phase-1-risk-register.md` | R-35 residual updated | Applied | PASS |
+| `WP-04-traceability.md` §8 | Remediation + CI + doc traceability | This section | PASS |
+
+### 8.4 Team status
+
+**PARTIALLY COMPLETE.** RR-001 and RR-002 RESOLVED and verified green in CI; TC-04 branch/SHA/trigger/correct-commit checks satisfied. Withheld from a clean READY FOR CONFIRMATORY RE-REVIEW only because two mandatory but pre-existing, unrelated CI jobs remain red (deferred by explicit scope decision). The board retains sole authority to mark WP-04 **Accepted**.

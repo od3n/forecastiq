@@ -59,6 +59,17 @@ Decision: **BLOCKED** (report: `docs/reviews/work-packages/WP-04-delivery-re-rev
 
 Next action (implementation team): push the branch with working credentials and capture CI for `fc72f08`; fix RR-001 and stabilise the suite; then re-convene for a short confirmatory re-review. **WP-05 must not be selected until WP-04 is Accepted.**
 
+## WP-04 team final remediation (2026-07-23)
+
+Status: **PARTIALLY COMPLETE** (report addendum: `docs/reviews/work-packages/WP-04-delivery-re-review.md` §A1–A6). The implementation team addressed the two evidence blockers within strict scope (test-only + test-harness; no production, migration, OpenAPI, or CI changes):
+
+- **DRB-WP04-RR-001 — RESOLVED (test-only).** `test/integration/location_test.go` now type-asserts `allow_near_duplicate` as a JSON boolean (`bool` + `true`) instead of the string `"true"`. Production audit payload unchanged. Commit `bf694a0`.
+- **DRB-WP04-RR-002 — RESOLVED (test-harness).** Single package-wide PostgreSQL container via `TestMain`; each test gets a fresh migrated database (`it_<pid>_<counter>`) dropped `WITH (FORCE)`. Per-test container churn eliminated; isolation preserved; no retries/skips/weakened assertions. 5 consecutive local green runs (~40 s → ~7 s). Commit `b7f2479`.
+- **TC-04 — PARTIALLY SATISFIED.** Branch `fix/wp04-final-review` (base `33ad0ab`, tip `1fa9105`) pushed via SSH; local == remote SHA verified; PR #1 triggered CI run `29945014559` (`pull_request`, headSha `1fa9105`). **`backend-integration` went red→green** (failure on `main` `fc72f08` → success on `1fa9105`), verifying RR-001+RR-002 in CI. `api-contract`, `migrations`, `image` also green.
+- **Out of scope (deferred, separate work item).** Two mandatory but **pre-existing, unrelated** CI jobs remain red on the branch (they fail on `main` independently of WP-04): `backend-checks` (`govulncheck` flags Go 1.23.x stdlib CVEs GO-2025-4007/4008 + `golang.org/x/net@v0.25.0` GO-2025-3595) and `security` (`gitleaks` HTTP 403 `Resource not accessible by integration` — a `pull_request`-event token-permission quirk, not a detected secret). By explicit scope decision these were left unchanged; their remediation (Go toolchain/dependency bump; CI `permissions:` block) is a separate task.
+
+Next action: raise the two pre-existing CI failures as a separate maintenance task, then re-convene the board for a short confirmatory re-review. **Only the Delivery Review Board may mark WP-04 Accepted. WP-05 must not be selected until WP-04 is Accepted.**
+
 ## Deferred items recorded during WP-04
 
 | Item | Rationale | Revisit |

@@ -191,3 +191,78 @@ Then re-convene for a short confirmatory re-review. *(This board does not perfor
 | Readiness for WP-05 | 6 | Contracts stable and hardened, but WP-04 not yet Accepted (evidence gate) |
 
 A high average does not override an unsatisfied mandatory condition: TC-04 governs the decision.
+
+---
+
+# Addendum — Team final remediation (2026-07-23)
+
+> Author: implementation team (not the board). This addendum records the resolution of the two re-review evidence gaps (`DRB-WP04-RR-001`, `DRB-WP04-RR-002`) and the `TC-04` pushed-branch CI evidence. It does **not** reopen DRB-WP04-001..005 and does **not** change the board's verdict above. Only the Delivery Review Board may mark WP-04 **Accepted**.
+
+## A1. Repository state
+
+| Item | Value |
+|------|-------|
+| Branch | `fix/wp04-final-review` |
+| Base commit (branch point) | `33ad0ab` (prior `main` tip) |
+| Commit — RR-001 test fix | `bf694a0` `test(locations): assert duplicate override as boolean` |
+| Commit — RR-002 harness | `b7f2479` `test(integration): stabilise postgres test isolation` |
+| Commit — remediation docs | `1fa9105` `docs(review): record WP-04 RR-001/RR-002 remediation evidence` |
+| Pushed remote ref | `refs/heads/fix/wp04-final-review` |
+| Local == remote SHA | `1fa9105` == `1fa9105` (verified via `git ls-remote --heads origin fix/wp04-final-review`) |
+| `origin/main` | `fc72f08` — **untouched** |
+| Pull request | #1 → `main` (triggers the `pull_request` CI event) |
+| Worktree | clean |
+
+## A2. DRB-WP04-RR-001 — RESOLVED
+
+- **Root cause.** `test/integration/location_test.go` asserted the string `"true"` for the audit field `allow_near_duplicate`, but the audit payload stores a JSON boolean, which pgx decodes into a Go `bool`. Deterministic failure; **production behaviour was correct**.
+- **Correction (test-only).** Type-assert the value is a `bool` and is `true` (`require.Truef(ok, …%T…)` + `assert.True(allow, …)`), so the test now fails if the field is missing, `false`, or a string. Production audit payload unchanged.
+- **Evidence.** Focused: `go test -tags integration -run TestAPI_DuplicateOverrideWithReason ./test/integration/` → **PASS**. Full suite green (A3).
+
+## A3. DRB-WP04-RR-002 — RESOLVED
+
+- **Reproduction.** Board saw different unrelated tests fail across runs; all pass in isolation. Locally the failures did not reproduce in 4 baseline runs (≈40 s each) on a well-resourced machine — consistent with a resource-pressure race that surfaces under constrained CI.
+- **Root cause.** One PostgreSQL container per test (~28/run); `t.Cleanup` fired `container.Terminate` asynchronously (background context), so one container's teardown overlapped the next container's startup. Under CI resource limits (+ Ryuk reaper churn) this produced intermittent readiness timeouts / connection resets on unrelated tests.
+- **Stabilisation (smallest reliable strategy).** Single package-wide container via `TestMain`; each test gets a fresh uniquely-named, fully-migrated database (`it_<pid>_<counter>`), dropped `WITH (FORCE)` on cleanup. Isolation preserved; container churn eliminated. No parallelism disabled (there was none), no retries/sleeps/skips, no weakened assertions.
+- **Repeated-run evidence (local).** 5 consecutive `make test-integration` runs green; wall time ~40 s → ~7 s; no leaked containers.
+- **CI evidence.** The `backend-integration` job went **failure (on `main` `fc72f08`) → success (on this branch `1fa9105`)** — the fix is verified in the constrained CI environment, not just locally.
+
+| Run | Command | Result | Duration |
+| --: | ------- | ------ | -------: |
+| 1 | `go test -tags integration -count=1 ./test/integration/` | ✅ PASS | ~9 s |
+| 2 | same | ✅ PASS | ~7 s |
+| 3 | same | ✅ PASS | ~8 s |
+| 4 | same | ✅ PASS | ~6 s |
+| 5 | same | ✅ PASS | ~7 s |
+
+## A4. TC-04 — pushed-branch CI evidence
+
+Branch pushed with working SSH credentials; remote and CI independently verified. CI run **29945014559** (`pull_request`, headSha `1fa9105`): <https://github.com/od3n/forecastiq/actions/runs/29945014559>.
+
+| CI job | Status on `1fa9105` | Required? | Note |
+|--------|--------------------|-----------|------|
+| backend-integration | ✅ success | Yes | **WP-04 target; red→green vs `main`** — RR-001+RR-002 verified in CI |
+| api-contract (OpenAPI) | ✅ success | Yes | — |
+| migrations | ✅ success | Yes | build + migrate up + verify schema + seed ×2 |
+| image (container build) | ✅ success | Yes | distroless prod build |
+| backend-checks | ❌ failure | Yes | **Pre-existing on `main`** — `govulncheck` flags Go 1.23.x stdlib CVEs (GO-2025-4007/4008) + `golang.org/x/net@v0.25.0` (GO-2025-3595). **Not caused by this remediation.** gofmt/lint/unit-race all pass. |
+| security (gitleaks) | ❌ failure | Yes | Action error `Resource not accessible by integration` (HTTP 403 listing PR commits) on the `pull_request` event — a token-permission quirk (passes on `main`'s push event). **Not a detected secret; not caused by this remediation.** |
+
+**TC-04 requirement matrix**
+
+| Requirement | Evidence | Result |
+|-------------|----------|--------|
+| Dedicated branch exists | `fix/wp04-final-review` | ✅ |
+| Branch pushed | `git push -u origin fix/wp04-final-review` succeeded | ✅ |
+| Local and remote SHA match | `1fa9105` == `1fa9105` (`git ls-remote`) | ✅ |
+| CI triggered | PR #1 → run 29945014559 (`pull_request`) | ✅ |
+| Correct commit tested | run headSha = `1fa9105` (branch tip) | ✅ |
+| Required jobs passed | 4/6 green incl. **backend-integration**; 2 pre-existing/unrelated red (dependency scan, secret-scan permission) | ⚠️ Partial |
+
+## A5. Scope control
+
+**No production behaviour changed.** RR-001 is a test assertion; RR-002 is test-harness lifecycle. No production code, migrations, OpenAPI, or architecture were modified. Per an explicit scope decision, the two pre-existing/unrelated red CI jobs (`backend-checks` govulncheck, `security` gitleaks permission) were **left unchanged** and are tracked as a separate work item — they affect `main` independently of WP-04 and their remediation (Go toolchain / dependency bump; CI `permissions:` block) is outside the RR-001/RR-002 scope.
+
+## A6. Final team status
+
+**PARTIALLY COMPLETE.** RR-001 and RR-002 are resolved and **verified green in CI** (`backend-integration` red→green on the pushed commit); TC-04's branch/SHA/trigger/correct-commit checks are all satisfied. A clean **READY FOR CONFIRMATORY RE-REVIEW** is withheld only because two **mandatory but pre-existing, unrelated** CI jobs (dependency scan, secret-scan permission) remain red — by explicit scope decision they are deferred to a separate task. The board retains sole authority to mark WP-04 **Accepted**.
