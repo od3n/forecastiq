@@ -67,3 +67,15 @@ func (e *DuplicateLocationError) Error() string {
 	return fmt.Sprintf("location %.6f° from existing location %q (id=%s); near-duplicate (BR-LOC-01)",
 		e.DistanceDegrees, e.ExistingName, e.ExistingID)
 }
+
+// NameConflictError signals an (workspace_id, name) uniqueness violation
+// among active locations (409 conflict; partial unique index
+// locations_active_name_uidx).
+type NameConflictError struct {
+	Name string
+}
+
+// Error implements error.
+func (e *NameConflictError) Error() string {
+	return fmt.Sprintf("an active location named %q already exists in this workspace", e.Name)
+}

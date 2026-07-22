@@ -84,6 +84,7 @@ func (s *LocationService) CreateLocation(ctx context.Context, in CreateLocationI
 				"actor":                actorName(in.Actor),
 				"name":                 loc.Name,
 				"allow_near_duplicate": in.AllowNearDuplicate,
+				"override_reason":      in.OverrideReason,
 			},
 		})
 	})
@@ -138,7 +139,8 @@ func (s *LocationService) ListLocations(ctx context.Context, in ListLocationsInp
 	return rows, page, nil
 }
 
-// UpdateLocation updates mutable fields (name, timezone) and audits.
+// UpdateLocation updates mutable fields (name only — timezone and coordinates
+// are immutable per domain architecture §2.3) and audits.
 func (s *LocationService) UpdateLocation(ctx context.Context, id uuid.UUID, in UpdateLocationInput) (*domain.Location, error) {
 	var updated *domain.Location
 	err := s.tx.Run(ctx, func(ctx context.Context, tx dbtx.DBTX) error {
@@ -150,10 +152,6 @@ func (s *LocationService) UpdateLocation(ctx context.Context, id uuid.UUID, in U
 		if in.Name != nil {
 			loc.Name = *in.Name
 			changes["name"] = *in.Name
-		}
-		if in.Timezone != nil {
-			loc.Timezone = *in.Timezone
-			changes["timezone"] = *in.Timezone
 		}
 		if err := loc.ValidateCreation(); err != nil {
 			return err
@@ -174,6 +172,9 @@ func (s *LocationService) UpdateLocation(ctx context.Context, id uuid.UUID, in U
 	if err != nil {
 		return nil, err
 	}
+	s.logger.InfoContext(ctx, "location.updated",
+		slog.String("location_id", updated.ID.String()),
+		slog.String("name", updated.Name))
 	return updated, nil
 }
 
@@ -208,6 +209,9 @@ func (s *LocationService) SetLocationStatus(ctx context.Context, id uuid.UUID, s
 	if err != nil {
 		return nil, err
 	}
+	s.logger.InfoContext(ctx, "location.status_changed",
+		slog.String("location_id", id.String()),
+		slog.String("status", string(status)))
 	return updated, nil
 }
 

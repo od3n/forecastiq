@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/forecastiq/forecastiq/internal/catalog/domain"
 	"github.com/forecastiq/forecastiq/internal/catalog/ports"
@@ -49,7 +50,7 @@ func (r *LocationRepository) Insert(ctx context.Context, tx dbtx.DBTX, l *domain
 		l.ID, l.WorkspaceID, l.Name, l.Latitude, l.Longitude,
 		l.CountryCode, l.Timezone, string(l.Status), l.CreatedAt, l.UpdatedAt)
 	if err != nil {
-		return fmt.Errorf("insert location: %w", err)
+		return mapLocationExecErr(err, l.Name)
 	}
 	return nil
 }
@@ -95,7 +96,7 @@ func (r *LocationRepository) Update(ctx context.Context, tx dbtx.DBTX, l *domain
 		`UPDATE locations SET name = $2, timezone = $3 WHERE id = $1`,
 		l.ID, l.Name, l.Timezone)
 	if err != nil {
-		return fmt.Errorf("update location: %w", err)
+		return mapLocationExecErr(err, l.Name)
 	}
 	return nil
 }
@@ -122,4 +123,15 @@ func collectLocations(rows pgx.Rows) ([]*domain.Location, error) {
 		out = append(out, &l)
 	}
 	return out, rows.Err()
+}
+
+// mapLocationExecErr translates constraint violations into domain errors:
+// the partial unique index locations_active_name_uidx maps to
+// NameConflictError (409); everything else wraps unchanged.
+func mapLocationExecErr(err error, name string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "locations_active_name_uidx" {
+		return &domain.NameConflictError{Name: name}
+	}
+	return fmt.Errorf("location write: %w", err)
 }

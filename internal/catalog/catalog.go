@@ -55,14 +55,18 @@ type CreateLocationInput struct {
 	CountryCode        string
 	Timezone           string
 	AllowNearDuplicate bool
-	Actor              Actor
+	// OverrideReason documents why the operator accepted a near-duplicate
+	// (audited when AllowNearDuplicate is set; WP-04 accountability).
+	OverrideReason string
+	Actor          Actor
 }
 
-// UpdateLocationInput is the UpdateLocation command (mutable fields only).
+// UpdateLocationInput is the UpdateLocation command. Only name is mutable
+// (domain architecture §2.3: coordinates, country_code, and timezone are
+// immutable after creation — a moved or re-zoned location is a new location).
 type UpdateLocationInput struct {
-	Name     *string
-	Timezone *string
-	Actor    Actor
+	Name  *string
+	Actor Actor
 }
 
 // ListLocationsInput is the location list query.
