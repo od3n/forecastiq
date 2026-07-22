@@ -1,0 +1,252 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ForecastIQ API",
+    "version": "1.0.0",
+    "description": "Weather forecast accuracy comparison platform. First vertical slice endpoints. All successful responses use the standard envelope (docs/api/02-response-conventions.md); errors use RFC 7807 (docs/api/03-error-and-partial-result-contracts.md)."
+  },
+  "servers": [
+    { "url": "/api/v1" }
+  ],
+  "tags": [
+    { "name": "catalog" },
+    { "name": "data" },
+    { "name": "admin" },
+    { "name": "operations" }
+  ],
+  "paths": {
+    "/locations": {
+      "get": {
+        "tags": ["catalog"],
+        "operationId": "listLocations",
+        "summary": "List locations",
+        "parameters": [
+          { "name": "active", "in": "query", "schema": { "type": "boolean" } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Locations", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "422": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "post": {
+        "tags": ["catalog"],
+        "operationId": "createLocation",
+        "summary": "Create a location (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateLocationRequest" } } }
+        },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "409": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/locations/{id}": {
+      "get": {
+        "tags": ["catalog"],
+        "operationId": "getLocation",
+        "summary": "Get a location",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Location", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/providers": {
+      "get": {
+        "tags": ["catalog"],
+        "operationId": "listProviders",
+        "summary": "List providers",
+        "responses": {
+          "200": { "description": "Providers", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }
+        }
+      }
+    },
+    "/forecasts/latest": {
+      "get": {
+        "tags": ["data"],
+        "operationId": "getLatestForecast",
+        "summary": "Latest forecast for a provider + location",
+        "parameters": [
+          { "name": "location_id", "in": "query", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "provider_id", "in": "query", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Latest forecast", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/admin/collections/trigger": {
+      "post": {
+        "tags": ["admin"],
+        "operationId": "triggerCollection",
+        "summary": "Trigger an immediate collection (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TriggerCollectionRequest" } } }
+        },
+        "responses": {
+          "200": { "description": "Collection result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "409": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/forecast-collections": {
+      "get": {
+        "tags": ["admin"],
+        "operationId": "listCollections",
+        "summary": "List forecast collections (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "provider_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "location_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Collections", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "401": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/forecast-collections/{id}": {
+      "get": {
+        "tags": ["admin"],
+        "operationId": "getCollection",
+        "summary": "Get a forecast collection (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Collection", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+    },
+    "responses": {
+      "Problem": {
+        "description": "RFC 7807 problem",
+        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+      }
+    },
+    "schemas": {
+      "Envelope": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {},
+          "metadata": { "$ref": "#/components/schemas/Metadata" },
+          "freshness": { "$ref": "#/components/schemas/Freshness" },
+          "attribution": { "type": "array", "items": { "$ref": "#/components/schemas/Attribution" } },
+          "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/Warning" } },
+          "pagination": { "$ref": "#/components/schemas/Pagination" },
+          "partial_result": { "type": "boolean" }
+        }
+      },
+      "Metadata": {
+        "type": "object",
+        "properties": {
+          "request_id": { "type": "string" },
+          "generated_at": { "type": "string", "format": "date-time" },
+          "timezone": { "type": "string" },
+          "units": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      },
+      "Freshness": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "string", "enum": ["fresh", "delayed", "stale", "unavailable"] },
+          "last_updated": { "type": "string", "format": "date-time" },
+          "age_seconds": { "type": "integer" },
+          "threshold_seconds": { "type": "integer" },
+          "reason": { "type": "string" }
+        }
+      },
+      "Attribution": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": "string" },
+          "text": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      },
+      "Warning": {
+        "type": "object",
+        "properties": {
+          "provider_id": { "type": "string" },
+          "code": { "type": "string", "enum": ["provider_unavailable", "stale"] },
+          "message": { "type": "string" },
+          "since": { "type": "string" }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "next_cursor": { "type": "string" },
+          "has_more": { "type": "boolean" }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": ["type", "title", "status", "request_id"],
+        "properties": {
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "integer" },
+          "detail": { "type": "string" },
+          "instance": { "type": "string" },
+          "request_id": { "type": "string" },
+          "retryable": { "type": "boolean" },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": { "field": { "type": "string" }, "message": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "CreateLocationRequest": {
+        "type": "object",
+        "required": ["name", "latitude", "longitude", "country_code", "timezone"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 120 },
+          "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+          "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+          "country_code": { "type": "string", "pattern": "^[A-Z]{2}$" },
+          "timezone": { "type": "string" },
+          "allow_near_duplicate": { "type": "boolean", "default": false }
+        }
+      },
+      "TriggerCollectionRequest": {
+        "type": "object",
+        "required": ["provider_id", "location_id"],
+        "properties": {
+          "provider_id": { "type": "string", "format": "uuid" },
+          "location_id": { "type": "string", "format": "uuid" }
+        }
+      }
+    }
+  }
+}

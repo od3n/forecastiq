@@ -1,0 +1,61 @@
+package api
+
+import (
+	"log/slog"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/forecastiq/forecastiq/api/openapi"
+	"github.com/forecastiq/forecastiq/internal/api/handlers"
+	"github.com/forecastiq/forecastiq/internal/platform/metrics"
+	"github.com/forecastiq/forecastiq/internal/platform/ratelimit"
+)
+
+// RouterConfig configures the HTTP router.
+type RouterConfig struct {
+	DevAdminToken    string
+	CORSAllowOrigins []string
+	RateLimiter      *ratelimit.KeyedLimiter
+}
+
+// NewRouter builds the Gin engine with the middleware chain and first-slice
+// routes. Operational probes (/healthz, /readyz) are unversioned; the API is
+// URL-versioned under /api/v1 (API architecture §2). /metrics is served on a
+// separate localhost-bound server (see cmd), not here.
+func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cfg RouterConfig) *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(Recovery(logger), RequestID(), RequestLogger(logger), Metrics(m), CORS(cfg.CORSAllowOrigins))
+
+	// Operational probes (no auth, no rate limit).
+	r.GET("/healthz", h.Healthz)
+	r.GET("/readyz", h.Readyz)
+
+	v1 := r.Group("/api/v1")
+	v1.Use(RateLimit(cfg.RateLimiter))
+	{
+		v1.GET("/openapi.json", serveOpenAPI)
+
+		// Public catalog + data reads.
+		v1.GET("/locations", h.ListLocations)
+		v1.GET("/locations/:id", h.GetLocation)
+		v1.GET("/providers", h.ListProviders)
+		v1.GET("/forecasts/latest", h.LatestForecast)
+
+		// Admin mutations + lineage queries.
+		admin := v1.Group("", RequireAdmin(cfg.DevAdminToken))
+		{
+			admin.POST("/locations", h.CreateLocation)
+			admin.POST("/admin/collections/trigger", h.TriggerCollection)
+			admin.GET("/forecast-collections", h.ListCollections)
+			admin.GET("/forecast-collections/:id", h.GetCollection)
+		}
+	}
+	return r
+}
+
+// serveOpenAPI returns the committed OpenAPI 3.1 document.
+func serveOpenAPI(c *gin.Context) {
+	c.Data(http.StatusOK, "application/json; charset=utf-8", openapi.Spec)
+}
