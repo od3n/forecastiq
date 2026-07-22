@@ -47,6 +47,7 @@ hourly; the trigger endpoint runs an immediate collection.
 - **Worker**: in-process scheduler with `FOR UPDATE SKIP LOCKED` slot claims,
   leases, retry, and run history.
 - **API**: `/healthz`, `/readyz`, `/metrics`, `/api/v1/locations`,
+  `/api/v1/locations/{id}` (GET/PUT), `/api/v1/locations/{id}/status` (PATCH),
   `/api/v1/providers`, `/api/v1/forecasts/latest`,
   `/api/v1/admin/collections/trigger`, `/api/v1/forecast-collections`,
   `/api/v1/openapi.json` — RFC 7807 errors, standard envelope, dev-token auth seam.

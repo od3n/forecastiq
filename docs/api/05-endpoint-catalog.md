@@ -28,9 +28,9 @@ Complete catalog of all MVP endpoints. Response envelope per `docs/api/02-respon
 | GET | `/providers/{id}` | Provider detail | public | — | single provider + adapter_version + collecting_since | 404 | ETag 300 s | 10/50 ms |
 | GET | `/locations` | Location list (S-01 selector, S-12) | public | active (bool), cursor/limit | locations[{id, name, country_code, lat, lon, timezone, status, created_at}] | — | ETag 300 s | 10/50 ms |
 | GET | `/locations/{id}` | Location detail | public | — | single location | 404 | ETag 300 s | 10/50 ms |
-| POST | `/locations` | Create location | **admin** | Idempotency-Key; body {name, latitude, longitude, country_code, timezone, allow_near_duplicate?} | created location | 422 validation; 409 duplicate (existing ref + distance) | no-store | 100/500 ms |
-| PUT | `/locations/{id}` | Update mutable fields | admin | {name?, timezone?} | updated | 422; 404 | no-store | 100/300 ms |
-| PATCH | `/locations/{id}/status` | Enable/disable | admin | {status} | updated | 422 enum; 404 | no-store | 100/300 ms |
+| POST | `/locations` | Create location | **admin** | Idempotency-Key; body {name, latitude, longitude, country_code, timezone, allow_near_duplicate?, override_reason? (required when allow_near_duplicate)} | created location | 422 validation; 409 duplicate (existing ref + distance) | no-store | 100/500 ms |
+| PUT | `/locations/{id}` | Update mutable fields | admin | {name} (coordinates, country_code, timezone immutable — domain architecture §2.3) | updated | 422; 404; 409 name conflict | no-store | 100/300 ms |
+| PATCH | `/locations/{id}/status` | Enable/disable | admin | {status: active\|disabled} | updated | 422 enum; 404; 409 invalid transition | no-store | 100/300 ms |
 
 ### 1.3 User (authenticated) endpoints
 
