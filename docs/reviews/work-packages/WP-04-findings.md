@@ -190,13 +190,15 @@ Discovered during re-review when the integration suite was executed (Docker was 
 | Discipline | QA / Test quality |
 | Affected files | `test/integration/location_test.go:68` |
 | Origin | Original WP-04 test commit `c412fee` (pre-remediation) |
-| Status | Open — blocks a clean `make test-integration` gate |
+| Status | **Resolved (final remediation 2026-07-23, branch `fix/wp04-final-review`)** — assertion now type-checks a JSON boolean (`bool` true), not the string `"true"`. Focused test + full suite green. |
 
 **Evidence.** `assert.Equal(t, "true", details["allow_near_duplicate"])` expects the string `"true"`, but the audit `details` JSON stores a boolean, so `details["allow_near_duplicate"]` unmarshals to Go `bool(true)`. The test fails deterministically (isolated and in-suite). **Production behaviour is correct** (audit records a boolean); the assertion is wrong. Latent until now because the first review could not execute the integration suite.
 
-**Recommended remediation.** `assert.Equal(t, true, details["allow_near_duplicate"])` (test-only; no production change).
+**Remediation applied (test-only).** `test/integration/location_test.go` now does a type assertion `allow, ok := details["allow_near_duplicate"].(bool)`, `require.Truef(ok, …%T…)`, and `assert.True(allow, …)`. This verifies the value is a **JSON boolean** and is **true** — the test now fails if the field is missing, `false`, or a string. Production audit payload is unchanged (`in.AllowNearDuplicate` remains a Go `bool` in `location_service.go`).
 
-**Acceptance condition.** `TestAPI_DuplicateOverrideWithReason` green; full integration suite green.
+**Test evidence.** `go test -tags integration -run TestAPI_DuplicateOverrideWithReason ./test/integration/` → **PASS** (0.17 s); full `make test-integration` → **PASS** (see RR-002 repeated-run table).
+
+**Acceptance condition.** `TestAPI_DuplicateOverrideWithReason` green; full integration suite green. **MET.**
 
 ### DRB-WP04-RR-002 — Integration suite is flaky under container contention
 
@@ -206,11 +208,25 @@ Discovered during re-review when the integration suite was executed (Docker was 
 | Discipline | Test infrastructure |
 | Affected files | `test/integration/*` (per-test PostgreSQL containers) |
 | Origin | Test-infra design (pre-existing) |
-| Status | Open (non-blocking; reduces CI confidence) |
+| Status | **Resolved (final remediation 2026-07-23, branch `fix/wp04-final-review`)** — single package-wide container via `TestMain`; per-test isolated database. 5 consecutive full-suite runs green; no leaked containers. |
 
-**Evidence.** Two full-suite runs failed on *different* unrelated tests (`TestAPI_ValidationErrorShape`, then `TestSkipLockedClaim`); both pass in isolation. Each test provisions its own PostgreSQL container; Docker Desktop reports 7.8 GB. Symptom of resource contention, not a code defect.
+**Evidence (reproduction & root cause).** The board observed two full-suite runs failing on *different* unrelated tests (`TestAPI_ValidationErrorShape`, then `TestSkipLockedClaim`); both pass in isolation. Root cause: the suite started **one PostgreSQL container per test (~28 per run)** and `t.Cleanup` fired `container.Terminate` asynchronously with a background context, so one container's teardown overlapped the next container's startup. Under constrained CI (ubuntu-latest, 2 vCPU / ~7 GB) plus Ryuk-reaper churn, that overlap produced intermittent readiness timeouts / connection resets on unrelated tests. On a well-resourced local machine the failures did not reproduce in 4 baseline runs (≈40 s each), consistent with a resource-pressure race rather than a code defect. No `t.Parallel()`, shared global clients, or fixed host ports were involved (testcontainers assigns random ports; each test builds its own pool).
 
-**Recommended remediation.** Share a container/schema-per-test or bound parallelism; treat as test-infra hardening.
+**Remediation applied.** `test/integration/setup_test.go`: a `TestMain` owns a single PostgreSQL 16 container for the whole package (started once, terminated once, synchronously). `startPostgres` now `CREATE DATABASE`s a uniquely-named database (`it_<pid>_<counter>`) inside that shared container, migrates and seeds it independently, and `DROP DATABASE … WITH (FORCE)` on `t.Cleanup`. Every test therefore still gets a pristine, fully-isolated database; container churn (and its teardown/startup overlap) is eliminated. All 28 call sites are unchanged. Parallelism was **not** disabled (there was none to disable); no retries, sleeps, skips, or weakened assertions were added.
+
+**Repeated-run evidence (single container, per-test DB).**
+
+| Run | Command | Result | Duration |
+| --: | ------- | ------ | -------: |
+| 1 | `go test -tags integration -count=1 ./test/integration/` | ✅ PASS | ~9 s |
+| 2 | same | ✅ PASS | ~7 s |
+| 3 | same | ✅ PASS | ~8 s |
+| 4 | same | ✅ PASS | ~6 s |
+| 5 | same | ✅ PASS | ~7 s |
+
+No unrelated test failed across the five runs; no leaked `postgres:16-alpine` test containers remained afterward.
+
+**Acceptance condition.** Suite deterministically green across repeated runs; isolation preserved. **MET.**
 
 ---
 
