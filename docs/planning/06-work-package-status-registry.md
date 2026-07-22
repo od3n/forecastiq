@@ -15,7 +15,7 @@ State model: Not Started → Prototype Exists → Partially Implemented → Impl
 | 01 | Repository + dev env | Accepted (bootstrap) | 2026-07-22 | Repository Bootstrap final report; `make dev-up`, CI green |
 | 02 | DB foundation | Accepted (bootstrap) | 2026-07-22 | Migrations 20260801000001..05; integration suite |
 | 03 | Identity + workspace | Not Started | 2026-07-22 | Audit recorder seam exists (used by WP-04); JWKS/API keys pending |
-| 04 | Location management | Ready for Re-Review | 2026-07-22 | DRB-WP04-001..005 remediated: advisory-lock dedup serialization, fp-tolerant boundary, mandatory override reason, restricted status lifecycle, doc corrections. Regression tests added. Awaiting DRB re-review. |
+| 04 | Location management | Blocked (re-review) | 2026-07-23 | DRB-WP04-001..005 verified **RESOLVED** at re-review (advisory-lock dedup proven vs real PostgreSQL; fp-tolerant boundary; mandatory override reason; restricted status lifecycle; doc corrections). **BLOCKED** on TC-04 (pushed-branch CI unverifiable — remote auth fails) + red `make test-integration` (pre-existing DRB-WP04-RR-001 test-assertion bug + RR-002 flakiness). Report: `docs/reviews/work-packages/WP-04-delivery-re-review.md`. |
 | 05 | Adapter framework | Prototype Exists | 2026-07-22 | First-slice collection pipeline + Open-Meteo adapter; hardening pending |
 | 06 | First provider (Open-Meteo) | Prototype Exists | 2026-07-22 | Adapter + fixtures exist; full contract matrix pending |
 | 07 | Second provider (OpenWeather) | Not Started | 2026-07-22 | |
@@ -49,6 +49,15 @@ Decision: **CHANGES REQUIRED** (report: `docs/reviews/work-packages/WP-04-delive
 | DRB-WP04-007 | Low | Malformed `active` query param silently coerced | 422 on invalid boolean |
 
 Tracked conditions: TC-01 Idempotency-Key (→ WP-15, this registry's deferral accepted); TC-02 optimistic concurrency (deferred); TC-03 dev-token seam replacement (WP-03/19) + DR-01 UI/matrix follow-ups (WP-21/19); TC-04 CI green on pushed branch + testcontainers run (review env had no Docker).
+
+## WP-04 Delivery Review Board **Re-Review** outcome (2026-07-23)
+
+Decision: **BLOCKED** (report: `docs/reviews/work-packages/WP-04-delivery-re-review.md`). All five original findings independently verified **RESOLVED** (High concurrency finding proven fixed against real PostgreSQL 16; four Medium findings closed with executed unit + integration tests and matching OpenAPI/docs). No remediation-caused Critical/High regression. Blocked purely on evidence:
+
+- **TC-04 NOT SATISFIED / BLOCKED BY EXTERNAL ACCESS** — `git ls-remote origin` fails authentication; no distinct remediation branch (all on `main`); local `origin/main` moved to HEAD unverifiably; GitHub Actions results not inspectable. Local checks do not substitute for pushed-branch CI.
+- **`make test-integration` red** — DRB-WP04-RR-001 (Medium, **pre-existing** test-assertion bug: string `"true"` vs boolean `true` at `location_test.go:68`; production correct) + DRB-WP04-RR-002 (Low, flaky per-test containers).
+
+Next action (implementation team): push the branch with working credentials and capture CI for `fc72f08`; fix RR-001 and stabilise the suite; then re-convene for a short confirmatory re-review. **WP-05 must not be selected until WP-04 is Accepted.**
 
 ## Deferred items recorded during WP-04
 

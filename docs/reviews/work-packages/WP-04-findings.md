@@ -5,9 +5,10 @@
 **Work package**: WP-04 — Location Management
 **Reviewed commits**: `19035f9..5445435` (on top of accepted baseline `b78a748`)
 **Board decision**: CHANGES REQUIRED (one High finding open)
+**Re-review (2026-07-23)**: DRB-WP04-001..005 verified **RESOLVED**; decision **BLOCKED** on TC-04 (pushed-branch CI unverifiable) + red integration gate. See `WP-04-delivery-re-review.md`.
 **Authority**: Delivery Review Board prompt; `docs/planning/05-implementation-work-packages.md` §WP-04
 
-Finding ID scheme: `DRB-WP04-<NNN>`. Statuses: Open | Accepted Risk | Deferred by Approved Decision | Resolved During Review | Not Reproducible.
+Finding ID scheme: `DRB-WP04-<NNN>` (original), `DRB-WP04-RR-<NNN>` (re-review). Statuses: Open | Resolved (verified re-review) | Accepted Risk | Deferred by Approved Decision | Resolved During Review | Not Reproducible.
 
 ---
 
@@ -19,7 +20,7 @@ Finding ID scheme: `DRB-WP04-<NNN>`. Statuses: Open | Accepted Risk | Deferred b
 | Discipline | Principal Backend Engineer / SRE / QA |
 | Affected requirement | BR-LOC-01; DRB WP-04 guidance "concurrent duplicate prevention" |
 | Affected files | `internal/catalog/location_service.go` (CreateLocation tx), `adapters/persistence/catalogpg/location.go` |
-| Status | Open |
+| Status | **Resolved (verified re-review 2026-07-23)** — `AcquireDedupLock` (`pg_advisory_xact_lock`) serializes the create tx; `TestAPI_ConcurrentDuplicateCreates` executed against real PostgreSQL: 6 concurrent → 1×201, 5×409, 1 row. |
 | Owner | Eng |
 
 **Evidence.** `CreateLocation` performs `ListActive` → haversine scan → `Insert` inside a single READ COMMITTED transaction. No database-level constraint enforces proximity, and nothing serializes concurrent creates. Reproduced live against the real binary + PostgreSQL: 6 concurrent `POST /api/v1/locations` at identical coordinates (30.001, 60.001) with distinct names produced **two 201 responses and two rows** (`Storm Loc 3`, `Storm Loc 5`); the other four requests correctly returned 409. The two near-duplicate rows coexist in `locations`, violating BR-LOC-01.
@@ -53,7 +54,7 @@ for i in 1..6; do curl -X POST .../api/v1/locations -H "Authorization: Bearer <t
 | Discipline | Principal Backend Engineer / QA |
 | Affected requirement | WP-04 test list "Dedup boundary (exactly 0.05°)"; testing doc boundary 0.049°/0.051° |
 | Affected files | `internal/catalog/domain/location.go` (`IsNearDuplicate`, `HaversineDegrees`), `internal/catalog/location_service_test.go` |
-| Status | Open |
+| Status | **Resolved (verified re-review 2026-07-23)** — `dedupTolerance = 1e-9` guard band; `TestIsNearDuplicate_BoundaryTable` (equator/mid/high lat, meridional+zonal, DRB pair permitted, 0.049 rejected, 0.051 permitted) executed and passed. |
 | Owner | Eng |
 
 **Evidence.** The rule is `distanceDegrees < 0.05` (strict), documented as "exactly 0.05° is permitted". Live check: a point mathematically exactly 0.05° from an existing location (20.001 → 20.051, same meridian) was **rejected** with computed `distance_degrees: 0.04999999999999716` — IEEE-754 error landed below the threshold. The passing unit test (`TestCreateLocation_DuplicateBoundaryPermitted`, base latitude 1.4927) succeeds only because that particular sum rounds above the threshold.
@@ -78,7 +79,7 @@ for i in 1..6; do curl -X POST .../api/v1/locations -H "Authorization: Bearer <t
 | Discipline | Business Analyst / Security Engineer |
 | Affected requirement | DRB WP-04 guidance "mandatory override reason"; WP-04 accountability for BR-LOC-01 override |
 | Affected files | `internal/catalog/location_service.go`, `internal/api/handlers/handlers.go` (`CreateLocationRequest`), `api/openapi/openapi.json` |
-| Status | Open |
+| Status | **Resolved (verified re-review 2026-07-23)** — empty/whitespace `override_reason` with `allow_near_duplicate` → 422; unit (`OverrideWithoutReason`/`WithWhitespaceReason`) + integration (`TestAPI_OverrideWithoutReason422`) executed and passed; OpenAPI note added. |
 | Owner | Eng |
 
 **Evidence.** Live: `POST /locations` with `allow_near_duplicate: true` and **no** `override_reason` → 201 Created; the audit row records `"override_reason": ""`. The field exists, is described in OpenAPI ("Operator justification… audited"), and the comment in `catalog.go` says "audited when AllowNearDuplicate is set; WP-04 accountability" — but nothing enforces non-emptiness.
@@ -103,7 +104,7 @@ for i in 1..6; do curl -X POST .../api/v1/locations -H "Authorization: Bearer <t
 | Discipline | API Architect / Domain review |
 | Affected requirement | Domain architecture §2.3 lifecycle (`active → disabled`, `archived` reserved); API requirements §4.1 PATCH "enable/disable" |
 | Affected files | `internal/catalog/location_service.go` (SetLocationStatus), `api/openapi/openapi.json` (`SetLocationStatusRequest` enum), `internal/api/handlers/location.go` |
-| Status | Open |
+| Status | **Resolved (verified re-review 2026-07-23)** — `Status.Settable()` restricts to `active|disabled`; no-op → `StatusTransitionError`→409; enum reduced to `[active,disabled]`; unit + integration (`ArchivedRejected` 422, `NoOpRejected` 409) executed and passed. |
 | Owner | Eng |
 
 **Evidence.** Live: `PATCH /locations/{id}/status` with `{"status":"archived"}` → 200; subsequent `archived → active` → 200. `SetLocationStatus` validates only that the value is a known status — any→any transition is accepted, including into the reserved `archived` state, and no-op transitions (e.g. `disabled → disabled`) are persisted and audited as changes. The OpenAPI request enum advertises `archived`.
@@ -126,7 +127,7 @@ for i in 1..6; do curl -X POST .../api/v1/locations -H "Authorization: Bearer <t
 | Discipline | Developer Experience / Documentation |
 | Affected requirement | Documentation consistency (DR-01 resolution); API doc accuracy |
 | Affected files | `docs/api/05-endpoint-catalog.md` (PUT `/locations/{id}` row: body `{name?, timezone?}`; POST row missing `override_reason`), `README.md` (endpoint list omits PUT/PATCH) |
-| Status | Open |
+| Status | **Resolved (verified re-review 2026-07-23)** — endpoint catalog PUT row → `{name}` + immutability note; POST row adds `override_reason? (required when allow_near_duplicate)`; PATCH row → `{active|disabled}` + 409; README endpoint list updated. No doc claims timezone mutable. |
 | Owner | Eng |
 
 **Evidence.** The WP-04 changeset correctly fixed `docs/api/00-api-requirements.md` (PUT = name only, per DR-01), but `05-endpoint-catalog.md` line 32 still documents the PUT body as `{name?, timezone?}` — directly contradicting the implemented and approved immutability rule. The POST row omits `override_reason`. README's "What's implemented" endpoint list predates the new PUT/PATCH routes.
@@ -147,7 +148,7 @@ for i in 1..6; do curl -X POST .../api/v1/locations -H "Authorization: Bearer <t
 | Discipline | Database Architect / Code quality |
 | Affected requirement | Domain architecture §2.3 immutability (application-enforced per table-design doc) |
 | Affected files | `adapters/persistence/catalogpg/location.go` (`Update`) |
-| Status | Open |
+| Status | Open (non-blocking) — re-review 2026-07-23: **not fixed**; statement still `SET name = $2, timezone = $3`. Out of the 001..005 remediation scope; remains a Low hygiene item. |
 | Owner | Eng |
 
 **Evidence.** `UPDATE locations SET name = $2, timezone = $3 WHERE id = $1`. The service never mutates `loc.Timezone` (the prototype's `Timezone *string` input was removed in this package), so the statement writes back the loaded value — no behavioural deviation today, and `TestUpdateLocation_NameOnly` asserts immutability. The SQL nonetheless invites a future invariant breach and contradicts the documented rule.
@@ -166,7 +167,7 @@ for i in 1..6; do curl -X POST .../api/v1/locations -H "Authorization: Bearer <t
 | Discipline | API Architect |
 | Affected requirement | Input validation conventions (docs/api/02-response-conventions.md — malformed input → 422) |
 | Affected files | `internal/api/handlers/location.go` (ListLocations) |
-| Status | Open |
+| Status | Open (non-blocking) — re-review 2026-07-23: **not fixed**; still `b, _ := strconv.ParseBool(v)`. Out of the 001..005 remediation scope; remains a Low item. |
 | Owner | Eng |
 
 **Evidence.** `b, _ := strconv.ParseBool(v)` — `GET /locations?active=banana` silently behaves as `active=false` (returns only non-active locations) instead of 422. Similarly `limit=abc` silently falls back to the default (acceptable for limit, but the boolean changes filter semantics).
@@ -177,6 +178,42 @@ for i in 1..6; do curl -X POST .../api/v1/locations -H "Authorization: Bearer <t
 
 ---
 
-## Review-environment limitation (not a finding)
+## Re-review findings (2026-07-23) — `DRB-WP04-RR-*`
 
-The testcontainers integration suite (`make test-integration`) could not be executed in the review environment (Docker unavailable). Mitigations applied: the suite compiles under `-tags integration` (`go vet`); every WP-04 behaviour it asserts was re-verified live against the real binary and a real PostgreSQL (14; production target is 16 — no 16-specific DDL identified); unit suite green with `-race`. The WP-04 commits are local-only; CI has not run on them. **CI green on the pushed branch is required before the state moves to Accepted** (tracked in the delivery review §17).
+Discovered during re-review when the integration suite was executed (Docker was available this time; the original review could not run it). **Both are pre-existing, not caused by the remediation.**
+
+### DRB-WP04-RR-001 — `TestAPI_DuplicateOverrideWithReason` asserts the wrong audit type (string vs boolean)
+
+| Attribute | Value |
+|-----------|-------|
+| Severity | **Medium** |
+| Discipline | QA / Test quality |
+| Affected files | `test/integration/location_test.go:68` |
+| Origin | Original WP-04 test commit `c412fee` (pre-remediation) |
+| Status | Open — blocks a clean `make test-integration` gate |
+
+**Evidence.** `assert.Equal(t, "true", details["allow_near_duplicate"])` expects the string `"true"`, but the audit `details` JSON stores a boolean, so `details["allow_near_duplicate"]` unmarshals to Go `bool(true)`. The test fails deterministically (isolated and in-suite). **Production behaviour is correct** (audit records a boolean); the assertion is wrong. Latent until now because the first review could not execute the integration suite.
+
+**Recommended remediation.** `assert.Equal(t, true, details["allow_near_duplicate"])` (test-only; no production change).
+
+**Acceptance condition.** `TestAPI_DuplicateOverrideWithReason` green; full integration suite green.
+
+### DRB-WP04-RR-002 — Integration suite is flaky under container contention
+
+| Attribute | Value |
+|-----------|-------|
+| Severity | Low |
+| Discipline | Test infrastructure |
+| Affected files | `test/integration/*` (per-test PostgreSQL containers) |
+| Origin | Test-infra design (pre-existing) |
+| Status | Open (non-blocking; reduces CI confidence) |
+
+**Evidence.** Two full-suite runs failed on *different* unrelated tests (`TestAPI_ValidationErrorShape`, then `TestSkipLockedClaim`); both pass in isolation. Each test provisions its own PostgreSQL container; Docker Desktop reports 7.8 GB. Symptom of resource contention, not a code defect.
+
+**Recommended remediation.** Share a container/schema-per-test or bound parallelism; treat as test-infra hardening.
+
+---
+
+## Review-environment limitation (original review — superseded by re-review)
+
+The original review could not run the testcontainers integration suite (Docker unavailable). **Re-review update (2026-07-23):** Docker was available; the WP-04 remediation integration tests (concurrency, override-422, status lifecycle) were **executed against real PostgreSQL 16 and passed**. The full suite is red only due to DRB-WP04-RR-001 (pre-existing test-assertion bug) and DRB-WP04-RR-002 (flakiness). **TC-04 (CI green on the pushed branch) remains unsatisfied** — the remote rejects authentication and CI results are not inspectable in this environment; state cannot move to Accepted until real pushed-branch CI evidence exists (delivery re-review §11).

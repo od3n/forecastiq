@@ -122,3 +122,56 @@ Approved acceptance: "BR-LOC-01..03 behaviors proven by tests" + DRB WP-04 test 
 | `docs/planning/06-work-package-status-registry.md` | "Implementation Complete; PUT/PATCH live; BR-LOC-01..03 proven" | Confirmed except concurrency + boundary robustness | PARTIAL | Update per decision |
 | `docs/security/01-ui-authorization-matrix.md` S-12 | "name/timezone/status" mutable via PUT | Name-only | PARTIAL | Already tracked (DR-01 → WP-19 review) |
 | `docs/ui/02-ui-design-specification.md` S-12 edit form | Timezone editable in form | Backend rejects; form must render read-only | PARTIAL | Already tracked (DR-01 → WP-21) |
+
+---
+
+## 7. Re-review traceability (2026-07-23)
+
+Companion: `WP-04-delivery-re-review.md`. Decision: **BLOCKED** (all code findings RESOLVED; TC-04 unverifiable + integration gate red).
+
+### 7.1 Original-finding traceability
+
+| Finding | Original acceptance condition | Remediation evidence | Test evidence (executed) | Result |
+|---------|-------------------------------|----------------------|--------------------------|--------|
+| DRB-WP04-001 | Concurrency test green; single row for the 6-way reproduction | `AcquireDedupLock` (`pg_advisory_xact_lock`) at start of create tx (`location_service.go`, `catalogpg/location.go`, `ports/repositories.go`) | `TestAPI_ConcurrentDuplicateCreates` (real PG): 1×201, 5×409, 1 row — **PASS** | **RESOLVED** |
+| DRB-WP04-002 | Multi-coordinate boundary table green; (20.001→20.051) permitted | `dedupTolerance = 1e-9`; `dist < 0.05 - 1e-9` (`domain/location.go`) | `TestIsNearDuplicate_BoundaryTable` (incl. DRB pair) — **PASS** | **RESOLVED** |
+| DRB-WP04-003 | Empty/whitespace reason → 422 | Pre-tx validation in `CreateLocation`; OpenAPI note | unit `OverrideWithoutReason`/`WithWhitespaceReason` + integration `TestAPI_OverrideWithoutReason422` — **PASS** | **RESOLVED** |
+| DRB-WP04-004 | Transition tests green; `archived` not settable | `Status.Settable()`; no-op → `StatusTransitionError`→409; enum `[active,disabled]` | unit `ArchivedRejected`/`NoOpRejected`/`ValidTransitions` + integration `ArchivedRejected` 422 / `NoOpRejected` 409 — **PASS** | **RESOLVED** |
+| DRB-WP04-005 | No doc says timezone mutable; README lists routes | endpoint-catalog PUT `{name}`+note, POST `override_reason?`, PATCH `{active|disabled}`; README updated | doc review | **RESOLVED** |
+
+### 7.2 Regression traceability
+
+| Existing WP-04 behaviour | Verification | Result | New finding |
+|--------------------------|--------------|--------|-------------|
+| Unit suite (all pkgs, `-race`) | `go test -race ./...` | PASS | — |
+| Build / vet / lint | `go build`, `go vet`, `golangci-lint run` | PASS | — |
+| create/read/list/update/status, dedup, override, disable→history | focused unit + integration | PASS | — |
+| scheduler eligibility (disabled excluded) | `TestSchedulerEligibility_*` | PASS | — |
+| override-audit integration assertion | `TestAPI_DuplicateOverrideWithReason` | **FAIL (deterministic)** | DRB-WP04-RR-001 (pre-existing test-assertion bug; not remediation-caused) |
+| full integration suite stability | full runs ×2 | FLAKY | DRB-WP04-RR-002 (pre-existing infra) |
+
+### 7.3 CI traceability (TC-04)
+
+| Required CI check | Commit tested | Result | Evidence |
+|-------------------|---------------|--------|----------|
+| Pushed-branch CI (GitHub Actions) | `fc72f08` (unconfirmed on remote) | **NOT SATISFIED** | `git ls-remote origin` → auth failed; no distinct branch; CI not inspectable |
+
+### 7.4 Documentation traceability
+
+| Document / contract | Required update | Actual update | Result |
+|---------------------|-----------------|---------------|--------|
+| `docs/api/05-endpoint-catalog.md` | PUT `{name}`; POST `override_reason?`; PATCH `{active|disabled}` | Applied | PASS |
+| `README.md` | List PUT/PATCH routes | Applied | PASS |
+| `api/openapi/openapi.json` | Enum `[active,disabled]`; override note; 409 on PATCH | Applied | PASS |
+| `docs/risk/02-phase-1-risk-register.md` | R-35 status | Updated (see register) | PASS |
+| `docs/planning/06-work-package-status-registry.md` | State = Blocked; re-review outcome | Updated | PASS |
+
+### 7.5 Dependency readiness
+
+| Dependent package | Required WP-04 capability | Ready? | Evidence or blocker |
+|-------------------|---------------------------|--------|---------------------|
+| WP-05 | `LocationManager`, active-location queries, stable create/status contract | Functionally yes; **gated** | Contracts stable + hardened; blocked by TC-04 + red integration gate |
+| WP-06 | Location catalog for provider mapping | Functionally yes; gated | Same |
+| WP-08 | `ListActiveLocations` for slot generation | Functionally yes; gated | Scheduler-eligibility tests pass |
+
+WP-05 is included for readiness only; it was **not** reviewed or implemented during the re-review.
