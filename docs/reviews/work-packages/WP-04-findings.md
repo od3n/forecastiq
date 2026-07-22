@@ -233,3 +233,47 @@ No unrelated test failed across the five runs; no leaked `postgres:16-alpine` te
 ## Review-environment limitation (original review — superseded by re-review)
 
 The original review could not run the testcontainers integration suite (Docker unavailable). **Re-review update (2026-07-23):** Docker was available; the WP-04 remediation integration tests (concurrency, override-422, status lifecycle) were **executed against real PostgreSQL 16 and passed**. The full suite is red only due to DRB-WP04-RR-001 (pre-existing test-assertion bug) and DRB-WP04-RR-002 (flakiness). **TC-04 (CI green on the pushed branch) remains unsatisfied** — the remote rejects authentication and CI results are not inspectable in this environment; state cannot move to Accepted until real pushed-branch CI evidence exists (delivery re-review §11).
+
+---
+
+## Mandatory CI gate findings (maintenance task, 2026-07-23)
+
+Companion: `WP-04-delivery-re-review.md` §B. These are the two mandatory-but-pre-existing CI jobs deferred by the team final remediation (Addendum A5/A6), fixed within strict scope (build/dependency + CI config only). They do **not** reopen DRB-WP04-001..005 or RR-001/002.
+
+### CI-WP04-001 — `backend-checks` red: govulncheck flags stdlib CVEs + outdated deps
+
+| Attribute | Value |
+|-----------|-------|
+| Severity | High (blocks a mandatory CI gate) |
+| Classification | Code/dependency defect (real vulnerabilities, not a scanner quirk) |
+| Affected files | `go.mod`, `go.sum`, `Dockerfile`, `.github/workflows/ci.yml` |
+| Origin | Pre-existing on `main` (independent of WP-04) |
+| Status | **Resolved (2026-07-23, branch `fix/wp04-final-review`, commit `542c808`)** |
+
+**Root cause.** Module targeted Go 1.23.x (13 stdlib CVEs fixed only in later toolchains) and shipped `x/text@v0.15.0`, `x/net@v0.25.0`, `pgx/v5@v5.6.0` with called vulnerabilities.
+
+**Remediation applied.** `go 1.25.0` + `toolchain go1.25.12`; deps upgraded to `pgx/v5 v5.9.2`, `x/text v0.39.0`, `x/net v0.56.0` (`go mod tidy`); `Dockerfile` base `golang:1.25-alpine`; `ci.yml` `go-version 1.25.12` (all jobs), `govulncheck@v1.6.0` (pinned), `golangci-lint install-mode: goinstall` (v1.64.8 built from source with Go 1.25 — v1 prebuilt is incompatible with Go 1.25 export data). No job disabled, no `continue-on-error`, no scanner exclusions/suppressions.
+
+**Residual (informational).** One **uncalled** advisory `GO-2026-5932` (`x/crypto@v0.53.0`, no fixed release) — `govulncheck` reports it uncalled and does **not** fail the job. Tracked on the risk watchlist.
+
+**Evidence.** Local `govulncheck ./...` exit 0 (no called vulns); CI run `29952013546` `backend-checks` **success** on `b277fba` (was failure on `701a0ed`).
+
+**Acceptance condition.** `backend-checks` green in CI on the pushed branch. **MET.**
+
+### CI-WP04-002 — `security` red: gitleaks HTTP 403 listing PR commits
+
+| Attribute | Value |
+|-----------|-------|
+| Severity | Medium (blocks a mandatory CI gate) |
+| Classification | CI-config defect (token permission), **not** a detected secret |
+| Affected files | `.github/workflows/ci.yml` (security job) |
+| Origin | Pre-existing on `main` (`pull_request`-event permission quirk) |
+| Status | **Resolved (2026-07-23, branch `fix/wp04-final-review`, commit `b277fba`)** |
+
+**Root cause.** `gitleaks/gitleaks-action@v2` lists PR commits via the REST API on `pull_request` events, requiring `pull-requests: read`. The default `GITHUB_TOKEN` is `contents: read` only → HTTP 403 `Resource not accessible by integration`.
+
+**Remediation applied.** Job-scoped least-privilege `permissions:` block granting `contents: read` + `pull-requests: read`. No secrets committed; no gitleaks rules disabled; no allow-listing. Detection behaviour unchanged — real findings still fail the job.
+
+**Evidence.** CI run `29952013546` `security` **success** on `b277fba` (was failure on `701a0ed`).
+
+**Acceptance condition.** `security` green in CI on the pushed branch with detection intact. **MET.**

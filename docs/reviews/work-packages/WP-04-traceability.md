@@ -216,3 +216,46 @@ Pushed-branch CI is now inspectable (SSH credentials working). Run **29945014559
 ### 8.4 Team status
 
 **PARTIALLY COMPLETE.** RR-001 and RR-002 RESOLVED and verified green in CI; TC-04 branch/SHA/trigger/correct-commit checks satisfied. Withheld from a clean READY FOR CONFIRMATORY RE-REVIEW only because two mandatory but pre-existing, unrelated CI jobs remain red (deferred by explicit scope decision). The board retains sole authority to mark WP-04 **Accepted**.
+
+> **Superseded by §9 (2026-07-23).** The two deferred CI jobs are now RESOLVED; all six mandatory CI jobs are green on `b277fba`. Team status advances to **READY FOR CONFIRMATORY RE-REVIEW**.
+
+---
+
+## 9. Mandatory CI gate remediation traceability (2026-07-23)
+
+Companion: `WP-04-delivery-re-review.md` §B; findings `CI-WP04-001`, `CI-WP04-002`. Records the separate maintenance task that cleared the two pre-existing mandatory CI gates deferred in §8. Branch `fix/wp04-final-review`, tip `b277fba`. Scope: build/dependency + CI config only; no WP-04 production, migration, or OpenAPI change.
+
+### 9.1 Finding traceability
+
+| Finding | Classification | Acceptance condition | Remediation evidence | Result |
+|---------|----------------|----------------------|----------------------|--------|
+| CI-WP04-001 | Code/dependency defect | `backend-checks` green in CI (no called vulns) | `go 1.25.0`+`toolchain go1.25.12`; `pgx/v5 v5.9.2`, `x/text v0.39.0`, `x/net v0.56.0`; `Dockerfile` `golang:1.25-alpine`; `ci.yml` go-version/govulncheck pin/goinstall (`542c808`) | **RESOLVED** |
+| CI-WP04-002 | CI-config defect (token permission) | `security` green in CI; detection intact | Least-privilege `permissions:` block (`contents:read`+`pull-requests:read`) on `security` job (`b277fba`) | **RESOLVED** |
+
+### 9.2 CI traceability — superseding §8.2
+
+Run **29952013546** (`pull_request`, headSha `b277fba`): <https://github.com/od3n/forecastiq/actions/runs/29952013546>. Baseline `701a0ed` run `29946041618` had `backend-checks`+`security` red.
+
+| Required CI check | Status on `701a0ed` | Status on `b277fba` | Evidence |
+|-------------------|---------------------|---------------------|----------|
+| backend-checks | FAIL | **PASS** | govulncheck exit 0 after toolchain+dep bump; gofmt/lint(goinstall)/unit-race pass |
+| security | FAIL | **PASS** | gitleaks scans PR commits after `pull-requests:read` grant |
+| backend-integration | PASS | **PASS** | RR-001+RR-002 remain green |
+| api-contract (OpenAPI) | PASS | **PASS** | 8 paths validated |
+| migrations | PASS | **PASS** | build + migrate up + verify + seed ×2 |
+| image (container build) | PASS | **PASS** | distroless prod build |
+| Local == remote SHA | — | **PASS** | `git rev-parse @{u}` = `b277fba` |
+
+### 9.3 Documentation traceability
+
+| Document | Required update | Actual update | Result |
+|----------|-----------------|---------------|--------|
+| `WP-04-delivery-re-review.md` | Addendum B: CI-WP04-001/002 + CI evidence + status | Applied (§B1–B6) | PASS |
+| `WP-04-findings.md` | CI-WP04-001/002 finding cards → Resolved | Applied | PASS |
+| `docs/planning/06-work-package-status-registry.md` | WP-04 row → Ready for confirmatory re-review + CI subsection | Applied | PASS |
+| `docs/risk/02-phase-1-risk-register.md` | Watchlist: uncalled `GO-2026-5932` residual | Applied | PASS |
+| `WP-04-traceability.md` §9 | CI gate remediation traceability | This section | PASS |
+
+### 9.4 Team status
+
+**READY FOR CONFIRMATORY RE-REVIEW.** All six mandatory CI jobs green on `b277fba`; DRB-WP04-001..005 + RR-001/002 verified resolved; TC-04 satisfied. WP-04 remains **not Accepted** — only the Delivery Review Board may convene the confirmatory re-review and mark it Accepted. WP-05 must not be selected until then.

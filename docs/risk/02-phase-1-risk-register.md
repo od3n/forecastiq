@@ -32,6 +32,7 @@ Severity = Probability × Impact. Review cadence: monthly with the Phase 0 regis
 | R-33 | Migration complexity at promotion time (Redis/NATS/etc.) exceeds plan | Low | Med | **Low** | Seams built in Phase 1 (cache port, event seam, SKIP LOCKED, scheme-prefixed keys); each promotion ADR-supervised with measured trigger; migration paths documented per technology | Promotion review at trigger | Architect | Low |
 | R-34 | Dashboard query performance degrades with data age | Low | Med | **Low** | Pre-computed projections for all aggregates; indexed access paths verified (Q-01..Q-11 + QX); PT-7 quarterly baselines; LRU/ETag absorption | PT runs; pg_stat_statements review | Eng | Low |
 | R-35 | Location dedup (BR-LOC-01) bypassed under concurrent creates — check-then-insert TOCTOU (found DRB-WP04-001, reproduced) | Low | Med | **Med** | Remediation required in WP-04: serialize create tx (`pg_advisory_xact_lock` or SERIALIZABLE + 40001 retry) + concurrency integration test; duplicate rows detectable via proximity query for manual cleanup | Re-review gate (WP-04 cannot be Accepted open); admin audit trail (`location.create` rows) | Eng | **Mitigated 2026-07-23** — `pg_advisory_xact_lock` serializes create tx; `TestAPI_ConcurrentDuplicateCreates` proves 1 row under 6 concurrent creates (real PostgreSQL). Residual: none for R-35 itself. WP-04 final remediation (branch `fix/wp04-final-review`, 2026-07-23) resolved the two re-review evidence gaps: DRB-WP04-RR-001 (test-only boolean assertion) and DRB-WP04-RR-002 (integration-suite flakiness — single shared container + per-test database; 5 consecutive green runs). Final acceptance remains with the Delivery Review Board. |
+| R-36 | Mandatory CI gates (`backend-checks`, `security`) red on the branch — outdated Go toolchain/deps flagged by `govulncheck` (real CVEs) + `gitleaks` token-permission 403 (found CI-WP04-001/002) | Low | Med | **Low** | Move module to `go 1.25.0`/`toolchain go1.25.12`; upgrade `pgx/v5 v5.9.2`, `x/text v0.39.0`, `x/net v0.56.0`; `Dockerfile golang:1.25-alpine`; `ci.yml` go-version/govulncheck pin/goinstall; least-privilege `pull-requests:read` on `security` job | CI on every push/PR; `govulncheck` in `backend-checks` | Eng | **Resolved 2026-07-23** — all six mandatory CI jobs green on `b277fba` (run 29952013546). Residual: one **uncalled** advisory `GO-2026-5932` (`x/crypto@v0.53.0`, no fix) — see watchlist. |
 
 ## 2. Gates Carried Forward (launch-blocking)
 
@@ -47,6 +48,7 @@ Severity = Probability × Impact. Review cadence: monthly with the Phase 0 regis
 - Cloudflare Pages build behavior changes (static export compatibility).
 - Neon/Supabase tier pricing changes (cost model sensitivity).
 - grafana-agent remote-write format changes.
+- **`GO-2026-5932` (`golang.org/x/crypto@v0.53.0`) — uncalled, no fixed release.** `govulncheck` reports it uncalled, so it does not fail `backend-checks`; upgrade `x/crypto` when a fixed version ships. Recorded during CI-WP04-001 (2026-07-23).
 
 ## 4. Governance
 

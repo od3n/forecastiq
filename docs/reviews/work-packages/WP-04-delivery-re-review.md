@@ -266,3 +266,67 @@ Branch pushed with working SSH credentials; remote and CI independently verified
 ## A6. Final team status
 
 **PARTIALLY COMPLETE.** RR-001 and RR-002 are resolved and **verified green in CI** (`backend-integration` red→green on the pushed commit); TC-04's branch/SHA/trigger/correct-commit checks are all satisfied. A clean **READY FOR CONFIRMATORY RE-REVIEW** is withheld only because two **mandatory but pre-existing, unrelated** CI jobs (dependency scan, secret-scan permission) remain red — by explicit scope decision they are deferred to a separate task. The board retains sole authority to mark WP-04 **Accepted**.
+
+> **Superseded by Addendum B (2026-07-23).** The two deferred CI jobs have since been remediated as a separate maintenance task (`CI-WP04-001`, `CI-WP04-002`). All six mandatory CI jobs are now green on the branch tip `b277fba`. See Addendum B; team status advances to **READY FOR CONFIRMATORY RE-REVIEW**.
+
+---
+
+# Addendum B — Mandatory CI gate remediation (2026-07-23)
+
+> Author: implementation team (not the board). This addendum records the separate maintenance task deferred in Addendum A5/A6: clearing the two **pre-existing, unrelated** mandatory CI jobs (`backend-checks`, `security`) that were red independently of WP-04. It does **not** reopen or alter DRB-WP04-001..005 or DRB-WP04-RR-001/002, does **not** change any WP-04 production behaviour, and does **not** change the board's verdict. Only the Delivery Review Board may mark WP-04 **Accepted**.
+
+## B1. Repository state
+
+| Item | Value |
+|------|-------|
+| Branch | `fix/wp04-final-review` |
+| Baseline (task start) | `701a0ed` (WP-04 team final remediation tip) |
+| Commit — backend-checks fix | `542c808` `fix(ci): clear mandatory backend-checks govulncheck gate (CI-WP04-001)` |
+| Commit — security fix | `b277fba` `fix(security): grant pull-requests:read so gitleaks can scan PRs (CI-WP04-002)` |
+| Local == remote SHA | `b277fba` == `b277fba` (verified via `git rev-parse @{u}`) |
+| `origin/main` | untouched |
+| Pull request | #1 → `main` |
+| Worktree | clean |
+
+## B2. CI-WP04-001 — `backend-checks` (govulncheck) — RESOLVED
+
+- **Classification.** Code/dependency defect (not a CI-config defect). `govulncheck` correctly flagged real vulnerabilities.
+- **Root cause.** The module targeted Go 1.23.x (13 stdlib CVEs fixed only in later toolchains) and shipped three outdated dependencies with called vulnerabilities: `golang.org/x/text@v0.15.0`, `golang.org/x/net@v0.25.0`, and `github.com/jackc/pgx/v5@v5.6.0`.
+- **Fix (smallest correct).**
+  - `go.mod`: `go 1.25.0` + `toolchain go1.25.12` (clears the stdlib CVEs at their source).
+  - Dependency upgrades to fixed versions: `pgx/v5 v5.6.0→v5.9.2`, `golang.org/x/text v0.15.0→v0.39.0`, `golang.org/x/net v0.25.0→v0.56.0`; `go mod tidy` closed the graph consistently.
+  - `Dockerfile`: base image `golang:1.23-alpine → golang:1.25-alpine` to match the toolchain.
+  - `.github/workflows/ci.yml`: `setup-go` `go-version "1.23"→"1.25.12"` (all jobs); `govulncheck` pinned `@latest→@v1.6.0` (reproducible); `golangci-lint-action` gained `install-mode: goinstall` so v1.64.8 builds from source with the runner's Go 1.25 (the v1 prebuilt binary is incompatible with Go 1.25 export data — the minimal alternative to a disruptive v2 config migration).
+- **No shortcuts.** No job disabled, no `continue-on-error`, no scanner exclusions/suppressions, no weakened assertions.
+- **Residual (informational, non-blocking).** One **uncalled** advisory `GO-2026-5932` in `golang.org/x/crypto@v0.53.0` has no fixed release; `govulncheck` reports it as uncalled and **does not fail** the job. Recorded on the risk watchlist.
+
+## B3. CI-WP04-002 — `security` (gitleaks) — RESOLVED
+
+- **Classification.** CI-config defect (not a detected secret).
+- **Root cause.** `gitleaks/gitleaks-action@v2` lists PR commits via the REST API on `pull_request` events, which needs `pull-requests: read`. The repository default `GITHUB_TOKEN` is `contents: read` only, so the API call returned HTTP 403 `Resource not accessible by integration`.
+- **Fix (least privilege).** Added a job-scoped `permissions:` block to `security` granting `contents: read` + `pull-requests: read` — the minimum needed for the scan to enumerate PR commits. Detection behaviour is unchanged: real secret findings still fail the job.
+- **No shortcuts.** No secrets committed, no gitleaks rules disabled, no allow-listing to force green.
+
+## B4. Verification
+
+- **Local (all green, Go 1.25.12 toolchain).** `gofmt -l` (empty), `go vet ./...`, `golangci-lint run ./...` (v1.64.8 goinstall), `govulncheck ./...` (exit 0, no called vulns), `go test -race ./...`, full integration suite (`-tags integration`, testcontainers PostgreSQL 16), OpenAPI validation (8 paths), distroless Docker prod build, `docker compose config`.
+- **Remote CI — decisive evidence.** CI run **29952013546** (`pull_request`, headSha `b277fba`): <https://github.com/od3n/forecastiq/actions/runs/29952013546>.
+
+| CI job | Status on `701a0ed` (before) | Status on `b277fba` (after) | Required? |
+|--------|------------------------------|-----------------------------|-----------|
+| backend-checks | ❌ failure | ✅ success | Yes |
+| security | ❌ failure | ✅ success | Yes |
+| backend-integration | ✅ success | ✅ success | Yes |
+| migrations | ✅ success | ✅ success | Yes |
+| api-contract | ✅ success | ✅ success | Yes |
+| image | ✅ success | ✅ success | Yes |
+
+**All six mandatory CI jobs pass on `b277fba`.** The prior failing run on the baseline was 29946041618 (`701a0ed`).
+
+## B5. Scope control
+
+No WP-04 production behaviour, migration, or OpenAPI contract was changed. Changes are confined to the build/dependency surface (`go.mod`, `go.sum`, `Dockerfile`) and CI configuration (`.github/workflows/ci.yml`) — each traceable to `CI-WP04-001` or `CI-WP04-002`. The resolved DRB-WP04-001..005 and RR-001/002 findings are untouched; WP-05 was not started.
+
+## B6. Final team status
+
+**READY FOR CONFIRMATORY RE-REVIEW.** All previously blocking evidence gaps are now closed: DRB-WP04-001..005 verified RESOLVED (re-review body); RR-001/RR-002 resolved and green in CI (Addendum A); TC-04 satisfied; and the two deferred mandatory CI gates (`CI-WP04-001`, `CI-WP04-002`) now green on `b277fba`. WP-04 remains **PARTIALLY COMPLETE / not Accepted** — the Delivery Review Board retains sole authority to convene the confirmatory re-review and mark WP-04 **Accepted**.

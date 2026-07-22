@@ -15,7 +15,7 @@ State model: Not Started → Prototype Exists → Partially Implemented → Impl
 | 01 | Repository + dev env | Accepted (bootstrap) | 2026-07-22 | Repository Bootstrap final report; `make dev-up`, CI green |
 | 02 | DB foundation | Accepted (bootstrap) | 2026-07-22 | Migrations 20260801000001..05; integration suite |
 | 03 | Identity + workspace | Not Started | 2026-07-22 | Audit recorder seam exists (used by WP-04); JWKS/API keys pending |
-| 04 | Location management | Blocked (re-review) | 2026-07-23 | DRB-WP04-001..005 verified **RESOLVED** at re-review (advisory-lock dedup proven vs real PostgreSQL; fp-tolerant boundary; mandatory override reason; restricted status lifecycle; doc corrections). **BLOCKED** on TC-04 (pushed-branch CI unverifiable — remote auth fails) + red `make test-integration` (pre-existing DRB-WP04-RR-001 test-assertion bug + RR-002 flakiness). Report: `docs/reviews/work-packages/WP-04-delivery-re-review.md`. |
+| 04 | Location management | Ready for confirmatory re-review | 2026-07-23 | DRB-WP04-001..005 verified **RESOLVED** at re-review (advisory-lock dedup proven vs real PostgreSQL; fp-tolerant boundary; mandatory override reason; restricted status lifecycle; doc corrections). RR-001/RR-002 resolved and **green in CI**. Two deferred mandatory CI gates now **RESOLVED** (CI-WP04-001 backend-checks, CI-WP04-002 security): **all six mandatory CI jobs green on `b277fba`** (run 29952013546). Awaiting board confirmatory re-review; **not yet Accepted**. Report: `docs/reviews/work-packages/WP-04-delivery-re-review.md` (§A, §B). |
 | 05 | Adapter framework | Prototype Exists | 2026-07-22 | First-slice collection pipeline + Open-Meteo adapter; hardening pending |
 | 06 | First provider (Open-Meteo) | Prototype Exists | 2026-07-22 | Adapter + fixtures exist; full contract matrix pending |
 | 07 | Second provider (OpenWeather) | Not Started | 2026-07-22 | |
@@ -69,6 +69,16 @@ Status: **PARTIALLY COMPLETE** (report addendum: `docs/reviews/work-packages/WP-
 - **Out of scope (deferred, separate work item).** Two mandatory but **pre-existing, unrelated** CI jobs remain red on the branch (they fail on `main` independently of WP-04): `backend-checks` (`govulncheck` flags Go 1.23.x stdlib CVEs GO-2025-4007/4008 + `golang.org/x/net@v0.25.0` GO-2025-3595) and `security` (`gitleaks` HTTP 403 `Resource not accessible by integration` — a `pull_request`-event token-permission quirk, not a detected secret). By explicit scope decision these were left unchanged; their remediation (Go toolchain/dependency bump; CI `permissions:` block) is a separate task.
 
 Next action: raise the two pre-existing CI failures as a separate maintenance task, then re-convene the board for a short confirmatory re-review. **Only the Delivery Review Board may mark WP-04 Accepted. WP-05 must not be selected until WP-04 is Accepted.**
+
+## WP-04 mandatory CI gate remediation (2026-07-23)
+
+Status: **READY FOR CONFIRMATORY RE-REVIEW** (report addendum: `docs/reviews/work-packages/WP-04-delivery-re-review.md` §B). The two mandatory but pre-existing/unrelated CI jobs deferred by the team final remediation were fixed within strict scope (build/dependency + CI config only; no WP-04 production, migration, or OpenAPI changes):
+
+- **CI-WP04-001 — `backend-checks` RESOLVED (code/dependency defect).** `govulncheck` flagged real Go 1.23.x stdlib CVEs plus outdated deps. Fixed by moving the module to `go 1.25.0` + `toolchain go1.25.12`, upgrading `pgx/v5 v5.6.0→v5.9.2`, `x/text v0.15.0→v0.39.0`, `x/net v0.25.0→v0.56.0` (`go mod tidy`), bumping the `Dockerfile` base to `golang:1.25-alpine`, and updating `ci.yml` (`go-version 1.25.12`; `govulncheck@v1.6.0`; `golangci-lint install-mode: goinstall` for v1.64.8-on-Go-1.25). No jobs disabled, no suppressions. One **uncalled** advisory (`GO-2026-5932`, `x/crypto@v0.53.0`, no fix) remains informational and does not fail the gate. Commit `542c808`.
+- **CI-WP04-002 — `security` RESOLVED (CI-config defect).** `gitleaks-action@v2` needs `pull-requests: read` to list PR commits on `pull_request` events; the default token (`contents: read` only) caused HTTP 403 `Resource not accessible by integration` — not a detected secret. Fixed with a least-privilege job-scoped `permissions:` block (`contents: read` + `pull-requests: read`). Detection unchanged. Commit `b277fba`.
+- **CI evidence.** Run `29952013546` (`pull_request`, headSha `b277fba`): **all six mandatory jobs green** (`backend-checks`, `security`, `backend-integration`, `migrations`, `api-contract`, `image`). Prior baseline `701a0ed` run `29946041618` had `backend-checks`+`security` red. <https://github.com/od3n/forecastiq/actions/runs/29952013546>
+
+Next action: re-convene the Delivery Review Board for the short confirmatory re-review. **Only the board may mark WP-04 Accepted. WP-05 must not be selected until WP-04 is Accepted.**
 
 ## Deferred items recorded during WP-04
 
