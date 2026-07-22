@@ -1,0 +1,79 @@
+# golangci-lint — ForecastIQ
+# Enforces the binding package rules from docs/delivery/01-repository-structure.md §2
+# and docs/architecture/03-module-architecture.md §1 (dependency direction).
+run:
+  go: "1.21"
+  timeout: 5m
+  tests: true
+  build-tags:
+    - integration
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - depguard
+    - bodyclose
+    - unconvert
+    - sqlclosecheck
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/forecastiq/forecastiq
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment   # too noisy for MVP
+  depguard:
+    rules:
+      # Binding: only cmd/ (composition root) wires infrastructure adapters.
+      persistence-isolation:
+        files:
+          - "**/internal/**"
+        deny:
+          - pkg: "github.com/forecastiq/forecastiq/adapters"
+            desc: "internal modules must not import adapters; wiring happens only in cmd/ (composition root)"
+      # Binding: domain packages import only stdlib + shared kernel (no infra).
+      domain-purity:
+        files:
+          - "**/internal/**/domain/**"
+        deny:
+          - pkg: "github.com/gin-gonic/gin"
+            desc: "domain must be infrastructure-free"
+          - pkg: "github.com/jackc/pgx"
+            desc: "domain must be infrastructure-free"
+          - pkg: "github.com/prometheus/client_golang"
+            desc: "domain must be infrastructure-free"
+          - pkg: "github.com/golang-migrate/migrate"
+            desc: "domain must be infrastructure-free"
+          - pkg: "net/http"
+            desc: "domain must be infrastructure-free"
+          - pkg: "database/sql"
+            desc: "domain must be infrastructure-free"
+      # Binding: adapters import module ports, never HTTP handlers.
+      adapters-no-handlers:
+        files:
+          - "**/adapters/**"
+        deny:
+          - pkg: "github.com/forecastiq/forecastiq/internal/api"
+            desc: "adapters must not import HTTP handlers"
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    - path: test/
+      linters:
+        - errcheck
+  max-issues-per-linter: 0
+  max-same-issues: 0
