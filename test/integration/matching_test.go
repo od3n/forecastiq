@@ -67,7 +67,10 @@ func pairCount(ctx context.Context, t *testing.T, pool *pgxpool.Pool) int {
 }
 
 // TestMatching_BatchDedupSuspect proves exact-hour matching, suspect exclusion
-// (BR-MATCH-05), and idempotent re-runs (uniqueness + NOT EXISTS scan).
+// (BR-MATCH-05: a snapshot whose only observation is suspect stays unmatched),
+// and idempotent re-runs. The partial dedup index allows one live observation
+// per (source, location, hour), so the suspect and valid rows are at different
+// hours (distinct snapshots).
 func TestMatching_BatchDedupSuspect(t *testing.T) {
 	ctx := context.Background()
 	connStr := startPostgres(ctx, t)
@@ -75,26 +78,30 @@ func TestMatching_BatchDedupSuspect(t *testing.T) {
 	pool := newPool(ctx, t, connStr)
 	(&testEnv{pool: pool}).seedCatalog(ctx, t)
 
-	// A matchable snapshot 5h ago (inside [now-30d, now-2h]); target on the hour.
-	target := time.Now().UTC().Truncate(time.Hour).Add(-5 * time.Hour)
-	issued := target.Add(-time.Hour)
-	snapID := ids.New()
-	insertSnapshot(ctx, t, pool, snapID, issued, target)
-	// Two observations for the hour: a suspect one (must be ignored) and a valid.
-	insertObservation(ctx, t, pool, ids.New(), target, "reanalysis", "suspect", nil)
+	// Snapshot A at hour H1: only a SUSPECT observation → stays unmatched.
+	h1 := time.Now().UTC().Truncate(time.Hour).Add(-5 * time.Hour)
+	snapA := ids.New()
+	insertSnapshot(ctx, t, pool, snapA, h1.Add(-time.Hour), h1)
+	insertObservation(ctx, t, pool, ids.New(), h1, "reanalysis", "suspect", nil)
+
+	// Snapshot B at hour H2: a VALID observation → matched.
+	h2 := time.Now().UTC().Truncate(time.Hour).Add(-6 * time.Hour)
+	snapB := ids.New()
+	insertSnapshot(ctx, t, pool, snapB, h2.Add(-time.Hour), h2)
 	validObs := ids.New()
-	insertObservation(ctx, t, pool, validObs, target, "reanalysis", "valid", nil)
+	insertObservation(ctx, t, pool, validObs, h2, "reanalysis", "valid", nil)
 
 	m := newMatcher(pool)
 	created, err := m.MatchBatch(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 1, created)
+	assert.Equal(t, 1, created, "only the valid-observation snapshot matches")
 	assert.Equal(t, 1, pairCount(ctx, t, pool))
 
-	// The pair chose the valid (non-suspect) observation.
-	var chosen uuid.UUID
+	// The pair is snapshot B → the valid observation; the suspect snapshot A has none.
+	var chosen, snap uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx,
-		`SELECT observation_id FROM matched_evaluations WHERE forecast_snapshot_id = $1`, snapID).Scan(&chosen))
+		`SELECT forecast_snapshot_id, observation_id FROM matched_evaluations`).Scan(&snap, &chosen))
+	assert.Equal(t, snapB, snap)
 	assert.Equal(t, validObs, chosen)
 
 	// Idempotent: a second batch creates zero new pairs.
