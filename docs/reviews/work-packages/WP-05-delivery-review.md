@@ -174,3 +174,20 @@ A high average does not override a mandatory evidence gate: TC-05-01 governs the
 All six mandatory jobs ran, completed, and passed on the exact reviewed SHA; none was neutral, skipped, or cancelled. The closure team also reproduced the full gate locally (gofmt, `golangci-lint` zero findings, `govulncheck` 0 called, `go test -race` all green, testcontainers integration green, distroless image build green).
 
 **TC-05-01: SATISFIED.** **DRB-WP05-001: Resolved (evidence captured).** WP-05 state set to **READY FOR CONFIRMATORY RE-REVIEW** — **not** Accepted. TC-05-02 / TC-05-03 (Low, non-blocking) remain Open.
+
+---
+
+## 17. Confirmatory re-review — DRB decision (2026-07-23)
+
+> Independent confirmatory re-review of the single tracked condition **TC-05-01**. The board re-verified commit identity, ancestry, the real remote, the CI run, and all six mandatory jobs directly against the repository and GitHub Actions API. It did not reopen the merits, rescore, or alter historical decisions.
+
+**Verification performed (all independently confirmed):**
+
+- **Commit identity.** `9a6023f45dc4a966bc0e40caca5208db57927a01` and `469560b3fe9eed8bfecf25b190f93d53cb136069` both exist; `git merge-base --is-ancestor 9a6023f 469560b` → true (`9a6023f` is the direct parent of `469560b`). `469560b` carries the full reviewed WP-05 change set.
+- **Remote.** `git ls-remote origin` → `refs/heads/review/wp05-ci-evidence` = `469560b3fe9eed8bfecf25b190f93d53cb136069`; `refs/pull/2/head` = same. Local `review/wp05-ci-evidence` == remote tip == `469560b`. History preserved (no force-rewrite).
+- **CI run.** Workflow **CI**, run **29978249699**, event `pull_request`, branch `review/wp05-ci-evidence`, **headSha `469560b3fe9eed8bfecf25b190f93d53cb136069`** (exact reviewed SHA, not a synthetic merge commit), overall conclusion **success**.
+- **Six mandatory jobs.** `backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image` — all `completed` / `success`; none skipped, cancelled, or neutral. No `continue-on-error` exists in `ci.yml`.
+- **No post-review framework change.** The only commit after `469560b` (`311a4a7`, on `fix/wp04-final-review`) is documentation-only (status registry + WP-05 review artifacts) and is not on the reviewed branch. The CI-tested framework commit remains exactly `469560b`.
+- **Documentation.** Consistent; no document prematurely marked WP-05 Accepted prior to this decision.
+
+**Decision: ACCEPTED.** TC-05-01 → **Closed — Satisfied**. DRB-WP05-001 → **Closed**. WP-05 package state → **Accepted**. TC-05-02 / TC-05-03 (Low, non-blocking) remain Open as opportunistic follow-ups. WP-06 may be selected in a separate action. No new Critical or High finding was revealed by the final evidence.

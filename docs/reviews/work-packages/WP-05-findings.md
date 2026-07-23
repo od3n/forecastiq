@@ -4,7 +4,7 @@
 **Review date**: 2026-07-23
 **Work package**: WP-05 — Provider Adapter Framework Hardening
 **Reviewed commit**: `469560b` feat(collection): harden provider adapter framework (WP-05), on the DRB-accepted WP-04 tip `15b8faa` (via `9a6023f`)
-**Board decision**: CONDITIONALLY ACCEPTED (no Critical/High; one Medium evidence gate + two Low coverage gaps) — evidence gate DRB-WP05-001 / **TC-05-01 SATISFIED** 2026-07-23 (CI run 29978249699, six jobs green on `469560b`); WP-05 **READY FOR CONFIRMATORY RE-REVIEW**
+**Board decision**: CONDITIONALLY ACCEPTED (no Critical/High; one Medium evidence gate + two Low coverage gaps) — evidence gate DRB-WP05-001 / **TC-05-01 SATISFIED** 2026-07-23 (CI run 29978249699, six jobs green on `469560b`); WP-05 **READY FOR CONFIRMATORY RE-REVIEW**. **Confirmatory re-review 2026-07-23: ACCEPTED** — TC-05-01 **Closed — Satisfied**; DRB-WP05-001 **Closed**; WP-05 → **Accepted** (report §17).
 **Authority**: Delivery Review Board prompt; `docs/planning/05-implementation-work-packages.md` §WP-05
 
 Finding ID scheme: `DRB-WP05-<NNN>`. Statuses: Open | Resolved (verified re-review) | Accepted Risk | Deferred by Approved Decision | Resolved During Review | Not Reproducible.
@@ -19,7 +19,7 @@ Finding ID scheme: `DRB-WP05-<NNN>`. Statuses: Open | Resolved (verified re-revi
 | Discipline | SRE / Release Engineering / QA |
 | Affected requirement | Mandatory CI evidence gate (board standing rule, established at the WP-04 re-review: "local checks do not substitute for pushed-branch CI when it is a mandatory gate") |
 | Affected files | none (repository state / release process) |
-| Status | **Resolved (evidence captured 2026-07-23)** — TC-05-01 SATISFIED |
+| Status | **Closed** (confirmatory re-review 2026-07-23; TC-05-01 Satisfied) — evidence independently re-verified: remote tip `469560b`, CI run 29978249699 headSha `469560b`, all six mandatory jobs green |
 | Owner | Eng |
 
 **Evidence.** `git ls-remote --heads origin` shows `refs/heads/fix/wp04-final-review` at the accepted WP-04 tip `15b8faa`. Local HEAD is **2 commits ahead**: `9a6023f` (WP-04 confirmatory doc) and `469560b` (WP-05 implementation). No CI run exists on the WP-05 SHA `469560b`. The remote is reachable in this environment (`git ls-remote` succeeds), unlike the WP-04 re-review environment.

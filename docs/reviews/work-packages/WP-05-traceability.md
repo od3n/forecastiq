@@ -108,3 +108,5 @@
 | Framework-code change | none | ✅ reviewed SHA intact |
 
 **TC-05-01: SATISFIED.** WP-05 → **READY FOR CONFIRMATORY RE-REVIEW** (not Accepted; DRB transition only).
+
+**Confirmatory re-review 2026-07-23:** evidence independently re-verified (remote tip `469560b`, CI run 29978249699 headSha `469560b`, all six mandatory jobs green, no post-review framework change). **Decision: ACCEPTED.** TC-05-01 → **Closed — Satisfied**; WP-05 → **Accepted**.
