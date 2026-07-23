@@ -59,9 +59,10 @@ type Config struct {
 
 	PayloadStoreDir string
 
-	ProviderTimeout       time.Duration
-	ProviderMaxRespBytes  int64
-	ProviderCredentialEnv map[string]string // provider slug -> env var name
+	ProviderTimeout        time.Duration
+	ProviderMaxRespBytes   int64
+	ProviderCredentialEnv  map[string]string // provider slug -> env var name
+	OpenWeatherDailyBudget int               // WP-07: OpenWeather calls per UTC day (0 disables the guard)
 
 	SchedulerInterval   time.Duration
 	SlotLeaseDuration   time.Duration
@@ -166,6 +167,7 @@ func Load() (Config, error) {
 		"open-meteo":  "FIQ_PROVIDER_OPENMETEO_API_KEY",
 		"openweather": "FIQ_PROVIDER_OPENWEATHER_API_KEY",
 	}
+	cfg.OpenWeatherDailyBudget = getInt("FIQ_PROVIDER_OPENWEATHER_DAILY_BUDGET", 1000, &errs, "FIQ_PROVIDER_OPENWEATHER_DAILY_BUDGET")
 
 	// Scheduler / worker
 	cfg.SchedulerInterval = getDuration("FIQ_SCHEDULER_INTERVAL", 15*time.Second, &errs, "FIQ_SCHEDULER_INTERVAL")

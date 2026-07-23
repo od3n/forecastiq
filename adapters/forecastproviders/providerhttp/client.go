@@ -45,16 +45,24 @@ type Config struct {
 	MaxResponseBytes int64
 	MaxAttempts      int           // total attempts (FC-08 caps at 5)
 	RetryBaseDelay   time.Duration // backoff base (1s); ±20% jitter
+	// RetryableOverride optionally overrides the default FC-08 retry
+	// disposition for a given HTTP status. It receives the status code and the
+	// transport's default retryability and returns whether to retry. It governs
+	// loop control only; the classified ProviderError.Retryable field still
+	// reflects the honest FC-13 classification. Use it to opt a status out of
+	// retry (e.g. a daily-quota 429 that an adapter handles with a pause).
+	RetryableOverride func(status int, defaultRetryable bool) bool
 }
 
 // Client is a hardened, reusable HTTP transport for provider adapters.
 type Client struct {
-	http         *http.Client
-	limiter      *ratelimit.Limiter
-	userAgent    string
-	maxRespBytes int64
-	maxAttempts  int
-	retryBase    time.Duration
+	http          *http.Client
+	limiter       *ratelimit.Limiter
+	userAgent     string
+	maxRespBytes  int64
+	maxAttempts   int
+	retryBase     time.Duration
+	retryOverride func(status int, defaultRetryable bool) bool
 }
 
 // New builds a Client, applying safe defaults and hardening the supplied (or a
@@ -91,16 +99,20 @@ func New(cfg Config) *Client {
 	return &Client{
 		http: hc, limiter: cfg.Limiter, userAgent: ua,
 		maxRespBytes: maxBytes, maxAttempts: attempts, retryBase: base,
+		retryOverride: cfg.RetryableOverride,
 	}
 }
 
 // Response is a successful (or terminally classified) fetch. Body/StatusCode/
 // LatencyMS are best-effort populated even when a *ports.ProviderError is
 // returned, so adapters can still persist the raw error payload (ADR-011).
+// Attempts is the number of upstream requests actually made (1..MaxAttempts),
+// so callers can account real provider traffic (e.g. outbound rate budgets).
 type Response struct {
 	Body       []byte
 	StatusCode int
 	LatencyMS  int
+	Attempts   int
 	RequestID  string
 	RateLimit  *ports.RateLimit
 }
@@ -122,6 +134,7 @@ func (c *Client) Get(ctx context.Context, endpoint string, header http.Header) (
 			}
 		}
 		body, code, rl, reqID, latency, err := c.doOnce(ctx, endpoint, header)
+		resp.Attempts = attempt + 1
 		resp.LatencyMS = latency
 		if code > 0 {
 			resp.StatusCode = code
@@ -140,7 +153,11 @@ func (c *Client) Get(ctx context.Context, endpoint string, header http.Header) (
 			return resp, nil // success
 		}
 		last = classify(code, rl, err)
-		if !last.Retryable {
+		retry := last.Retryable
+		if c.retryOverride != nil {
+			retry = c.retryOverride(code, last.Retryable)
+		}
+		if !retry {
 			return resp, last
 		}
 	}

@@ -1,0 +1,18 @@
+{
+  "lat": 1.4927,
+  "lon": 103.7414,
+  "hourly": [
+    {
+      "dt": 1784718000,
+      "temp": 28.0,
+      "humidity": 90,
+      "weather": [{ "id": 781, "main": "Tornado", "description": "tornado" }]
+    },
+    {
+      "dt": 1784721600,
+      "temp": 29.0,
+      "humidity": 88,
+      "weather": [{ "id": 800, "main": "Clear", "description": "clear sky" }]
+    }
+  ]
+}

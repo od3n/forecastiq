@@ -83,6 +83,54 @@ func TestGet_ErrorMessageRedaction(t *testing.T) {
 	assert.Contains(t, ferr.Error(), "provider_5xx")
 }
 
+// TestGet_RetryableOverride proves an adapter can opt a status out of retry
+// while the transport still reports the honest attempt count. A 429 with a
+// budget of 5 attempts must call exactly once when the override returns false.
+func TestGet_RetryableOverride(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	client := providerhttp.New(providerhttp.Config{
+		HTTPClient:     &http.Client{Timeout: 2 * time.Second},
+		MaxAttempts:    5,
+		RetryBaseDelay: time.Nanosecond,
+		RetryableOverride: func(status int, def bool) bool {
+			if status == http.StatusTooManyRequests {
+				return false
+			}
+			return def
+		},
+	})
+	resp, ferr := client.Get(context.Background(), srv.URL, nil)
+	require.NotNil(t, ferr)
+	assert.Equal(t, ports.ErrRateLimited, ferr.Code)
+	assert.True(t, ferr.Retryable, "classification stays honest even when retry is overridden")
+	assert.Equal(t, int32(1), calls.Load(), "override must stop retry")
+	assert.Equal(t, 1, resp.Attempts)
+}
+
+// TestGet_AttemptsCount proves Response.Attempts reflects the real number of
+// upstream requests (used by outbound rate budgets).
+func TestGet_AttemptsCount(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	resp, ferr := newClient(5).Get(context.Background(), srv.URL, nil)
+	require.Nil(t, ferr)
+	assert.Equal(t, 3, resp.Attempts)
+}
+
 func TestGet_RetryThenSuccess(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
