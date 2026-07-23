@@ -23,10 +23,12 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/collectionpg"
+	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
 	"github.com/forecastiq/forecastiq/internal/api"
 	"github.com/forecastiq/forecastiq/internal/api/handlers"
@@ -36,6 +38,7 @@ import (
 	"github.com/forecastiq/forecastiq/internal/collection"
 	collectiondomain "github.com/forecastiq/forecastiq/internal/collection/domain"
 	"github.com/forecastiq/forecastiq/internal/collection/ports"
+	"github.com/forecastiq/forecastiq/internal/identity"
 	"github.com/forecastiq/forecastiq/internal/platform/clock"
 	"github.com/forecastiq/forecastiq/internal/platform/config"
 	"github.com/forecastiq/forecastiq/internal/platform/db"
@@ -240,6 +243,10 @@ type testEnv struct {
 	router    *gin.Engine
 	adapter   *fakeAdapter
 	store     *payloadstore.FilesystemStore
+
+	identityUsers *identity.UserService
+	identityKeys  *identity.APIKeyService
+	auditReader   *audit.ReaderService
 }
 
 // schedulerpgSlotRepo aliases the concrete slot repo type for tests.
@@ -259,7 +266,8 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	circuitRepo := catalogpg.NewCircuitRepository()
 	collectionRepo := collectionpg.NewCollectionRepository()
 	snapshotRepo := collectionpg.NewSnapshotRepository()
-	recorder := audit.NewRecorder(auditpg.NewStore())
+	auditStore := auditpg.NewStore()
+	recorder := audit.NewRecorder(auditStore)
 
 	locations := catalog.NewLocationService(locationRepo, tx, pool, recorder, clk, logger)
 	providers := catalog.NewProviderService(providerRepo, pool)
@@ -288,10 +296,18 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 		RateLimiter:   limiter,
 	})
 
+	// Identity (WP-03): dev verifier + services over the same DB.
+	userRepo := identitypg.NewUserRepository()
+	apiKeyRepo := identitypg.NewAPIKeyRepository()
+	identityUsers := identity.NewUserService(userRepo, devauth.New(clk), tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
+	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
+	auditReader := audit.NewReaderService(auditStore, pool)
+
 	return &testEnv{
 		pool: pool, tx: tx, locations: locations, providers: providers, configs: configs,
 		circuits: circuits, collector: collector, replayer: collector, reader: reader,
 		slots: schedulerpg.NewSlotRepository(), router: router, adapter: adapter, store: store,
+		identityUsers: identityUsers, identityKeys: identityKeys, auditReader: auditReader,
 	}
 }
 

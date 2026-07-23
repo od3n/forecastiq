@@ -10,17 +10,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
+	"github.com/forecastiq/forecastiq/adapters/auth/jwks"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openmeteo"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/collectionpg"
+	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
 	"github.com/forecastiq/forecastiq/internal/api"
 	"github.com/forecastiq/forecastiq/internal/api/handlers"
 	"github.com/forecastiq/forecastiq/internal/audit"
 	"github.com/forecastiq/forecastiq/internal/catalog"
+	catalogdomain "github.com/forecastiq/forecastiq/internal/catalog/domain"
 	"github.com/forecastiq/forecastiq/internal/collection"
+	"github.com/forecastiq/forecastiq/internal/identity"
+	"github.com/forecastiq/forecastiq/internal/identity/ports"
 	"github.com/forecastiq/forecastiq/internal/platform/clock"
 	"github.com/forecastiq/forecastiq/internal/platform/config"
 	"github.com/forecastiq/forecastiq/internal/platform/db"
@@ -42,6 +48,12 @@ type App struct {
 	metrics      *metrics.Metrics
 	scheduler    *scheduler.Scheduler
 	payloadStore *payloadstore.FilesystemStore
+
+	// Identity (WP-03): use cases + verifier are wired here; HTTP routes that
+	// consume them land in WP-15/WP-19.
+	identityUsers *identity.UserService
+	identityKeys  *identity.APIKeyService
+	auditReader   *audit.ReaderService
 }
 
 // buildApp loads configuration and wires every adapter to its port. This is
@@ -175,9 +187,29 @@ func buildApp(ctx context.Context) (*App, error) {
 		MissedThreshold: cfg.SchedulerMissed,
 	})
 
+	// Identity (WP-03). The verifier is the Supabase JWKS verifier in
+	// production; a local dev verifier otherwise (compiled out of release
+	// builds). Provisioned users belong to the system workspace (ADR-009).
+	var verifier ports.TokenVerifier
+	if cfg.AuthDevMode {
+		verifier = devauth.New(clk)
+		logger.Warn("auth.dev_mode_enabled")
+	} else {
+		verifier = jwks.New(jwks.Config{
+			JWKSURL: cfg.AuthJWKSURL, Issuer: cfg.AuthIssuer, Audience: cfg.AuthAudience,
+		})
+	}
+	userRepo := identitypg.NewUserRepository()
+	apiKeyRepo := identitypg.NewAPIKeyRepository()
+	identityUsers := identity.NewUserService(userRepo, verifier, tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
+	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
+	auditReader := audit.NewReaderService(auditStore, pool)
+	logger.Info("identity.ready", slog.Bool("dev_mode", cfg.AuthDevMode))
+
 	return &App{
 		cfg: cfg, logger: logger, pool: pool, router: router,
 		metrics: m, scheduler: sched, payloadStore: payloadStore,
+		identityUsers: identityUsers, identityKeys: identityKeys, auditReader: auditReader,
 	}, nil
 }
 
