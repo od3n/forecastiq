@@ -36,7 +36,7 @@
 - **Resulting state**: Implementation Complete (Not Accepted)
 - **Hard dependencies**: WP-05 (Accepted); platform WP-04, WP-02 (Accepted)
 - **Branch**: `feature/wp06-open-meteo-provider`
-- **Final commit**: recorded in §15 after push
+- **Final commit**: `da04fe4` (full `da04fe49e4daed358e50d06d401c41f781e9e809`); CI evidence in §15
 
 ## 4. Scope reconstruction
 
@@ -45,7 +45,7 @@
 | S1 | Adapter (schema v1, 168-period hourly array) | Implementation Complete (WP-05 refactor) | unchanged | ✅ |
 | S2 | UTC normalization | Implementation Complete | BR-PROV-01 now contract-tested (S5-T1) | ✅ |
 | S3 | Fixture capture script + committed fixtures | Partially Implemented | +2 matrix fixtures | ✅ |
-| S4 | Contract test matrix (§1.2) | Partially Implemented (10 tests) | +4 tests → 14; matrix complete | ✅ |
+| S4 | Contract test matrix (§1.2) | Partially Implemented (11 tests) | +4 contract tests → 15 discovered; matrix complete | ✅ |
 | S5 | Attribution config seed | Implementation Complete (WP-02 seed) | attribution capture contract-tested | ✅ |
 | Acc | One live collection into local DB verified | manual / undocumented | documented smoke + payload evidence (§10) | ✅ |
 
@@ -123,7 +123,7 @@ Unmapped-condition tally (FC-15) and provider metrics are emitted by the existin
 
 ## 13. Tests
 
-- **Unit / contract (adapter)**: `adapters/forecastproviders/openmeteo/openmeteo_test.go` — 14 tests incl. the 4 added (§7).
+- **Unit / contract (adapter)**: `adapters/forecastproviders/openmeteo/openmeteo_test.go` — 15 discovered top-level tests (11 pre-existing + 4 added; enumerated via `go test -list` on the package), all green under `-race` (§7).
 - **Regression**: full `go test -race ./...`; WP-05 `providerhttp`/registry/domain suites unchanged and green.
 - **Integration**: `test/integration` (testcontainers PG16) unchanged; `TestCollectionIdempotency` continues to prove the pipeline.
 - **Security**: `govulncheck`, `gitleaks` in CI.
@@ -134,23 +134,38 @@ Recorded in the final chat report (§Validation) and reproduced by CI (§15).
 
 ## 15. CI evidence
 
-Branch pushed to the real remote; PR #3 triggered CI (event `pull_request`). All six mandatory jobs green on the exact head SHA; none skipped/cancelled; no `continue-on-error`.
+Final reviewed commit `da04fe4` was pushed to the real remote on branch `feature/wp06-open-meteo-provider` (PR #3); CI re-ran on that tip (event `pull_request`) and all six mandatory jobs are green on the exact head SHA — none skipped, cancelled, or neutral; no `continue-on-error` in `.github/workflows/ci.yml`.
 
 | Item | Value | Result |
 |------|-------|--------|
 | Branch | `feature/wp06-open-meteo-provider` | ✅ pushed |
-| Local HEAD | `e2f6cfd5499abda776efe11817de4c7555340308` | ✅ |
-| Remote tip | `e2f6cfd5499abda776efe11817de4c7555340308` | ✅ equal |
-| Workflow run | CI / `29984454806` (event `pull_request`, PR #3) | ✅ success |
-| Workflow headSha | `e2f6cfd5499abda776efe11817de4c7555340308` | ✅ equal |
-| `backend-checks` (gofmt, golangci-lint, govulncheck, race+coverage) | headSha `e2f6cfd` | ✅ success |
-| `backend-integration` (testcontainers PG16) | headSha `e2f6cfd` | ✅ success |
-| `migrations` (up + verify + seed×2) | headSha `e2f6cfd` | ✅ success |
-| `api-contract` (OpenAPI validation) | headSha `e2f6cfd` | ✅ success |
-| `security` (gitleaks) | headSha `e2f6cfd` | ✅ success |
-| `image` (distroless build) | headSha `e2f6cfd` | ✅ success |
+| Implementation commit (final reviewed SHA) | `da04fe49e4daed358e50d06d401c41f781e9e809` (`da04fe4`) | ✅ |
+| Remote implementation commit | `da04fe49e4daed358e50d06d401c41f781e9e809` (`da04fe4`) | ✅ equal |
+| CI workflow | `CI` | ✅ |
+| CI run | `29984650522` (event `pull_request`, PR #3) | ✅ success |
+| CI head SHA | `da04fe49e4daed358e50d06d401c41f781e9e809` (`da04fe4`) | ✅ equal |
+| SHA verification | local HEAD == remote tip == CI head SHA == `da04fe4` | ✅ |
 
-> The only surviving annotations are Node.js-20 deprecation notices on the marketplace actions (`actions/checkout@v4` etc.) — informational, non-blocking, unrelated to WP-06. A docs-only §15 addendum was applied after this run; CI was re-run on the resulting tip to keep the final SHA CI-verified (see below).
+### 15.1 Commit lineage (implementation vs. documentation addendum)
+
+The code-bearing tip `e2f6cfd` was CI-verified first (run `29984454806`, six jobs green). A docs-only §15 addendum was then committed as `da04fe4` (no code, migration, API, OpenAPI, or CI-config change — `git show --stat da04fe4` touches only this report), and CI was re-run on that tip (run `29984650522`) so the **final reviewed SHA remains CI-verified**. The board's authoritative CI evidence is therefore run `29984650522` on head SHA `da04fe4`; the mandatory-job results are recorded in §15.2.
+
+### 15.2 Mandatory CI job results
+
+All six jobs below ran to completion on CI head SHA `da04fe4` (run `29984650522`):
+
+| # | Mandatory job | Result | Skipped or cancelled |
+|---|---------------|--------|----------------------|
+| 1 | `backend-checks` (gofmt, golangci-lint, govulncheck, race+coverage) | PASS | No |
+| 2 | `backend-integration` (testcontainers PG16) | PASS | No |
+| 3 | `migrations` (up + verify + seed×2) | PASS | No |
+| 4 | `api-contract` (OpenAPI validation) | PASS | No |
+| 5 | `security` (gitleaks) | PASS | No |
+| 6 | `image` (distroless build) | PASS | No |
+
+Overall CI result: **PASS**. The only surviving annotations are Node.js-20 deprecation notices on the marketplace actions (`actions/checkout@v4` etc.) — informational, non-blocking, unrelated to WP-06.
+
+**TC-06-01 implementation-team assessment: SATISFIED — pending Delivery Review Board confirmation.** (Only the Delivery Review Board may close TC-06-01 and transition WP-06 to Accepted.)
 
 ## 16. Files changed
 
@@ -200,7 +215,7 @@ None within WP-06 scope. Scheduler-driven unattended collection (48 h) is **WP-0
 | Tests map to requirements | ✅ | §7 |
 | Regression tests pass | ✅ | §13, §21 |
 | Local validation passes | ✅ | §14 |
-| Branch pushed; SHAs match; CI green | ⏳ | §15 (after push) |
+| Branch pushed; SHAs match; CI green | ✅ | §15 — run `29984650522`, head SHA `da04fe4`, six jobs PASS |
 | No WP-07+ functionality introduced | ✅ | §20 |
 
 ## 23. Work-package transition
