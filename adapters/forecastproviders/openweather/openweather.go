@@ -76,6 +76,16 @@ func New(cfg Config) *Adapter {
 		MaxResponseBytes: cfg.MaxResponseBytes,
 		MaxAttempts:      cfg.MaxRetries,
 		RetryBaseDelay:   cfg.RetryBaseDelay,
+		// A 429 from OpenWeather signals the daily allowance is spent, not a
+		// transient burst: retrying only burns quota and delays the pause. The
+		// budget guard handles it with a pause, so opt 429 out of transport
+		// retry (5xx/timeout still retry per FC-08).
+		RetryableOverride: func(status int, def bool) bool {
+			if status == http.StatusTooManyRequests {
+				return false
+			}
+			return def
+		},
 	})
 	a := &Adapter{transport: transport, logger: logger, clock: clk}
 	if cfg.DailyBudget > 0 {
@@ -143,6 +153,11 @@ func (a *Adapter) FetchForecast(ctx context.Context, req ports.ForecastRequest) 
 	if len(resp.Body) > 0 {
 		result.Checksum = ports.Checksum(resp.Body)
 	}
+	// Account any extra upstream requests the transport made (FC-08 retries)
+	// so the daily budget reflects real provider calls, not collection attempts.
+	if a.budget != nil && resp.Attempts > 1 {
+		a.budget.consume(resp.Attempts-1, a.clock.Now())
+	}
 
 	if ferr != nil {
 		result.Outcome = ferr.Outcome()
@@ -153,12 +168,13 @@ func (a *Adapter) FetchForecast(ctx context.Context, req ports.ForecastRequest) 
 		}
 		if ferr.Code == ports.ErrRateLimited && a.budget != nil {
 			// Engage the pause: honor Retry-After when present, otherwise pause
-			// until the next UTC day (429 → pause).
+			// until the next UTC day (429 → pause). Read a fresh clock so the
+			// window is anchored to now, not the pre-call timestamp.
 			var pauseFor time.Duration
 			if ferr.RateLimit != nil && ferr.RateLimit.RetryAfter != nil {
 				pauseFor = *ferr.RateLimit.RetryAfter
 			}
-			a.budget.pause(now, pauseFor)
+			a.budget.pause(a.clock.Now(), pauseFor)
 		}
 		return result, nil
 	}

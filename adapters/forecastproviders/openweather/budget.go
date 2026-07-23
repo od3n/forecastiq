@@ -70,6 +70,23 @@ func (b *dailyBudget) pause(now time.Time, d time.Duration) {
 	}
 }
 
+// consume debits n additional units from the day's budget without gating. It
+// accounts upstream requests beyond the one already admitted by reserve (e.g.
+// transport-level FC-08 retries), so the counter reflects actual provider
+// calls rather than collection attempts. Caps at max (never negative remaining).
+func (b *dailyBudget) consume(n int, now time.Time) {
+	if n <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.rollover(now)
+	b.used += n
+	if b.used > b.max {
+		b.used = b.max
+	}
+}
+
 // rollover resets the counter and clears the pause when now crosses into a new
 // UTC day. Caller holds the lock.
 func (b *dailyBudget) rollover(now time.Time) {

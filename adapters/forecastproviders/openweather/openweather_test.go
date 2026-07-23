@@ -414,3 +414,69 @@ func TestFetch_RateLimit_EngagesPause(t *testing.T) {
 	assert.Equal(t, ports.OutcomeSuccess, res.Outcome)
 	assert.Equal(t, int32(2), atomic.LoadInt32(&calls))
 }
+
+// TestFetch_RateLimited_NoRetry proves a daily-quota 429 triggers exactly ONE
+// upstream request even with a retry budget (DRB-WP07-001): retrying a spent
+// daily allowance only burns quota, so the adapter opts 429 out of transport
+// retry and lets the budget guard pause instead.
+func TestFetch_RateLimited_NoRetry(t *testing.T) {
+	var calls int32
+	body429 := loadFixture(t, "onecall_429.json")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write(body429)
+	}))
+	t.Cleanup(srv.Close)
+
+	a := openweather.New(openweather.Config{
+		Client:         &http.Client{Timeout: 5 * time.Second},
+		MaxRetries:     3, // budget retries; a 429 must still call exactly once
+		RetryBaseDelay: time.Millisecond,
+		DailyBudget:    1000,
+		Clock:          clock.Fixed{T: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)},
+	})
+	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
+	require.NoError(t, err)
+	assert.Equal(t, ports.OutcomeRateLimited, res.Outcome)
+	assert.Equal(t, "rate_limited", res.ErrorCode)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "daily-quota 429 must not be retried")
+}
+
+// TestFetch_RetriesCountAgainstBudget proves transport-level FC-08 retries are
+// debited from the daily budget (DRB-WP07-001): a single failing collection
+// that the transport retries consumes one budget unit per actual upstream
+// request, so the budget reflects real provider traffic, not attempts. With a
+// budget of 3 and a 3-attempt 5xx storm, the day's budget is fully spent and
+// the next collection is refused pre-emptively (no further upstream call).
+func TestFetch_RetriesCountAgainstBudget(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusServiceUnavailable) // retryable 5xx
+		_, _ = w.Write([]byte(`{"cod":503,"message":"unavailable"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	a := openweather.New(openweather.Config{
+		Client:         &http.Client{Timeout: 5 * time.Second},
+		MaxRetries:     3, // one collection == up to 3 upstream requests
+		RetryBaseDelay: time.Millisecond,
+		DailyBudget:    3,
+		Clock:          clock.Fixed{T: time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)},
+	})
+
+	// Fetch #1: 1 admitted + 2 retries accounted == 3 upstream calls == budget spent.
+	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
+	require.NoError(t, err)
+	assert.Equal(t, ports.OutcomeFailed, res.Outcome)
+	assert.Equal(t, "provider_5xx", res.ErrorCode)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&calls), "5xx retried up to MaxRetries")
+
+	// Fetch #2: budget fully spent by the retries → refused pre-emptively.
+	res, err = a.FetchForecast(context.Background(), newRequest(srv.URL))
+	require.NoError(t, err)
+	assert.Equal(t, ports.OutcomeRateLimited, res.Outcome)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&calls), "retries must be debited so the budget refuses the next call")
+}
