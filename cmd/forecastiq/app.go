@@ -16,12 +16,14 @@ import (
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openweather"
 	obsopenmeteo "github.com/forecastiq/forecastiq/adapters/observationsources/openmeteo"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
+	"github.com/forecastiq/forecastiq/adapters/persistence/analysispg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/collectionpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/observationpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
+	"github.com/forecastiq/forecastiq/internal/analysis"
 	"github.com/forecastiq/forecastiq/internal/api"
 	"github.com/forecastiq/forecastiq/internal/api/handlers"
 	"github.com/forecastiq/forecastiq/internal/audit"
@@ -230,9 +232,14 @@ func buildApp(ctx context.Context) (*App, error) {
 	observationRepo := observationpg.NewRepository()
 	observer := collection.NewObserveService(obsAdapter, observationRepo, bus, m, clk, logger, tx, pool)
 	obsDispatcher := scheduler.NewObservationDispatcher(observer, locations, logger)
+	// Analysis matching engine (WP-11): analysis_batch at :10/:40 pairs unmatched
+	// snapshots with observations and rematches superseded pairs.
+	matcher := analysis.NewMatchService(analysispg.NewMatchRepository(), tx, pool, m, clk, logger)
+	analysisDispatcher := scheduler.NewAnalysisDispatcher(matcher, logger)
 	jobRouter := scheduler.NewRouter(map[string]scheduler.Dispatcher{
 		scheduler.JobForecastCollection:    dispatcher,
 		scheduler.JobObservationCollection: obsDispatcher,
+		scheduler.JobAnalysisBatch:         analysisDispatcher,
 	})
 	sched := scheduler.New(slotRepo, runRepo, jobRouter, configs, locations, tx, clk, logger, m, scheduler.Config{
 		Interval:                cfg.SchedulerInterval,
@@ -243,6 +250,7 @@ func buildApp(ctx context.Context) (*App, error) {
 		MissedThreshold:         cfg.SchedulerMissed,
 		ObservationConfigID:     catalogdomain.OpenMeteoConfigID,
 		ObservationMinuteOffset: 5,
+		AnalysisConfigID:        catalogdomain.OpenMeteoConfigID,
 	})
 
 	// Identity (WP-03). The verifier is the Supabase JWKS verifier in
