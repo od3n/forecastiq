@@ -4,8 +4,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -229,4 +231,98 @@ func TestReplayDeterminism(t *testing.T) {
 	assert.Equal(t, res1.Checksum, res2.Checksum)
 	assert.Equal(t, len(res1.Snapshots), len(res2.Snapshots))
 	assert.Equal(t, ports.Checksum(body), res1.Checksum)
+}
+
+// TestFetch_TimezoneNormalization proves BR-PROV-01 (contract matrix §1.2
+// "Timezone conversion"): the adapter (a) requests UTC at the source and
+// (b) normalizes offset-bearing response timestamps to the exact UTC instant.
+// 19:00+08:00 == 11:00Z; issued 10:00Z ⇒ horizon 60 min.
+func TestFetch_TimezoneNormalization(t *testing.T) {
+	var gotQuery url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(loadFixture(t, "forecast_localtime_offset.json"))
+	}))
+	t.Cleanup(srv.Close)
+
+	a := newAdapter(t, srv.URL)
+	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
+	require.NoError(t, err)
+
+	// (a) normalize at source: the outgoing request pins timezone=UTC.
+	assert.Equal(t, "UTC", gotQuery.Get("timezone"))
+
+	// (b) offset-bearing response times normalize to the exact UTC instant.
+	assert.Equal(t, ports.OutcomeSuccess, res.Outcome)
+	require.Len(t, res.Snapshots, 3)
+	s0 := res.Snapshots[0]
+	assert.True(t, s0.TargetTime.Equal(time.Date(2026, 7, 22, 11, 0, 0, 0, time.UTC)))
+	assert.Equal(t, "UTC", s0.TargetTime.Location().String())
+	assert.Equal(t, 60, s0.ForecastHorizonMinutes)
+	assert.Equal(t, 180, res.Snapshots[2].ForecastHorizonMinutes)
+}
+
+// TestFetch_AttributionFields proves the adapter captures provider attribution
+// metadata when upstream exposes it (contract matrix §1.2 "Attribution
+// fields"): the provider request id from the response header, and no model-run
+// time (Open-Meteo exposes none ⇒ nil, never fabricated).
+func TestFetch_AttributionFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Request-Id", "om-req-abc123")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(loadFixture(t, "forecast_success_v1.json"))
+	}))
+	t.Cleanup(srv.Close)
+
+	a := newAdapter(t, srv.URL)
+	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
+	require.NoError(t, err)
+
+	assert.Equal(t, ports.OutcomeSuccess, res.Outcome)
+	assert.Equal(t, "om-req-abc123", res.ProviderRequestID)
+	assert.Nil(t, res.ModelRunTime)
+}
+
+// TestFetch_SchemaDrift_MajorityInvalid proves the >50%-invalid branch of the
+// drift classification (contract matrix §1.2): a structurally valid payload
+// whose majority of rows are out of range ⇒ failed + schema_drift (distinct
+// from the structural-drift and <50%-partial branches). The adapter still
+// decomposes the minority of valid rows; the failed outcome governs whether
+// the service persists them (workflow §10).
+func TestFetch_SchemaDrift_MajorityInvalid(t *testing.T) {
+	srv := serve(t, loadFixture(t, "forecast_majority_invalid.json"), http.StatusOK)
+	a := newAdapter(t, srv.URL)
+	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
+	require.NoError(t, err)
+
+	assert.Equal(t, ports.OutcomeFailed, res.Outcome)
+	assert.Equal(t, "schema_drift", res.ErrorCode)
+	assert.Equal(t, 4, res.RecordsReceived)
+	assert.Equal(t, 3, res.InvalidCount) // >50% ⇒ failed
+	assert.Len(t, res.Snapshots, 1)      // the lone valid row is still decomposed
+}
+
+// TestFetch_AuthFailed_NoRetry proves 401 is terminal (contract matrix §1.2
+// "Auth failure — no retry"; FC-08/FC-13): even with a retry budget, an
+// invalid-credentials classification performs exactly one upstream request.
+func TestFetch_AuthFailed_NoRetry(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	a := openmeteo.New(openmeteo.Config{
+		Client:         &http.Client{Timeout: 5 * time.Second},
+		MaxRetries:     3, // budget retries; a 401 must still call exactly once
+		RetryBaseDelay: time.Millisecond,
+	})
+	res, err := a.FetchForecast(context.Background(), newRequest(srv.URL))
+	require.NoError(t, err)
+	assert.Equal(t, ports.OutcomeAuthFailed, res.Outcome)
+	assert.Equal(t, "invalid_credentials", res.ErrorCode)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls))
 }
