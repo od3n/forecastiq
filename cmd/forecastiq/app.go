@@ -13,6 +13,7 @@ import (
 	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
 	"github.com/forecastiq/forecastiq/adapters/auth/jwks"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openmeteo"
+	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openweather"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
@@ -135,6 +136,24 @@ func buildApp(ctx context.Context) (*App, error) {
 	// slugs at startup (WP-05). Add future providers here.
 	registry := collection.NewRegistry()
 	if err := registry.Register(omAdapter); err != nil {
+		return nil, fmt.Errorf("register provider adapter: %w", err)
+	}
+	// OpenWeather One Call 3.0 (WP-07; ToS-gated for public launch — the seeded
+	// configuration ships disabled). The daily rate-budget guard caps calls per
+	// UTC day and pauses on a 429 (429 → pause); a modest per-minute bucket
+	// smooths outbound bursts.
+	owLimiter := ratelimit.NewLimiter(6, 6.0/60.0, clk) // 6 req/min effective
+	owAdapter := openweather.New(openweather.Config{
+		Client:           &http.Client{Timeout: cfg.ProviderTimeout},
+		Limiter:          owLimiter,
+		Logger:           logger,
+		Clock:            clk,
+		MaxResponseBytes: cfg.ProviderMaxRespBytes,
+		MaxRetries:       5,
+		RetryBaseDelay:   time.Second,
+		DailyBudget:      cfg.OpenWeatherDailyBudget,
+	})
+	if err := registry.Register(owAdapter); err != nil {
 		return nil, fmt.Errorf("register provider adapter: %w", err)
 	}
 	for _, d := range registry.Descriptors() {

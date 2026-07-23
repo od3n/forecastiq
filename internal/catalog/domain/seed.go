@@ -11,5 +11,6 @@ var (
 	OpenMeteoProviderID   = uuid.MustParse("00000000-0000-0000-0000-000000000010")
 	OpenWeatherProviderID = uuid.MustParse("00000000-0000-0000-0000-000000000011")
 	OpenMeteoConfigID     = uuid.MustParse("00000000-0000-0000-0000-000000000020")
+	OpenWeatherConfigID   = uuid.MustParse("00000000-0000-0000-0000-000000000021")
 	JohorBahruLocationID  = uuid.MustParse("00000000-0000-0000-0000-000000000030")
 )

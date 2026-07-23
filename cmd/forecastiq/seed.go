@@ -80,6 +80,21 @@ func seed(ctx context.Context, pool dbtx.DBTX) error {
 		return fmt.Errorf("seed configuration: %w", err)
 	}
 
+	// OpenWeather operational configuration (WP-07). Seeded DISABLED: the
+	// adapter and wiring are ready, but automatic collection is gated on the
+	// OpenWeather ToS review (D-05, a public-launch gate) and a resolvable
+	// FIQ_PROVIDER_OPENWEATHER_API_KEY. An operator activates it once both are
+	// satisfied; while disabled the scheduler does not generate its slots.
+	owCfg := &catalogdomain.ProviderConfiguration{
+		ID: catalogdomain.OpenWeatherConfigID, WorkspaceID: catalogdomain.SystemWorkspaceID,
+		ProviderID: catalogdomain.OpenWeatherProviderID, Status: catalogdomain.StatusDisabled,
+		CredentialRef: "FIQ_PROVIDER_OPENWEATHER_API_KEY", CollectionSchedule: catalogdomain.Schedule{Interval: "hourly", MinuteOffset: 2},
+		AdapterVersion: "1.0.0", ValidationState: "unvalidated", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := configRepo.Upsert(ctx, pool, owCfg); err != nil {
+		return fmt.Errorf("seed openweather configuration: %w", err)
+	}
+
 	// Johor Bahru demo location (idempotent via existence check).
 	locationRepo := catalogpg.NewLocationRepository()
 	if _, lookupErr := locationRepo.GetByID(ctx, pool, catalogdomain.JohorBahruLocationID); errors.Is(lookupErr, catalogdomain.ErrNotFound) {
