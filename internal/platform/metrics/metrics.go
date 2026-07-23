@@ -45,6 +45,9 @@ type Metrics struct {
 	MatchesCreated  prometheus.Counter
 	MatchingBacklog prometheus.Gauge
 
+	// Analysis / aggregation (WP-13)
+	MetricRowsWritten prometheus.Counter
+
 	// Scheduler
 	SlotsClaimed *prometheus.CounterVec
 	MissedSlots  *prometheus.CounterVec
@@ -140,6 +143,11 @@ func New() *Metrics {
 		Help: "Unmatched forecast snapshots within the matching window.",
 	})
 
+	m.MetricRowsWritten = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "aggregation_metric_rows_written_total",
+		Help: "AccuracyMetric rows written by the aggregation batch (incl. recompute).",
+	})
+
 	m.SlotsClaimed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "scheduler_slots_claimed_total",
 		Help: "Scheduler slots claimed.",
@@ -168,7 +176,7 @@ func New() *Metrics {
 		m.RateLimitHits, m.ProviderLatency, m.CircuitState,
 		m.ConditionUnmapped,
 		m.ObservationsCollected, m.ObservationsSuspect, m.ObservationFreshness,
-		m.MatchesCreated, m.MatchingBacklog,
+		m.MatchesCreated, m.MatchingBacklog, m.MetricRowsWritten,
 		m.SlotsClaimed, m.MissedSlots, m.SchedulerLag, m.JobDuration,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
