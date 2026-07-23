@@ -116,12 +116,12 @@ DR-03 (migration added despite the "DB changes: None" summary) — resolved and 
 ```text
 WP-03 — Identity and Workspace Foundation
 Previous State: Selected — Not Started
-New State: Implementation Complete
-Acceptance State: Not Accepted
+New State: Accepted (DRB full review 2026-07-23)
+Accepted Implementation SHA: 6e98a1c474e431f41205c6b4df8202acb7271612
 ```
 
 ## 14. Recommended next action
 
 ```text
-Push the branch to capture CI evidence, then convene the Delivery Review Board for WP-03.
+Merge PR #5 to main; select the next approved work package.
 ```
