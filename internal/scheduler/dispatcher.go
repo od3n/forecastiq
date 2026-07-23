@@ -59,3 +59,24 @@ func (d *ForecastDispatcher) Dispatch(ctx context.Context, slot *Slot) (int, err
 	}
 	return coll.SnapshotsStored, nil
 }
+
+// Router dispatches a slot to the per-job-type dispatcher. The scheduler holds a
+// single Dispatcher; Router lets one worker serve multiple job types
+// (forecast_collection, observation_collection, …) selected by slot.JobType.
+type Router struct {
+	byType map[string]Dispatcher
+}
+
+// NewRouter builds a Router from a job-type → dispatcher map.
+func NewRouter(byType map[string]Dispatcher) *Router {
+	return &Router{byType: byType}
+}
+
+// Dispatch implements Dispatcher, routing on slot.JobType.
+func (r *Router) Dispatch(ctx context.Context, slot *Slot) (int, error) {
+	d, ok := r.byType[slot.JobType]
+	if !ok {
+		return 0, fmt.Errorf("no dispatcher for job type %q", slot.JobType)
+	}
+	return d.Dispatch(ctx, slot)
+}

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/forecastiq/forecastiq/internal/catalog"
+	catalogdomain "github.com/forecastiq/forecastiq/internal/catalog/domain"
 	"github.com/forecastiq/forecastiq/internal/collection/domain"
 	"github.com/forecastiq/forecastiq/internal/platform/clock"
 	"github.com/forecastiq/forecastiq/internal/platform/dbtx"
@@ -35,6 +36,15 @@ type Config struct {
 	// MissedThreshold is how late a claim may be (claimed_at - slot_time)
 	// before the slot counts as a missed schedule (watchdog signal).
 	MissedThreshold time.Duration
+	// ObservationConfigID owns observation_collection slots (WP-10). The
+	// collection_schedules.provider_configuration_id FK is NOT NULL, so
+	// observation slots hang off a real active configuration (the seeded
+	// Open-Meteo config; job_type discriminates them from forecast slots).
+	// uuid.Nil disables observation slot generation.
+	ObservationConfigID uuid.UUID
+	// ObservationMinuteOffset is the minute past the hour for observation slots
+	// (OC-01: :05, allowing source publication delay).
+	ObservationMinuteOffset int
 }
 
 // Scheduler generates due slots and dispatches claimed slots to jobs.
@@ -185,7 +195,8 @@ func (s *Scheduler) watchdog(ctx context.Context, now time.Time) {
 }
 
 // generateSlots creates due slots for each active configuration × active
-// location over a short window (current hour + catch-up). Idempotent.
+// location over a short window (current hour + catch-up), plus observation
+// slots per active location when an observation owner config is set. Idempotent.
 func (s *Scheduler) generateSlots(ctx context.Context, now time.Time) error {
 	configs, err := s.configs.ListActiveConfigurations(ctx)
 	if err != nil {
@@ -195,7 +206,7 @@ func (s *Scheduler) generateSlots(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if len(configs) == 0 || len(locations) == 0 {
+	if len(locations) == 0 {
 		return nil
 	}
 	from := now.UTC().Truncate(time.Hour).Add(-time.Hour)
@@ -210,6 +221,27 @@ func (s *Scheduler) generateSlots(ctx context.Context, now time.Time) error {
 						ID:                      ids.New(),
 						ProviderConfigurationID: cfg.ID,
 						JobType:                 JobForecastCollection,
+						LocationID:              &locID,
+						SlotTime:                slotTime,
+						Status:                  SlotDue,
+						CreatedAt:               now,
+						UpdatedAt:               now,
+					}
+					if err := s.slots.Generate(ctx, tx, slot); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		if s.cfg.ObservationConfigID != uuid.Nil {
+			obsSchedule := catalogdomain.Schedule{Interval: "hourly", MinuteOffset: s.cfg.ObservationMinuteOffset}
+			for _, slotTime := range obsSchedule.SlotTimes(from, to) {
+				for _, loc := range locations {
+					locID := loc.ID
+					slot := &Slot{
+						ID:                      ids.New(),
+						ProviderConfigurationID: s.cfg.ObservationConfigID,
+						JobType:                 JobObservationCollection,
 						LocationID:              &locID,
 						SlotTime:                slotTime,
 						Status:                  SlotDue,
