@@ -39,6 +39,7 @@ type Metrics struct {
 	// Scheduler
 	SlotsClaimed *prometheus.CounterVec
 	MissedSlots  *prometheus.CounterVec
+	SchedulerLag *prometheus.HistogramVec
 	JobDuration  *prometheus.HistogramVec
 }
 
@@ -115,6 +116,12 @@ func New() *Metrics {
 		Help: "Scheduler slots that became due without being claimed in time.",
 	}, []string{"job_type"})
 
+	m.SchedulerLag = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "scheduler_lag_seconds",
+		Help:    "Delay between a slot's scheduled time and when it was claimed.",
+		Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 900, 3600},
+	}, []string{"job_type"})
+
 	m.JobDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "job_duration_seconds",
 		Help:    "Worker job execution duration.",
@@ -126,7 +133,7 @@ func New() *Metrics {
 		m.CollectionAttempts, m.CollectionDuration, m.SnapshotsStored, m.RecordsRejected,
 		m.RateLimitHits, m.ProviderLatency, m.CircuitState,
 		m.ConditionUnmapped,
-		m.SlotsClaimed, m.MissedSlots, m.JobDuration,
+		m.SlotsClaimed, m.MissedSlots, m.SchedulerLag, m.JobDuration,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)

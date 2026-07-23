@@ -111,6 +111,20 @@ func (r *SlotRepository) Fail(ctx context.Context, tx dbtx.DBTX, slotID, runID u
 	return nil
 }
 
+// CountClaimable implements scheduler.SlotRepository: counts slots eligible
+// for claiming now (mirrors the ClaimDue predicate without locking).
+func (r *SlotRepository) CountClaimable(ctx context.Context, tx dbtx.DBTX, now time.Time) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM collection_schedules
+		 WHERE (status = 'due' AND slot_time <= $1 AND (next_retry_at IS NULL OR next_retry_at <= $1))
+		    OR (status = 'claimed' AND lease_expires_at < $1)`, now).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count claimable slots: %w", err)
+	}
+	return n, nil
+}
+
 // RunRepository implements scheduler.RunRepository.
 type RunRepository struct{}
 

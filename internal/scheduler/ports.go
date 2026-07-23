@@ -24,6 +24,10 @@ type SlotRepository interface {
 	// Fail records a failed attempt. When attempts < MaxAttempts the slot
 	// returns to due with next_retry_at set (retry); otherwise it is failed.
 	Fail(ctx context.Context, tx dbtx.DBTX, slotID, runID uuid.UUID, attempts int, nextRetryAt *time.Time) error
+	// CountClaimable returns the number of slots that are eligible to be
+	// claimed now (due and past any retry backoff, or claimed with an expired
+	// lease). The watchdog uses it to detect a stalled scheduler.
+	CountClaimable(ctx context.Context, tx dbtx.DBTX, now time.Time) (int, error)
 }
 
 // RunRepository persists schedule run history.

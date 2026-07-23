@@ -24,6 +24,17 @@ type Config struct {
 	LeaseDuration time.Duration
 	MaxConcurrent int
 	ClaimBatch    int
+	// JobTimeout bounds a single dispatched job. The job runs under a context
+	// detached from the scheduler loop so a shutdown signal does not cancel
+	// work already in flight (graceful drain; workflow 05 §7).
+	JobTimeout time.Duration
+	// DrainTimeout bounds how long Run waits for in-flight jobs after the loop
+	// context is cancelled before returning (leases on any unfinished job
+	// expire naturally and are reclaimed on restart).
+	DrainTimeout time.Duration
+	// MissedThreshold is how late a claim may be (claimed_at - slot_time)
+	// before the slot counts as a missed schedule (watchdog signal).
+	MissedThreshold time.Duration
 }
 
 // Scheduler generates due slots and dispatches claimed slots to jobs.
@@ -38,6 +49,10 @@ type Scheduler struct {
 	logger     *slog.Logger
 	metrics    *metrics.Metrics
 	cfg        Config
+
+	inflight     sync.WaitGroup // tracks dispatched jobs for graceful drain
+	sem          chan struct{}  // bounds concurrent jobs (goroutine pool)
+	lastProgress time.Time      // last tick that claimed work (watchdog)
 }
 
 // New wires a Scheduler.
@@ -59,15 +74,29 @@ func New(slots SlotRepository, runs RunRepository, dispatcher Dispatcher,
 	if cfg.ClaimBatch <= 0 {
 		cfg.ClaimBatch = 10
 	}
+	if cfg.JobTimeout <= 0 {
+		cfg.JobTimeout = 60 * time.Second
+	}
+	if cfg.DrainTimeout <= 0 {
+		cfg.DrainTimeout = 30 * time.Second
+	}
+	if cfg.MissedThreshold <= 0 {
+		if cfg.MissedThreshold = 2 * cfg.Interval; cfg.MissedThreshold < 2*time.Minute {
+			cfg.MissedThreshold = 2 * time.Minute
+		}
+	}
 	return &Scheduler{slots: slots, runs: runs, dispatcher: dispatcher, configs: configs,
-		locations: locations, tx: tx, clock: clk, logger: logger, metrics: m, cfg: cfg}
+		locations: locations, tx: tx, clock: clk, logger: logger, metrics: m, cfg: cfg,
+		sem: make(chan struct{}, cfg.MaxConcurrent)}
 }
 
-// Run starts the scheduler loop until ctx is cancelled (graceful drain).
+// Run starts the scheduler loop until ctx is cancelled, then drains in-flight
+// jobs within DrainTimeout before returning (workflow 05 §7).
 func (s *Scheduler) Run(ctx context.Context) {
 	s.logger.InfoContext(ctx, "scheduler.started",
 		slog.String("instance_id", s.cfg.InstanceID),
 		slog.Duration("interval", s.cfg.Interval))
+	s.lastProgress = s.clock.Now()
 	ticker := time.NewTicker(s.cfg.Interval)
 	defer ticker.Stop()
 	// Run once immediately, then on each tick.
@@ -75,11 +104,26 @@ func (s *Scheduler) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			s.logger.InfoContext(ctx, "scheduler.stopped")
+			s.drain()
+			s.logger.Info("scheduler.stopped")
 			return
 		case <-ticker.C:
 			s.tick(ctx)
 		}
+	}
+}
+
+// drain waits for in-flight jobs to finish, bounded by DrainTimeout. Jobs that
+// do not finish keep running under their detached context; their slot leases
+// expire and are reclaimed on the next cycle/restart.
+func (s *Scheduler) drain() {
+	done := make(chan struct{})
+	go func() { s.inflight.Wait(); close(done) }()
+	select {
+	case <-done:
+		s.logger.Info("scheduler.drained")
+	case <-time.After(s.cfg.DrainTimeout):
+		s.logger.Warn("scheduler.drain_timeout", slog.Duration("deadline", s.cfg.DrainTimeout))
 	}
 }
 
@@ -88,6 +132,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 	if err := s.generateSlots(ctx, now); err != nil {
 		s.logger.ErrorContext(ctx, "scheduler.generate_failed", slog.String("error", err.Error()))
 	}
+	s.watchdog(ctx, now)
 	slots, err := s.claimDue(ctx, now)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "scheduler.claim_failed", slog.String("error", err.Error()))
@@ -96,18 +141,47 @@ func (s *Scheduler) tick(ctx context.Context) {
 	if len(slots) == 0 {
 		return
 	}
-	sem := make(chan struct{}, s.cfg.MaxConcurrent)
-	var wg sync.WaitGroup
+	s.lastProgress = now
+	// Dispatch each claimed slot on the bounded goroutine pool. Ticks do not
+	// block on job completion; the semaphore caps concurrency and slot leases
+	// prevent re-claiming in-flight work. Stop launching if the loop is
+	// shutting down (drain handles jobs already started).
 	for _, slot := range slots {
-		wg.Add(1)
-		sem <- struct{}{}
+		select {
+		case <-ctx.Done():
+			return
+		case s.sem <- struct{}{}:
+		}
+		s.inflight.Add(1)
 		go func(slot *Slot) {
-			defer wg.Done()
-			defer func() { <-sem }()
+			defer s.inflight.Done()
+			defer func() { <-s.sem }()
 			s.execute(ctx, slot)
 		}(slot)
 	}
-	wg.Wait()
+}
+
+// watchdog emits a stall warning when claimable slots exist but no claim has
+// made progress for 2× the tick interval (workflow 05 §5: scheduler stalled).
+func (s *Scheduler) watchdog(ctx context.Context, now time.Time) {
+	if now.Sub(s.lastProgress) < 2*s.cfg.Interval {
+		return
+	}
+	var claimable int
+	err := s.tx.Run(ctx, func(ctx context.Context, tx dbtx.DBTX) error {
+		var cerr error
+		claimable, cerr = s.slots.CountClaimable(ctx, tx, now)
+		return cerr
+	})
+	if err != nil {
+		s.logger.ErrorContext(ctx, "scheduler.watchdog_failed", slog.String("error", err.Error()))
+		return
+	}
+	if claimable > 0 {
+		s.logger.WarnContext(ctx, "scheduler.stalled",
+			slog.Int("claimable_slots", claimable),
+			slog.Duration("since_last_progress", now.Sub(s.lastProgress)))
+	}
 }
 
 // generateSlots creates due slots for each active configuration × active
@@ -162,14 +236,37 @@ func (s *Scheduler) claimDue(ctx context.Context, now time.Time) ([]*Slot, error
 	if err != nil {
 		return nil, err
 	}
-	for range claimed {
-		s.metrics.SlotsClaimed.WithLabelValues(JobForecastCollection).Inc()
+	for _, slot := range claimed {
+		s.metrics.SlotsClaimed.WithLabelValues(slot.JobType).Inc()
+		// Lag = how long after its scheduled time the slot was claimed. A lag
+		// beyond MissedThreshold means the schedule was missed and caught up
+		// late (workflow 05 §10).
+		lag := slotLag(now, slot.SlotTime)
+		s.metrics.SchedulerLag.WithLabelValues(slot.JobType).Observe(lag.Seconds())
+		if lag > s.cfg.MissedThreshold {
+			s.metrics.MissedSlots.WithLabelValues(slot.JobType).Inc()
+		}
 	}
 	return claimed, nil
 }
 
+// slotLag returns how late a claim is relative to the slot's scheduled time
+// (never negative — a slot claimed before its time has zero lag).
+func slotLag(now, slotTime time.Time) time.Duration {
+	if d := now.Sub(slotTime); d > 0 {
+		return d
+	}
+	return 0
+}
+
 // execute runs one claimed slot: start run → dispatch → finish run → update slot.
+// The job runs under a context detached from the scheduler loop (bounded by
+// JobTimeout) so a shutdown signal drains in-flight work rather than cancelling
+// it mid-collection.
 func (s *Scheduler) execute(ctx context.Context, slot *Slot) {
+	jobCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.JobTimeout)
+	defer cancel()
+	ctx = jobCtx
 	start := s.clock.Now()
 	log := s.logger.With(slog.String("slot_id", slot.ID.String()), slog.String("job_type", slot.JobType))
 
