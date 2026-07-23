@@ -13,11 +13,12 @@ import "math"
 // With all weights 1 these reduce to the unweighted definitions (TV-1). The
 // accumulator is order-independent (permutation-invariant; property 7).
 type Continuous struct {
-	sumWeight    float64
-	sumWeightAbs float64 // Σ w|e|
-	sumWeightErr float64 // Σ w e
-	sumWeightSq  float64 // Σ w e²
-	n            int
+	sumWeight     float64
+	sumWeightSqrd float64 // Σ w² (for the frequency-weight-unbiased variance)
+	sumWeightAbs  float64 // Σ w|e|
+	sumWeightErr  float64 // Σ w e
+	sumWeightSq   float64 // Σ w e²
+	n             int
 }
 
 // Add includes one eligible pair with the given observation-quality weight.
@@ -25,6 +26,7 @@ type Continuous struct {
 func (c *Continuous) Add(forecast, observed, weight float64) {
 	e := forecast - observed
 	c.sumWeight += weight
+	c.sumWeightSqrd += weight * weight
 	c.sumWeightAbs += weight * math.Abs(e)
 	c.sumWeightErr += weight * e
 	c.sumWeightSq += weight * e * e
