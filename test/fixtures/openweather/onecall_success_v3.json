@@ -1,0 +1,45 @@
+{
+  "lat": 1.4927,
+  "lon": 103.7414,
+  "timezone": "Asia/Kuala_Lumpur",
+  "timezone_offset": 28800,
+  "hourly": [
+    {
+      "dt": 1784718000,
+      "temp": 31.2,
+      "feels_like": 35.1,
+      "pressure": 1013,
+      "humidity": 70,
+      "clouds": 80,
+      "wind_speed": 3.5,
+      "wind_deg": 180,
+      "pop": 0.42,
+      "rain": { "1h": 0.5 },
+      "weather": [{ "id": 803, "main": "Clouds", "description": "broken clouds" }]
+    },
+    {
+      "dt": 1784721600,
+      "temp": 31.8,
+      "feels_like": 35.8,
+      "pressure": 1012,
+      "humidity": 68,
+      "clouds": 40,
+      "wind_speed": 3.8,
+      "wind_deg": 185,
+      "pop": 0.40,
+      "weather": [{ "id": 802, "main": "Clouds", "description": "scattered clouds" }]
+    },
+    {
+      "dt": 1784725200,
+      "temp": 32.0,
+      "feels_like": 36.0,
+      "pressure": 1012,
+      "humidity": 65,
+      "clouds": 10,
+      "wind_speed": 4.0,
+      "wind_deg": 190,
+      "pop": 0.38,
+      "weather": [{ "id": 800, "main": "Clear", "description": "clear sky" }]
+    }
+  ]
+}
