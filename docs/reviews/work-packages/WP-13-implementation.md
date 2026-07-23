@@ -63,11 +63,7 @@ Adds migration `20260801000009` (up + down): `accuracy_metrics`, the live-row pa
 
 ## 7. CI evidence
 
-```text
-PENDING — branch not yet pushed. The six mandatory jobs must be captured green
-on the pushed head SHA (migrations applies 20260801000009; backend-integration
-runs the aggregation hand-computed/null/supersede tests against real PG16).
-```
+Branch pushed; PR #11 → `main` triggered CI run **30045318424** (event `pull_request`) **success** on head SHA `93f808b170c14815930687d3266db1051a32f5ab` (`93f808b`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == remote tip == CI head SHA. The `migrations` job applied `20260801000009`; `backend-integration` ran the aggregation hand-computed/null/supersede tests against real PostgreSQL 16.
 
 ## 8. Files changed
 
@@ -103,6 +99,6 @@ Acceptance State: Not Accepted (pending pushed-branch CI + Delivery Review Board
 ## 11. Recommended next action
 
 ```text
-Push feature/wp13-aggregated-metrics, capture the six mandatory CI jobs green on
-the head SHA, then convene the Delivery Review Board for WP-13.
+Convene the Delivery Review Board for WP-13. CI evidence is captured (§7):
+run 30045318424 on head SHA 93f808b, six mandatory jobs green.
 ```
