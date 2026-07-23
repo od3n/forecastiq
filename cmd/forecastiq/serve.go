@@ -74,8 +74,17 @@ func cmdServe(args []string) error {
 		go func() { errCh <- apiSrv.ListenAndServe() }()
 		app.logger.InfoContext(ctx, "api.listening", slog.String("addr", app.cfg.HTTPAddr))
 	}
+	// The worker runs under its own cancelable context so shutdown triggered by
+	// a server error (not just a signal) still stops and drains it.
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+	var workerDone chan struct{}
 	if runWorker {
-		go app.scheduler.Run(ctx)
+		workerDone = make(chan struct{})
+		go func() {
+			defer close(workerDone)
+			app.scheduler.Run(workerCtx)
+		}()
 		app.logger.InfoContext(ctx, "worker.started")
 	}
 
@@ -92,6 +101,12 @@ func cmdServe(args []string) error {
 	defer cancel()
 	if apiSrv != nil {
 		_ = apiSrv.Shutdown(shutdownCtx)
+	}
+	// Stop the scheduler and wait for it to drain in-flight jobs (bounded by
+	// the scheduler's own DrainTimeout) before the pool closes.
+	if workerDone != nil {
+		cancelWorker()
+		<-workerDone
 	}
 	_ = metricsSrv.Shutdown(shutdownCtx)
 	app.logger.InfoContext(ctx, "shutdown.complete")

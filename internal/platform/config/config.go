@@ -66,6 +66,9 @@ type Config struct {
 	SchedulerInterval   time.Duration
 	SlotLeaseDuration   time.Duration
 	WorkerMaxConcurrent int
+	WorkerJobTimeout    time.Duration
+	SchedulerDrain      time.Duration
+	SchedulerMissed     time.Duration
 
 	DevAdminToken string
 }
@@ -164,6 +167,9 @@ func Load() (Config, error) {
 	if cfg.WorkerMaxConcurrent <= 0 {
 		fail("FIQ_WORKER_MAX_CONCURRENT must be > 0")
 	}
+	cfg.WorkerJobTimeout = getDuration("FIQ_WORKER_JOB_TIMEOUT", 60*time.Second, &errs, "FIQ_WORKER_JOB_TIMEOUT")
+	cfg.SchedulerDrain = getDuration("FIQ_SCHEDULER_DRAIN_TIMEOUT", 30*time.Second, &errs, "FIQ_SCHEDULER_DRAIN_TIMEOUT")
+	cfg.SchedulerMissed = getDuration("FIQ_SCHEDULER_MISSED_THRESHOLD", 0, &errs, "FIQ_SCHEDULER_MISSED_THRESHOLD")
 
 	// Dev-mode auth
 	cfg.DevAdminToken = getEnv("FIQ_DEV_ADMIN_TOKEN", "")
