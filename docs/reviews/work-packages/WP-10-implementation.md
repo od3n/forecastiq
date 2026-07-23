@@ -79,11 +79,7 @@ No public API changes. /observations query endpoints are WP-15+.
 
 ## 9. CI evidence
 
-```text
-PENDING — branch not yet pushed. Six mandatory jobs must be captured green on
-the pushed head SHA (the migrations + backend-integration jobs exercise the new
-migration and the observation pipeline).
-```
+Branch pushed; PR #8 → `main` triggered CI run **30031945500** (event `pull_request`) **success** on head SHA `b42e937800ff61a0c3f0d2d91d39ba54ed210b95` (`b42e937`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == remote tip == CI head SHA. The `migrations` job applied `20260801000007`; `backend-integration` ran the observation dedup/correction/suspect tests against real PostgreSQL 16.
 
 ## 10. Files changed
 
@@ -114,6 +110,6 @@ Acceptance State: Not Accepted (pending pushed-branch CI + Delivery Review Board
 ## 13. Recommended next action
 
 ```text
-Push feature/wp10-observation-collection, capture the six mandatory CI jobs green
-on the head SHA, then convene the Delivery Review Board for WP-10.
+Convene the Delivery Review Board for WP-10. CI evidence is captured (§9):
+run 30031945500 on head SHA b42e937, six mandatory jobs green.
 ```
