@@ -149,13 +149,34 @@ Existing pipeline metrics apply unchanged: `provider_rate_limit_hits_total` incr
 
 ## 15. CI evidence
 
-```text
-PENDING — branch not yet pushed. The mandatory six-job CI run on the pushed
-feature/wp07-openweather-provider tip must be captured before Delivery Review
-Board acceptance (per the WP-05/WP-06/WP-08 evidence protocol): backend-checks,
-backend-integration, migrations, api-contract, security, image — all green on
-the exact head SHA, none skipped/cancelled. To be recorded here on push.
-```
+Branch `feature/wp07-openweather-provider` pushed; PR #6 → `main` triggered CI run **30011969157** (event `pull_request`). All six mandatory jobs are green on the exact head SHA — none skipped, cancelled, or neutral; no `continue-on-error` in `.github/workflows/ci.yml`.
+
+| Item | Value | Result |
+|------|-------|--------|
+| Branch | `feature/wp07-openweather-provider` | ✅ pushed |
+| Implementation commit (final reviewed SHA) | `1211878adff0be8ecebd9c0f1bd5312e67add6b5` (`1211878`) | ✅ |
+| Remote branch tip | `1211878adff0be8ecebd9c0f1bd5312e67add6b5` | ✅ equal |
+| CI workflow | `CI` | ✅ |
+| CI run | `30011969157` (event `pull_request`, PR #6) | ✅ success |
+| CI head SHA | `1211878adff0be8ecebd9c0f1bd5312e67add6b5` (`1211878`) | ✅ equal |
+| SHA verification | local HEAD == remote tip == CI head SHA == `1211878` | ✅ |
+
+### 15.1 Mandatory CI job results
+
+All six jobs ran to completion on CI head SHA `1211878` (run `30011969157`):
+
+| # | Mandatory job | Result | Skipped or cancelled |
+|---|---------------|--------|----------------------|
+| 1 | `backend-checks` (gofmt, golangci-lint, govulncheck, race+coverage) | PASS | No |
+| 2 | `backend-integration` (testcontainers PG16) | PASS | No |
+| 3 | `migrations` (up + verify + seed×2) | PASS | No |
+| 4 | `api-contract` (OpenAPI validation) | PASS | No |
+| 5 | `security` (gitleaks) | PASS | No |
+| 6 | `image` (distroless build) | PASS | No |
+
+Overall CI result: **PASS**. The only annotations are Node.js-20 deprecation notices on marketplace actions (`actions/checkout@v4`, `gitleaks/gitleaks-action@v2`) — informational, non-blocking, unrelated to WP-07. The `migrations` seed×2 run exercised the new (idempotent, disabled) OpenWeather configuration seed.
+
+**TC-07-01 implementation-team assessment: SATISFIED — pending Delivery Review Board confirmation.** (Only the Delivery Review Board may transition WP-07 to Accepted.)
 
 ## 16. Files changed
 
@@ -212,12 +233,12 @@ Not Accepted (pending pushed-branch CI + Delivery Review Board)
 ## 22. Recommended next action
 
 ```text
-Push feature/wp07-openweather-provider, capture the six mandatory CI jobs green
-on the head SHA (§15), then convene the Delivery Review Board for WP-07.
+Convene the Delivery Review Board for WP-07. CI evidence is captured (§15):
+run 30011969157 on head SHA 1211878, six mandatory jobs green.
 ```
 
 ## 23. Final status
 
 ```text
-IMPLEMENTATION COMPLETE — READY FOR REVIEW (contingent on §15 CI evidence)
+IMPLEMENTATION COMPLETE — READY FOR REVIEW (CI green — §15)
 ```
