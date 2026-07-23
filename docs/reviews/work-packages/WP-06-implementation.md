@@ -134,7 +134,23 @@ Recorded in the final chat report (§Validation) and reproduced by CI (§15).
 
 ## 15. CI evidence
 
-Recorded after push (branch tip SHA == local HEAD == workflow headSha; all six mandatory jobs — `backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image` — green).
+Branch pushed to the real remote; PR #3 triggered CI (event `pull_request`). All six mandatory jobs green on the exact head SHA; none skipped/cancelled; no `continue-on-error`.
+
+| Item | Value | Result |
+|------|-------|--------|
+| Branch | `feature/wp06-open-meteo-provider` | ✅ pushed |
+| Local HEAD | `e2f6cfd5499abda776efe11817de4c7555340308` | ✅ |
+| Remote tip | `e2f6cfd5499abda776efe11817de4c7555340308` | ✅ equal |
+| Workflow run | CI / `29984454806` (event `pull_request`, PR #3) | ✅ success |
+| Workflow headSha | `e2f6cfd5499abda776efe11817de4c7555340308` | ✅ equal |
+| `backend-checks` (gofmt, golangci-lint, govulncheck, race+coverage) | headSha `e2f6cfd` | ✅ success |
+| `backend-integration` (testcontainers PG16) | headSha `e2f6cfd` | ✅ success |
+| `migrations` (up + verify + seed×2) | headSha `e2f6cfd` | ✅ success |
+| `api-contract` (OpenAPI validation) | headSha `e2f6cfd` | ✅ success |
+| `security` (gitleaks) | headSha `e2f6cfd` | ✅ success |
+| `image` (distroless build) | headSha `e2f6cfd` | ✅ success |
+
+> The only surviving annotations are Node.js-20 deprecation notices on the marketplace actions (`actions/checkout@v4` etc.) — informational, non-blocking, unrelated to WP-06. A docs-only §15 addendum was applied after this run; CI was re-run on the resulting tip to keep the final SHA CI-verified (see below).
 
 ## 16. Files changed
 
