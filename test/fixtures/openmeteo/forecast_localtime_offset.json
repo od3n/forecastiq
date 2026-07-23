@@ -1,0 +1,28 @@
+{
+  "_fixture_meta": "BR-PROV-01 tz-normalization contract fixture; schema_version=openmeteo-v1, adapter_version=1.0.0. hourly.time carries a +08:00 UTC offset (RFC3339); the adapter must normalize every target_time to the exact UTC instant. 19:00+08:00 == 11:00Z.",
+  "latitude": 1.4927,
+  "longitude": 103.7414,
+  "generationtime_ms": 0.201,
+  "utc_offset_seconds": 28800,
+  "timezone": "Asia/Kuala_Lumpur",
+  "timezone_abbreviation": "+08",
+  "elevation": 10.0,
+  "hourly_units": {
+    "time": "iso8601",
+    "temperature_2m": "°C",
+    "weather_code": "wmo code"
+  },
+  "hourly": {
+    "time": ["2026-07-22T19:00:00+08:00", "2026-07-22T20:00:00+08:00", "2026-07-22T21:00:00+08:00"],
+    "temperature_2m": [31.2, 31.8, 32.0],
+    "apparent_temperature": [35.1, 35.8, 36.0],
+    "precipitation_probability": [42, 40, 38],
+    "precipitation": [0.0, 0.1, 0.0],
+    "relative_humidity_2m": [70, 68, 65],
+    "wind_speed_10m": [3.5, 3.8, 4.0],
+    "wind_direction_10m": [180, 185, 190],
+    "surface_pressure": [1013.0, 1012.8, 1012.5],
+    "cloud_cover": [40, 45, 50],
+    "weather_code": [3, 2, 1]
+  }
+}
