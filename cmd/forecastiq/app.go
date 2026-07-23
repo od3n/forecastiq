@@ -235,7 +235,10 @@ func buildApp(ctx context.Context) (*App, error) {
 	// Analysis matching engine (WP-11): analysis_batch at :10/:40 pairs unmatched
 	// snapshots with observations and rematches superseded pairs.
 	matcher := analysis.NewMatchService(analysispg.NewMatchRepository(), tx, pool, m, clk, logger)
-	analysisDispatcher := scheduler.NewAnalysisDispatcher(matcher, logger)
+	// Analysis aggregation (WP-13): the same batch aggregates matched pairs into
+	// AccuracyMetric rows (per cell-period, with CIs, coverage/reliability).
+	aggregator := analysis.NewAggregateService(analysispg.NewMetricRepository(), tx, pool, m, clk, logger)
+	analysisDispatcher := scheduler.NewAnalysisDispatcher(matcher, aggregator, logger)
 	jobRouter := scheduler.NewRouter(map[string]scheduler.Dispatcher{
 		scheduler.JobForecastCollection:    dispatcher,
 		scheduler.JobObservationCollection: obsDispatcher,
