@@ -88,11 +88,7 @@ The `observations` table + `observation_type`/`quality_flag` enums (table-design
 
 ## 9. CI evidence
 
-```text
-PENDING — branch not yet pushed. Six mandatory jobs must be captured green on
-the pushed feature/wp09-observation-adapter head SHA before Delivery Review
-Board (per the WP-05/06/07/08 evidence protocol).
-```
+Branch pushed; PR #7 → `main` triggered CI run **30023733403** (event `pull_request`) **success** on head SHA `ffc47876c1199b87226c2a962c6ecd676050a121` (`ffc4787`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == remote tip == CI head SHA. The subsequent docs-only CI-evidence commit is a descendant of the CI-verified SHA (no code/CI change), so run `30023733403` on `ffc4787` remains the authoritative implementation CI evidence.
 
 ## 10. Files changed
 
@@ -118,6 +114,6 @@ Acceptance State: Not Accepted (pending pushed-branch CI + Delivery Review Board
 ## 13. Recommended next action
 
 ```text
-Push feature/wp09-observation-adapter, capture the six mandatory CI jobs green
-on the head SHA, then convene the Delivery Review Board for WP-09.
+Convene the Delivery Review Board for WP-09. CI evidence is captured (§9):
+run 30023733403 on head SHA ffc4787, six mandatory jobs green.
 ```
