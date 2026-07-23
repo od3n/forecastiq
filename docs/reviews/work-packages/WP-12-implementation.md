@@ -65,12 +65,7 @@ None. No migration, no endpoint, no external call, no credential. Standard-libra
 
 ## 7. CI evidence
 
-```text
-PENDING — branch not yet pushed. The six mandatory jobs must be captured green
-on the pushed head SHA. This WP adds no migration or integration test, so the
-kernel is exercised by backend-checks (unit + -race); migrations and
-backend-integration run unchanged.
-```
+Branch pushed; PR #10 → `main` triggered CI run **30041647144** (event `pull_request`) **success** on head SHA `6452c4936b5cb2b581128eebe924b5b9798bdbb7` (`6452c49`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == remote tip == CI head SHA. This WP adds no migration or integration test; the kernel is exercised by `backend-checks` (unit + `-race`), and `migrations`/`backend-integration` ran unchanged.
 
 ## 8. Files changed
 
@@ -96,6 +91,6 @@ Acceptance State: Not Accepted (pending pushed-branch CI + Delivery Review Board
 ## 11. Recommended next action
 
 ```text
-Push feature/wp12-pair-evaluation, capture the six mandatory CI jobs green on
-the head SHA, then convene the Delivery Review Board for WP-12.
+Convene the Delivery Review Board for WP-12. CI evidence is captured (§7):
+run 30041647144 on head SHA 6452c49, six mandatory jobs green.
 ```
