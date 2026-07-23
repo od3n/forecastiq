@@ -71,6 +71,13 @@ type Config struct {
 	SchedulerMissed     time.Duration
 
 	DevAdminToken string
+
+	// Auth (ADR-008 Supabase JWKS). AuthDevMode selects the local dev token
+	// verifier (non-production only); otherwise the JWKS verifier is used.
+	AuthJWKSURL  string
+	AuthIssuer   string
+	AuthAudience string
+	AuthDevMode  bool
 }
 
 // Load reads configuration from the environment (optionally seeding from a
@@ -175,6 +182,21 @@ func Load() (Config, error) {
 	cfg.DevAdminToken = getEnv("FIQ_DEV_ADMIN_TOKEN", "")
 	if cfg.Env == EnvProduction && cfg.DevAdminToken != "" {
 		fail("FIQ_DEV_ADMIN_TOKEN must NOT be set in production (use Supabase JWKS auth)")
+	}
+
+	// Auth (ADR-008). JWKS URL is required in production; dev-mode auth is
+	// forbidden there (the dev verifier is also compiled out of release builds).
+	cfg.AuthJWKSURL = getEnv("FIQ_AUTH_JWKS_URL", "")
+	cfg.AuthIssuer = getEnv("FIQ_AUTH_ISSUER", "")
+	cfg.AuthAudience = getEnv("FIQ_AUTH_AUDIENCE", "")
+	cfg.AuthDevMode = getBool("FIQ_AUTH_DEV_MODE", cfg.Env != EnvProduction)
+	if cfg.Env == EnvProduction {
+		if cfg.AuthDevMode {
+			fail("FIQ_AUTH_DEV_MODE must be false in production")
+		}
+		if cfg.AuthJWKSURL == "" {
+			fail("FIQ_AUTH_JWKS_URL is required in production")
+		}
 	}
 
 	if len(errs) > 0 {
