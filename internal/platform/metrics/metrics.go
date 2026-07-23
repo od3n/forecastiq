@@ -41,6 +41,10 @@ type Metrics struct {
 	ObservationsSuspect   *prometheus.CounterVec
 	ObservationFreshness  *prometheus.GaugeVec
 
+	// Analysis / matching (WP-11)
+	MatchesCreated  prometheus.Counter
+	MatchingBacklog prometheus.Gauge
+
 	// Scheduler
 	SlotsClaimed *prometheus.CounterVec
 	MissedSlots  *prometheus.CounterVec
@@ -126,6 +130,16 @@ func New() *Metrics {
 		Help: "Age of the newest observation per location (BR-FRESH).",
 	}, []string{"location_id"})
 
+	m.MatchesCreated = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "matching_pairs_created_total",
+		Help: "Snapshot–observation pairs created by the matching engine (incl. rematch).",
+	})
+
+	m.MatchingBacklog = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "matching_backlog",
+		Help: "Unmatched forecast snapshots within the matching window.",
+	})
+
 	m.SlotsClaimed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "scheduler_slots_claimed_total",
 		Help: "Scheduler slots claimed.",
@@ -154,6 +168,7 @@ func New() *Metrics {
 		m.RateLimitHits, m.ProviderLatency, m.CircuitState,
 		m.ConditionUnmapped,
 		m.ObservationsCollected, m.ObservationsSuspect, m.ObservationFreshness,
+		m.MatchesCreated, m.MatchingBacklog,
 		m.SlotsClaimed, m.MissedSlots, m.SchedulerLag, m.JobDuration,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),

@@ -45,6 +45,12 @@ type Config struct {
 	// ObservationMinuteOffset is the minute past the hour for observation slots
 	// (OC-01: :05, allowing source publication delay).
 	ObservationMinuteOffset int
+	// AnalysisConfigID owns analysis_batch slots (WP-11); uuid.Nil disables
+	// their generation. The batch is global (location_id NULL).
+	AnalysisConfigID uuid.UUID
+	// AnalysisMinuteOffsets are the minutes past each hour to run the analysis
+	// batch (workflow §7: :10 and :40). Empty defaults to {10, 40}.
+	AnalysisMinuteOffsets []int
 }
 
 // Scheduler generates due slots and dispatches claimed slots to jobs.
@@ -254,8 +260,43 @@ func (s *Scheduler) generateSlots(ctx context.Context, now time.Time) error {
 				}
 			}
 		}
+		if s.cfg.AnalysisConfigID != uuid.Nil {
+			for _, slotTime := range analysisSlotTimes(from, to, s.cfg.AnalysisMinuteOffsets) {
+				slot := &Slot{
+					ID:                      ids.New(),
+					ProviderConfigurationID: s.cfg.AnalysisConfigID,
+					JobType:                 JobAnalysisBatch,
+					LocationID:              nil, // global job
+					SlotTime:                slotTime,
+					Status:                  SlotDue,
+					CreatedAt:               now,
+					UpdatedAt:               now,
+				}
+				if err := s.slots.Generate(ctx, tx, slot); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	})
+}
+
+// analysisSlotTimes enumerates the analysis-batch instants in [from, to) at the
+// given minute offsets past each hour (defaults to :10 and :40).
+func analysisSlotTimes(from, to time.Time, offsets []int) []time.Time {
+	if len(offsets) == 0 {
+		offsets = []int{10, 40}
+	}
+	var out []time.Time
+	for h := from.UTC().Truncate(time.Hour); h.Before(to); h = h.Add(time.Hour) {
+		for _, off := range offsets {
+			t := h.Add(time.Duration(off) * time.Minute)
+			if !t.Before(from) && t.Before(to) {
+				out = append(out, t)
+			}
+		}
+	}
+	return out
 }
 
 func (s *Scheduler) claimDue(ctx context.Context, now time.Time) ([]*Slot, error) {

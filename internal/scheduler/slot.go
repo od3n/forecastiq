@@ -14,6 +14,7 @@ import (
 const (
 	JobForecastCollection    = "forecast_collection"
 	JobObservationCollection = "observation_collection"
+	JobAnalysisBatch         = "analysis_batch"
 )
 
 // Slot statuses (collection_schedules.status).
