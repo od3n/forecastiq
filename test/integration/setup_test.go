@@ -170,7 +170,7 @@ func (f *fakeAdapter) Slug() string           { return "open-meteo" }
 func (f *fakeAdapter) SchemaVersion() string  { return "openmeteo-v1" }
 func (f *fakeAdapter) AdapterVersion() string { return "1.0.0-test" }
 func (f *fakeAdapter) Capabilities() ports.Capabilities {
-	return ports.Capabilities{MaxForecastHorizon: 7 * 24 * time.Hour, HourlyResolution: true}
+	return ports.Capabilities{MaxForecastHorizon: 7 * 24 * time.Hour, HourlyResolution: true, SupportsReplay: true}
 }
 func (f *fakeAdapter) FetchForecast(_ context.Context, req ports.ForecastRequest) (*ports.ForecastResult, error) {
 	raw := f.rawPayload
@@ -183,22 +183,41 @@ func (f *fakeAdapter) FetchForecast(_ context.Context, req ports.ForecastRequest
 		IssuedAt: req.IssuedAt, RecordsReceived: f.count, Outcome: f.outcome,
 	}
 	if f.outcome == ports.OutcomeSuccess || f.outcome == ports.OutcomePartial {
-		for i := 0; i < f.count; i++ {
-			temp := 30.0 + float64(i)
-			res.Snapshots = append(res.Snapshots, &collectiondomain.ForecastSnapshot{
-				ID:                       uuid.Must(uuid.NewV7()),
-				ProviderID:               req.ProviderID,
-				LocationID:               req.LocationID,
-				IssuedAt:                 req.IssuedAt,
-				TargetTime:               req.IssuedAt.Add(time.Duration(i+1) * time.Hour),
-				ForecastHorizonMinutes:   (i + 1) * 60,
-				TemperatureC:             &temp,
-				CanonicalConditionCode:   collectiondomain.ConditionCloudy,
-				ConditionTaxonomyVersion: collectiondomain.ConditionTaxonomyVersion,
-			})
-		}
+		res.Snapshots = f.buildSnapshots(req)
 	}
 	return res, nil
+}
+
+// DecodeStored implements ports.ReplayDecoder: deterministically re-derive the
+// same snapshots from stored bytes with no network metadata (replay path).
+func (f *fakeAdapter) DecodeStored(_ context.Context, req ports.ForecastRequest, raw []byte) (*ports.ForecastResult, error) {
+	res := &ports.ForecastResult{
+		RawPayload: raw, Checksum: ports.Checksum(raw),
+		SchemaVersion: "openmeteo-v1", AdapterVersion: "1.0.0-test",
+		IssuedAt: req.IssuedAt, RecordsReceived: f.count, Outcome: ports.OutcomeSuccess,
+	}
+	res.Snapshots = f.buildSnapshots(req)
+	return res, nil
+}
+
+// buildSnapshots produces f.count deterministic snapshots at issuedAt+(i+1)h.
+func (f *fakeAdapter) buildSnapshots(req ports.ForecastRequest) []*collectiondomain.ForecastSnapshot {
+	var out []*collectiondomain.ForecastSnapshot
+	for i := 0; i < f.count; i++ {
+		temp := 30.0 + float64(i)
+		out = append(out, &collectiondomain.ForecastSnapshot{
+			ID:                       uuid.Must(uuid.NewV7()),
+			ProviderID:               req.ProviderID,
+			LocationID:               req.LocationID,
+			IssuedAt:                 req.IssuedAt,
+			TargetTime:               req.IssuedAt.Add(time.Duration(i+1) * time.Hour),
+			ForecastHorizonMinutes:   (i + 1) * 60,
+			TemperatureC:             &temp,
+			CanonicalConditionCode:   collectiondomain.ConditionCloudy,
+			ConditionTaxonomyVersion: collectiondomain.ConditionTaxonomyVersion,
+		})
+	}
+	return out
 }
 
 // newSuccessAdapter returns a fake adapter producing `count` valid snapshots.
@@ -215,10 +234,12 @@ type testEnv struct {
 	configs   catalog.ConfigurationManager
 	circuits  catalog.CircuitState
 	collector collection.ForecastCollector
+	replayer  collection.ForecastReplayer
 	reader    collection.ForecastReader
 	slots     *schedulerpgSlotRepo
 	router    *gin.Engine
 	adapter   *fakeAdapter
+	store     *payloadstore.FilesystemStore
 }
 
 // schedulerpgSlotRepo aliases the concrete slot repo type for tests.
@@ -252,14 +273,14 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	m := metrics.New()
 
 	adapters := map[string]ports.ForecastProviderAdapter{"open-meteo": adapter}
-	collector := collection.NewCollectService(adapters, collectionRepo, snapshotRepo, store, circuits,
+	collector := collection.NewCollectService(adapters, providers, collectionRepo, snapshotRepo, store, circuits,
 		bus, m, recorder, clk, logger, tx, pool, func(string) string { return "" })
 	reader := collection.NewReaderService(collectionRepo, snapshotRepo, pool)
 
 	checker := health.NewChecker()
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
-		Collector: collector, Reader: reader, Health: checker, Logger: logger,
+		Collector: collector, Replayer: collector, Reader: reader, Health: checker, Logger: logger,
 	}
 	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)
 	router := api.NewRouter(h, m, logger, api.RouterConfig{
@@ -269,8 +290,8 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 
 	return &testEnv{
 		pool: pool, tx: tx, locations: locations, providers: providers, configs: configs,
-		circuits: circuits, collector: collector, reader: reader,
-		slots: schedulerpg.NewSlotRepository(), router: router, adapter: adapter,
+		circuits: circuits, collector: collector, replayer: collector, reader: reader,
+		slots: schedulerpg.NewSlotRepository(), router: router, adapter: adapter, store: store,
 	}
 }
 
