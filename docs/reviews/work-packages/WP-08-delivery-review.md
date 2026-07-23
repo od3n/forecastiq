@@ -91,3 +91,35 @@ Role: Independent Delivery Review Board Re-Review Panel
 ```text
 ACCEPTED — conditional on six mandatory CI jobs green on the pushed remediation SHA
 ```
+
+## 8. Confirmatory Re-Review & Acceptance
+
+```text
+Role: Independent Confirmatory Delivery Review Board
+```
+
+The board independently verified:
+
+| Item | Evidence | Result |
+|------|----------|--------|
+| Remediation SHA identity | local HEAD == `git ls-remote origin` == CI head == `daee1e1bd07718ce073ba0c11d5e02cd8fa9432c` | PASS |
+| CI run | `29998847727` (`pull_request`, head `daee1e1`) overall **success** | PASS |
+| Mandatory jobs | `backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image` — all green, none skipped/cancelled | PASS |
+| DRB-WP08-001 closed | `TestReplayDoesNotShadowLatestForecast` green in `backend-integration` | PASS |
+| Scope | remediation limited to `replay.go` + one test + governance docs; no migration/CI-config change | PASS |
+| No new Critical/High | independent read of the remediation diff | PASS |
+
+**Confirmatory decision:**
+
+```text
+ACCEPTED
+
+WP-08 — Forecast Scheduler and Collection Operations
+Accepted Implementation SHA: daee1e1bd07718ce073ba0c11d5e02cd8fa9432c
+Review State: Accepted
+Package State: Accepted
+Blocking findings: None
+Open tracked conditions: None
+```
+
+CI evidence of record: run **29998847727** (event `pull_request`, head `daee1e1`), six mandatory jobs green. The initial full-review SHA `7e29571` (run `29998226061`) is superseded by the remediation SHA. DRB-WP08-002 remains open as Informational (non-blocking).

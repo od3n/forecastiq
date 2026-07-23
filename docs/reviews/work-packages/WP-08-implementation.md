@@ -142,14 +142,14 @@ Previous State:
 Selected — Not Started
 
 New State:
-Implementation Complete
+Accepted (DRB full review + re-review 2026-07-23)
 
-Acceptance State:
-Not Accepted
+Accepted Implementation SHA:
+daee1e1bd07718ce073ba0c11d5e02cd8fa9432c
 ```
 
 ## 16. Recommended next action
 
 ```text
-Push the branch to capture CI evidence, then convene the Delivery Review Board for WP-08.
+Merge PR #4 to main; select the next approved work package.
 ```
