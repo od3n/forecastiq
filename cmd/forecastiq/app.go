@@ -14,11 +14,13 @@ import (
 	"github.com/forecastiq/forecastiq/adapters/auth/jwks"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openmeteo"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openweather"
+	obsopenmeteo "github.com/forecastiq/forecastiq/adapters/observationsources/openmeteo"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/collectionpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
+	"github.com/forecastiq/forecastiq/adapters/persistence/observationpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
 	"github.com/forecastiq/forecastiq/internal/api"
 	"github.com/forecastiq/forecastiq/internal/api/handlers"
@@ -119,6 +121,22 @@ func buildApp(ctx context.Context) (*App, error) {
 				slog.Int("consecutive_failures", hc.ConsecutiveFailures))
 		}
 	})
+	bus.Subscribe("observation.collected", func(ctx context.Context, e events.Event) {
+		if oc, ok := e.(events.ObservationCollected); ok {
+			logger.InfoContext(ctx, "event.observation.collected",
+				slog.String("location_id", oc.LocationID.String()),
+				slog.String("source", oc.Source),
+				slog.Int("count", oc.Count))
+		}
+	})
+	bus.Subscribe("observation.corrected", func(ctx context.Context, e events.Event) {
+		if oc, ok := e.(events.ObservationCorrected); ok {
+			logger.InfoContext(ctx, "event.observation.corrected",
+				slog.String("location_id", oc.LocationID.String()),
+				slog.String("superseded_observation_id", oc.SupersededObservationID.String()),
+				slog.String("new_observation_id", oc.NewObservationID.String()))
+		}
+	})
 
 	m := metrics.New()
 
@@ -197,13 +215,34 @@ func buildApp(ctx context.Context) (*App, error) {
 
 	// Scheduler / worker.
 	dispatcher := scheduler.NewForecastDispatcher(configs, providers, locations, collector, logger)
-	sched := scheduler.New(slotRepo, runRepo, dispatcher, configs, locations, tx, clk, logger, m, scheduler.Config{
-		Interval:        cfg.SchedulerInterval,
-		LeaseDuration:   cfg.SlotLeaseDuration,
-		MaxConcurrent:   cfg.WorkerMaxConcurrent,
-		JobTimeout:      cfg.WorkerJobTimeout,
-		DrainTimeout:    cfg.SchedulerDrain,
-		MissedThreshold: cfg.SchedulerMissed,
+	// Observation collection (WP-10): Open-Meteo Historical source adapter →
+	// ObserveService → dispatched at :05 per active location. Observation slots
+	// hang off the seeded Open-Meteo config (job_type discriminates).
+	obsLimiter := ratelimit.NewLimiter(6, 6.0/60.0, clk)
+	obsAdapter := obsopenmeteo.New(obsopenmeteo.Config{
+		Client:           &http.Client{Timeout: cfg.ProviderTimeout},
+		Limiter:          obsLimiter,
+		Logger:           logger,
+		MaxResponseBytes: cfg.ProviderMaxRespBytes,
+		MaxRetries:       5,
+		RetryBaseDelay:   time.Second,
+	})
+	observationRepo := observationpg.NewRepository()
+	observer := collection.NewObserveService(obsAdapter, observationRepo, bus, m, clk, logger, tx, pool)
+	obsDispatcher := scheduler.NewObservationDispatcher(observer, locations, logger)
+	jobRouter := scheduler.NewRouter(map[string]scheduler.Dispatcher{
+		scheduler.JobForecastCollection:    dispatcher,
+		scheduler.JobObservationCollection: obsDispatcher,
+	})
+	sched := scheduler.New(slotRepo, runRepo, jobRouter, configs, locations, tx, clk, logger, m, scheduler.Config{
+		Interval:                cfg.SchedulerInterval,
+		LeaseDuration:           cfg.SlotLeaseDuration,
+		MaxConcurrent:           cfg.WorkerMaxConcurrent,
+		JobTimeout:              cfg.WorkerJobTimeout,
+		DrainTimeout:            cfg.SchedulerDrain,
+		MissedThreshold:         cfg.SchedulerMissed,
+		ObservationConfigID:     catalogdomain.OpenMeteoConfigID,
+		ObservationMinuteOffset: 5,
 	})
 
 	// Identity (WP-03). The verifier is the Supabase JWKS verifier in

@@ -208,7 +208,12 @@ CREATE TABLE observations (
   PRIMARY KEY (id, observed_at),
   CHECK (observed_at <= now())
 ) PARTITION BY RANGE (observed_at);
-CREATE UNIQUE INDEX observations_dedup ON observations (source, location_id, observed_at);
+-- Live-row dedup (OC-03): one NON-SUPERSEDED row per (source, location, hour).
+-- The predicate is required so a correction (a new row sharing the same key,
+-- with the old row marked superseded) does not violate uniqueness (DR-05;
+-- WP-10 migration 20260801000007).
+CREATE UNIQUE INDEX observations_dedup ON observations (source, location_id, observed_at)
+  WHERE superseded_observation_id IS NULL;
 ```
 
 ## 4. Analysis Module

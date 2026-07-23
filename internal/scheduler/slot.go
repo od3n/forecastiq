@@ -12,7 +12,8 @@ import (
 
 // Job types dispatched by the scheduler.
 const (
-	JobForecastCollection = "forecast_collection"
+	JobForecastCollection    = "forecast_collection"
+	JobObservationCollection = "observation_collection"
 )
 
 // Slot statuses (collection_schedules.status).
