@@ -6,7 +6,7 @@
 **PR**: #6 (`feature/wp07-openweather-provider` → `main`)
 **Reviewed SHA**: `3b8760110523fd79e0525021da1f6da122d55040` (`3b87601`)
 **Authority**: `docs/planning/05-implementation-work-packages.md` §WP-07; `docs/testing/03-contract-testing.md` §1.2; ADR-002 (provider scope + Tomorrow.io fallback); implementation report `WP-07-implementation.md`
-**Decision**: **CONDITIONALLY ACCEPTED** — accepted on technical/architectural merits (no Critical/High); one blocking condition (**TC-07-01**) on the rate-budget/retry interaction, to be closed before the OpenWeather provider is activated.
+**Decision**: **CONDITIONALLY ACCEPTED** — accepted on technical/architectural merits (no Critical/High); one blocking condition (**TC-07-01**) on the rate-budget/retry interaction, to be closed before the OpenWeather provider is activated. **Confirmatory re-review 2026-07-23 (§13): ACCEPTED — TC-07-01/002/003 Closed; Accepted Implementation SHA `c64c17d`.**
 
 ---
 
@@ -137,3 +137,32 @@ Status: **READY FOR CONFIRMATORY RE-REVIEW.** All three findings addressed withi
 Next action: capture the six mandatory CI jobs green on the pushed remediation SHA, then the board performs the confirmatory re-review. TC-07-01 converts to **Closed — Satisfied** on that confirmation. **Only the Delivery Review Board may mark WP-07 Accepted.**
 
 **Remediation CI evidence (captured):** CI run **30013888511** (`pull_request`, PR #6) **success** on head SHA `ce4910f` — all six mandatory jobs green (`backend-integration` cleared a transient Docker Hub image-pull flake on a same-SHA job re-run, no code change). Local == remote tip == CI head == `ce4910f`.
+
+---
+
+## 13. Confirmatory re-review (Delivery Review Board, 2026-07-23)
+
+**Decision: ACCEPTED.** The board independently re-verified the remediation and evidence.
+
+**Independent verification**
+
+| Check | Evidence | Result |
+|-------|----------|--------|
+| SHA identity | local HEAD == `git ls-remote origin` == `c64c17d9fafcfa9522897f405e991e6d6ed7bf71` (`c64c17d`) | ✅ |
+| Code-bearing commit | `860e93b` (`fix(collection): OpenWeather budget accounts real calls; 429 not retried`); commits since (`ce4910f`, `c64c17d`) are **docs-only** (`git diff --stat 860e93b..HEAD`) | ✅ |
+| Remediation scope | diff `df6780e..860e93b` touches only `openweather/{budget,openweather,openweather_test}.go` + `providerhttp/{client,client_test}.go` — no domain/service/persistence/API/migration/CI change | ✅ |
+| CI on exact head | run **30015654361** (`pull_request`, head `c64c17d`) **success**, all six mandatory jobs green (none skipped/cancelled) | ✅ |
+| CI on code SHA | run **30013888511** (head `ce4910f`) **success**, six jobs green | ✅ |
+| Local gate | `gofmt -l` clean; `go build ./...`; `go vet ./...`; `go test -race ./...` all `ok`; `golangci-lint` clean | ✅ |
+
+**Findings dispositions**
+
+- **DRB-WP07-001 (Medium) → CLOSED — Satisfied.** Verified in code: `providerhttp.Config.RetryableOverride` (client.go:54) + `Response.Attempts` (client.go:115, set at :137); the OpenWeather adapter opts a 429 out of retry (openweather.go:83–84) and debits real attempts via `budget.consume(resp.Attempts-1, ...)` (openweather.go:159). Proven by `TestFetch_RateLimited_NoRetry` (429 → 1 upstream call under a 3-retry budget) and `TestFetch_RetriesCountAgainstBudget` (3-attempt 5xx storm spends a budget of 3 → next call refused). The change is additive/backward-compatible — Open-Meteo passes no override, and its suite plus the existing `providerhttp` suite are unchanged and green (no regression).
+- **DRB-WP07-002 (Low) → CLOSED.** `budget.pause(a.clock.Now(), ...)` (openweather.go:177) reads a fresh clock.
+- **DRB-WP07-003 (Low, docs) → CLOSED.** Test count corrected (23 openweather + 2 framework), matching `go test -list`.
+
+No new Critical/High/Medium finding introduced by the remediation. TC-07-02 (doc count) also satisfied.
+
+**Package transition:** READY FOR CONFIRMATORY RE-REVIEW → **Accepted**. **TC-07-01 → Closed — Satisfied; TC-07-02 → Closed.** Authoritative CI evidence: run **30015654361** on head `c64c17d` (the docs-only closure note of this decision is a descendant of that SHA). **Accepted Implementation SHA `c64c17d`** (code lineage `860e93b`). PR #6 ready to merge to `main`.
+
+**Standing operational note (not a code gate):** the OpenWeather operational configuration remains seeded **disabled** pending the ToS review (D-05, a public-launch gate). Acceptance of WP-07 covers the code; operator activation of the provider is gated on D-05 clearing and a resolvable API key.
