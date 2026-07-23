@@ -98,6 +98,33 @@ func TestReplayUnknownCollection(t *testing.T) {
 	require.ErrorIs(t, err, collectiondomain.ErrNotFound)
 }
 
+// TestReplayDoesNotShadowLatestForecast is the DRB-WP08-001 regression guard:
+// after replaying the most recent collection, /forecasts/latest must still
+// return the original, complete snapshot set (the replay collection is recorded
+// as deduplicated and must not become "latest successful").
+func TestReplayDoesNotShadowLatestForecast(t *testing.T) {
+	ctx := context.Background()
+	connStr := startPostgres(ctx, t)
+	migrate(t, connStr)
+	e := newTestEnv(ctx, t, connStr, newSuccessAdapter(3))
+	e.seedCatalog(ctx, t)
+
+	orig, err := e.collector.Collect(ctx, collectInput(ctx, t, e))
+	require.NoError(t, err)
+
+	replayed, err := e.replayer.Replay(ctx, orig.ID, catalog.Actor{Name: "admin"})
+	require.NoError(t, err)
+	assert.Equal(t, collectiondomain.StatusDeduplicated, replayed.Status,
+		"replay collection must be recorded as deduplicated, not success")
+
+	// Latest forecast still resolves to the original complete collection.
+	latest, err := e.reader.LatestForecast(ctx, catalogdomain.OpenMeteoProviderID, catalogdomain.JohorBahruLocationID)
+	require.NoError(t, err)
+	require.NotNil(t, latest)
+	assert.Equal(t, orig.ID, latest.Collection.ID, "replay must not shadow the original as latest")
+	assert.Len(t, latest.Snapshots, 3, "latest-forecast must retain the full snapshot set after replay")
+}
+
 // TestAPI_ReplayCollection exercises the admin replay endpoint end-to-end,
 // including auth and not-found handling.
 func TestAPI_ReplayCollection(t *testing.T) {

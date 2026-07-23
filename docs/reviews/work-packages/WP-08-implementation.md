@@ -127,7 +127,7 @@ Run locally (Docker unavailable in this environment — integration suite runs i
 No approved-scope deviations.
 ```
 
-**Recorded design note (non-blocking):** replay writes the new collection with `requested_at = now` and `provider_model_run_time = NULL` so it never collides with the original's collection-level dedup key. Snapshots are keyed by the original issuance, so corrected rows land while identical rows dedup. Under WP-08's provider (Open-Meteo, no model-run time) this is exact; the choice is documented for providers that expose a model-run time in later packages.
+**Recorded design note (non-blocking):** a replay writes a **new** collection recorded with `collection_status = deduplicated`, so it is excluded from both the success dedup unique index and the `LatestSuccessful` query and can never shadow the original in `/forecasts/latest` (DRB-WP08-001, remediated). `requested_at` and `provider_model_run_time` mirror the original issuance for lineage (dedup-safe because the row is never success/partial). Snapshots are keyed by the original issuance and inserted `ON CONFLICT DO NOTHING`, so identical rows dedup and only genuinely new-key rows land — an accepted, documented consequence of snapshot immutability (a fixed adapter that changes an existing row's values cannot overwrite it; it can only add new keys).
 
 ## 14. Known limitations
 

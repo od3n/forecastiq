@@ -78,20 +78,32 @@ func (s *CollectService) Replay(ctx context.Context, collectionID uuid.UUID, act
 	}
 
 	now := s.clock.Now()
-	status, errorCode, errorMsg := classify(result, true)
+	decodeStatus, errorCode, errorMsg := classify(result, true)
+	storeSnapshots := decodeStatus.Successful() && len(result.Snapshots) > 0
 	newID := ids.New()
 
-	// A distinct requested_at keeps the replay out of the original's
-	// collection-level dedup key; model-run time is intentionally cleared so
-	// the replay is never mistaken for a fresh provider model run.
+	// The replay collection is recorded as `deduplicated`: it is a reprocessing
+	// of an already-collected exchange, so it must NOT compete with the original
+	// in the success dedup index or in LatestSuccessful. Recording it as success
+	// would let a snapshot-less replay row shadow the original in
+	// /forecasts/latest (DRB-WP08-001). Genuinely new-key snapshots still land,
+	// linked to this row; a failed decode is recorded honestly as failed.
+	collStatus := domain.StatusDeduplicated
+	if !decodeStatus.Successful() {
+		collStatus = decodeStatus
+	}
+
+	// requested_at + model-run time mirror the original issuance for lineage;
+	// this is dedup-safe because the row is never success/partial.
 	coll := &domain.ForecastCollection{
 		ID:                      newID,
 		ProviderID:              orig.ProviderID,
 		LocationID:              orig.LocationID,
 		ProviderConfigurationID: orig.ProviderConfigurationID,
-		RequestedAt:             now,
+		RequestedAt:             orig.RequestedAt,
 		Status:                  domain.StatusPending,
 		ProviderRequestID:       orig.ProviderRequestID,
+		ProviderModelRunTime:    orig.ProviderModelRunTime,
 		RawPayloadObjectKey:     orig.RawPayloadObjectKey,
 		RawPayloadChecksum:      orig.RawPayloadChecksum,
 		SchemaVersion:           result.SchemaVersion,
@@ -99,7 +111,7 @@ func (s *CollectService) Replay(ctx context.Context, collectionID uuid.UUID, act
 		CreatedAt:               now,
 	}
 
-	if status.Successful() && len(result.Snapshots) > 0 {
+	if storeSnapshots {
 		if perr := s.snapshots.EnsurePartitions(ctx, s.pool, monthStarts(result.Snapshots)); perr != nil {
 			return nil, fmt.Errorf("ensure partitions: %w", perr)
 		}
@@ -110,7 +122,7 @@ func (s *CollectService) Replay(ctx context.Context, collectionID uuid.UUID, act
 		if ierr := s.collections.Insert(ctx, tx, coll); ierr != nil {
 			return ierr
 		}
-		if status.Successful() && len(result.Snapshots) > 0 {
+		if storeSnapshots {
 			for _, snap := range result.Snapshots {
 				snap.ForecastCollectionID = coll.ID
 				snap.ProviderID = orig.ProviderID
@@ -127,7 +139,7 @@ func (s *CollectService) Replay(ctx context.Context, collectionID uuid.UUID, act
 		coll.SnapshotsDeduplicated = len(result.Snapshots) - storedCount
 		coll.SnapshotsInvalid = result.InvalidCount
 		coll.RecordsReceived = result.RecordsReceived
-		coll.Status = status
+		coll.Status = collStatus
 		coll.CompletedAt = &completedAt
 		coll.ErrorCode = errorCode
 		coll.ErrorMessage = errorMsg
