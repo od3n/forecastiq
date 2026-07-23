@@ -41,3 +41,41 @@ type MatchRepository interface {
 	// (matching backlog gauge).
 	CountUnmatched(ctx context.Context, tx dbtx.DBTX, from, to time.Time) (int, error)
 }
+
+// VariableCounts is the number of delivered snapshots with a non-null value for
+// each continuous variable in a cell-period (coverage numerator).
+type VariableCounts struct {
+	Temperature   int
+	WindSpeed     int
+	Humidity      int
+	Pressure      int
+	Precipitation int
+}
+
+// MetricRepository is the aggregation engine's persistence port (WP-13).
+type MetricRepository interface {
+	// ListCells returns the distinct (provider, location, horizon) cells that
+	// have at least one live matched pair with target_time in [from, to).
+	ListCells(ctx context.Context, tx dbtx.DBTX, from, to time.Time) ([]domain.Cell, error)
+	// ReadPairs returns the live matched pairs for a cell whose target_time is in
+	// [from, to): matched_evaluations joined to the forecast snapshot and the
+	// (non-superseded, non-suspect) observation.
+	ReadPairs(ctx context.Context, tx dbtx.DBTX, cell domain.Cell, from, to time.Time) ([]*domain.PairRecord, error)
+	// SnapshotVariableCounts returns, per variable, the number of delivered
+	// snapshots for the cell with a non-null value in [from, to) (coverage
+	// numerator).
+	SnapshotVariableCounts(ctx context.Context, tx dbtx.DBTX, cell domain.Cell, from, to time.Time) (VariableCounts, error)
+	// ScheduledForecastSlots returns the number of scheduled forecast-collection
+	// slots for the provider serving the location in [from, to) (coverage /
+	// reliability denominator; schedule-derived expected count).
+	ScheduledForecastSlots(ctx context.Context, tx dbtx.DBTX, providerID, locationID uuid.UUID, from, to time.Time) (int, error)
+	// SuccessfulCollections returns the number of successful forecast collections
+	// for the provider+location in [from, to) (reliability numerator).
+	SuccessfulCollections(ctx context.Context, tx dbtx.DBTX, providerID, locationID uuid.UUID, from, to time.Time) (int, error)
+	// InsertMetrics inserts new metric rows (live: superseded_by NULL).
+	InsertMetrics(ctx context.Context, tx dbtx.DBTX, metrics []*domain.AccuracyMetric) error
+	// SupersedePrevious sets superseded_by = m.ID on the prior live row sharing
+	// m's logical key (provider, location, horizon, variable, metric_type,
+	// period), if any. Called after the new row is inserted.
+	SupersedePrevious(ctx context.Context, tx dbtx.DBTX, m *domain.AccuracyMetric) error
+}
