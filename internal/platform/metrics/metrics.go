@@ -36,6 +36,11 @@ type Metrics struct {
 	// Condition taxonomy
 	ConditionUnmapped *prometheus.CounterVec
 
+	// Observation collection (WP-10)
+	ObservationsCollected *prometheus.CounterVec
+	ObservationsSuspect   *prometheus.CounterVec
+	ObservationFreshness  *prometheus.GaugeVec
+
 	// Scheduler
 	SlotsClaimed *prometheus.CounterVec
 	MissedSlots  *prometheus.CounterVec
@@ -106,6 +111,21 @@ func New() *Metrics {
 		Help: "Provider condition codes with no canonical mapping.",
 	}, []string{"provider", "code"})
 
+	m.ObservationsCollected = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "observations_collected_total",
+		Help: "Observation rows stored by source and location.",
+	}, []string{"source", "location_id"})
+
+	m.ObservationsSuspect = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "observations_suspect_total",
+		Help: "Observation rows flagged suspect (OC-04 range violations).",
+	}, []string{"source", "reason"})
+
+	m.ObservationFreshness = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "observation_freshness_age_seconds",
+		Help: "Age of the newest observation per location (BR-FRESH).",
+	}, []string{"location_id"})
+
 	m.SlotsClaimed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "scheduler_slots_claimed_total",
 		Help: "Scheduler slots claimed.",
@@ -133,6 +153,7 @@ func New() *Metrics {
 		m.CollectionAttempts, m.CollectionDuration, m.SnapshotsStored, m.RecordsRejected,
 		m.RateLimitHits, m.ProviderLatency, m.CircuitState,
 		m.ConditionUnmapped,
+		m.ObservationsCollected, m.ObservationsSuspect, m.ObservationFreshness,
 		m.SlotsClaimed, m.MissedSlots, m.SchedulerLag, m.JobDuration,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),

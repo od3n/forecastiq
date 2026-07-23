@@ -48,3 +48,27 @@ type SnapshotRepository interface {
 	ByCollectionID(ctx context.Context, tx dbtx.DBTX, collectionID uuid.UUID) ([]*domain.ForecastSnapshot, error)
 	GetByID(ctx context.Context, tx dbtx.DBTX, id uuid.UUID) (*domain.ForecastSnapshot, error)
 }
+
+// ObservationRepository persists observation rows (WP-10). Observations have no
+// parent collection entity (ADR-025); dedup and supersession are enforced at
+// the row level. The live-row dedup boundary is (source, location_id,
+// observed_at) among non-superseded rows.
+type ObservationRepository interface {
+	// EnsurePartitions creates any missing monthly partitions covering the
+	// given month-start instants (idempotent DDL; run before inserts).
+	EnsurePartitions(ctx context.Context, tx dbtx.DBTX, monthStarts []time.Time) error
+	// ListCurrentByWindow returns the non-superseded observation rows for a
+	// (source, location) whose observed_at is within [start, end], keyed for
+	// correction comparison (workflow §4).
+	ListCurrentByWindow(ctx context.Context, tx dbtx.DBTX, source string, locationID uuid.UUID, start, end time.Time) ([]*domain.Observation, error)
+	// InsertBatch inserts observation rows with ON CONFLICT DO NOTHING against
+	// the live-row dedup boundary and returns the number actually stored.
+	InsertBatch(ctx context.Context, tx dbtx.DBTX, obs []*domain.Observation) (stored int, err error)
+	// Supersede sets superseded_observation_id on the old row (the only
+	// permitted observation mutation; domain §2.7). Must run before inserting
+	// the correcting row so the live-row dedup index does not conflict.
+	Supersede(ctx context.Context, tx dbtx.DBTX, oldID uuid.UUID, oldObservedAt time.Time, newID uuid.UUID) error
+	// LatestObservedAt returns the most recent observed_at for a
+	// (source, location), or ok=false when none exists (freshness gauge).
+	LatestObservedAt(ctx context.Context, tx dbtx.DBTX, source string, locationID uuid.UUID) (t time.Time, ok bool, err error)
+}

@@ -10,9 +10,10 @@ import (
 )
 
 // ObservationRequest is the adapter input for one observation collection: a
-// location and the [WindowStart, WindowEnd) UTC window to fetch (the 2 h
-// backfill window; workflow §3). Open-Meteo Historical is keyless, so no
-// credential is carried.
+// location and the [WindowStart, WindowEnd] UTC window to fetch (the 2 h
+// backfill window; workflow §3). The window is inclusive of both bounds
+// (Open-Meteo's start_hour/end_hour are inclusive). Open-Meteo Historical is
+// keyless, so no credential is carried.
 type ObservationRequest struct {
 	LocationID  uuid.UUID
 	Source      string
