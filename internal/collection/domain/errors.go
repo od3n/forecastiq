@@ -13,6 +13,9 @@ var (
 	ErrNotFound           = errors.New("resource not found")
 	ErrInactive           = errors.New("provider, location, or configuration is not active")
 	ErrPayloadUnavailable = errors.New("raw payload unavailable (expired or corrupt)")
+	// ErrReplayUnsupported signals the provider's adapter cannot deterministically
+	// decode a stored payload (does not implement ReplayDecoder; FC-14).
+	ErrReplayUnsupported = errors.New("provider adapter does not support replay")
 	// ErrDuplicateCollection signals a concurrent collection committed the same
 	// dedup key first (collection-level dedup race; domain §4.3). The collector
 	// records this attempt as a deduplicated collection rather than failing.

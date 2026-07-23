@@ -36,6 +36,13 @@ type ForecastCollector interface {
 	Collect(ctx context.Context, in CollectInput) (*domain.ForecastCollection, error)
 }
 
+// ForecastReplayer reprocesses a stored raw payload through the current
+// adapter (FC-14; workflow 06 §2). No provider network call occurs; the
+// original collection and its snapshots are never mutated.
+type ForecastReplayer interface {
+	Replay(ctx context.Context, collectionID uuid.UUID, actor catalog.Actor) (*domain.ForecastCollection, error)
+}
+
 // CollectionListInput is the admin collection query.
 type CollectionListInput struct {
 	ProviderID *uuid.UUID

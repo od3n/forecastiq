@@ -25,6 +25,7 @@ import (
 // idempotent forecast-collection workflow (docs/workflows/01).
 type CollectService struct {
 	adapters    map[string]ports.ForecastProviderAdapter
+	providers   catalog.ProviderCatalog
 	collections ports.CollectionRepository
 	snapshots   ports.SnapshotRepository
 	payloads    ports.PayloadStore
@@ -42,6 +43,7 @@ type CollectService struct {
 // NewCollectService wires a CollectService. adapters is keyed by provider slug.
 func NewCollectService(
 	adapters map[string]ports.ForecastProviderAdapter,
+	providers catalog.ProviderCatalog,
 	collections ports.CollectionRepository,
 	snapshots ports.SnapshotRepository,
 	payloads ports.PayloadStore,
@@ -56,7 +58,7 @@ func NewCollectService(
 	resolveCred func(string) string,
 ) *CollectService {
 	return &CollectService{
-		adapters: adapters, collections: collections, snapshots: snapshots,
+		adapters: adapters, providers: providers, collections: collections, snapshots: snapshots,
 		payloads: payloads, circuits: circuits, bus: bus, metrics: m, audit: rec,
 		clock: clk, logger: logger, tx: tx, pool: pool, resolveCred: resolveCred,
 	}

@@ -137,7 +137,7 @@ func buildApp(ctx context.Context) (*App, error) {
 
 	// Collection services.
 	collector := collection.NewCollectService(
-		registry.Adapters(), collectionRepo, snapshotRepo, payloadStore, circuits,
+		registry.Adapters(), providers, collectionRepo, snapshotRepo, payloadStore, circuits,
 		bus, m, recorder, clk, logger, tx, pool, cfg.ResolveCredential)
 	reader := collection.NewReaderService(collectionRepo, snapshotRepo, pool)
 
@@ -156,7 +156,7 @@ func buildApp(ctx context.Context) (*App, error) {
 	ipLimiter := ratelimit.NewKeyedLimiter(float64(cfg.RateLimitIPPerMin), float64(cfg.RateLimitIPPerMin)/60.0, clk)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
-		Collector: collector, Reader: reader, Health: checker, Logger: logger,
+		Collector: collector, Replayer: collector, Reader: reader, Health: checker, Logger: logger,
 	}
 	router := api.NewRouter(h, m, logger, api.RouterConfig{
 		DevAdminToken:    cfg.DevAdminToken,
@@ -167,9 +167,12 @@ func buildApp(ctx context.Context) (*App, error) {
 	// Scheduler / worker.
 	dispatcher := scheduler.NewForecastDispatcher(configs, providers, locations, collector, logger)
 	sched := scheduler.New(slotRepo, runRepo, dispatcher, configs, locations, tx, clk, logger, m, scheduler.Config{
-		Interval:      cfg.SchedulerInterval,
-		LeaseDuration: cfg.SlotLeaseDuration,
-		MaxConcurrent: cfg.WorkerMaxConcurrent,
+		Interval:        cfg.SchedulerInterval,
+		LeaseDuration:   cfg.SlotLeaseDuration,
+		MaxConcurrent:   cfg.WorkerMaxConcurrent,
+		JobTimeout:      cfg.WorkerJobTimeout,
+		DrainTimeout:    cfg.SchedulerDrain,
+		MissedThreshold: cfg.SchedulerMissed,
 	})
 
 	return &App{

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/forecastiq/forecastiq/internal/collection/ports"
 )
@@ -81,6 +82,22 @@ func (s *FilesystemStore) Read(_ context.Context, objectKey string) ([]byte, err
 	}
 	defer gz.Close()
 	return io.ReadAll(gz)
+}
+
+// Quarantine renames a corrupt payload to a sibling ".corrupt-<ts>" key so a
+// failed checksum verification cannot be served or replayed again, while the
+// bytes remain on disk as integrity evidence (workflow 06 §2). It returns the
+// scheme-prefixed quarantine key.
+func (s *FilesystemStore) Quarantine(_ context.Context, objectKey string) (string, error) {
+	path, err := s.resolve(objectKey)
+	if err != nil {
+		return "", err
+	}
+	suffix := fmt.Sprintf(".corrupt-%d", time.Now().UTC().UnixNano())
+	if err := os.Rename(path, path+suffix); err != nil {
+		return "", fmt.Errorf("quarantine payload: %w", err)
+	}
+	return objectKey + suffix, nil
 }
 
 // Writable reports whether the store root is writable (readiness probe).
