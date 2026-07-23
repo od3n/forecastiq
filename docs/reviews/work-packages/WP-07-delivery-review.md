@@ -122,3 +122,16 @@ push to the branch, capture the six mandatory CI jobs green on the new head SHA,
 then re-convene the board for a short confirmatory re-review. Only the Delivery
 Review Board may transition WP-07 to Accepted.
 ```
+
+---
+
+## 12. Implementation-team remediation (2026-07-23)
+
+Status: **READY FOR CONFIRMATORY RE-REVIEW.** All three findings addressed within strict scope (adapter + additive shared-transport extension + tests + docs; no domain/service/persistence/API/migration/CI change). Detail in `WP-07-implementation.md` §24.
+
+- **DRB-WP07-001 (Medium) — RESOLVED.** Added an optional `RetryableOverride` retry-decision hook and a `Response.Attempts` counter to the shared `providerhttp` transport (additive, backward-compatible — zero-value inert for existing callers). The OpenWeather adapter (a) opts a daily-quota 429 out of transport retry → exactly one upstream request + immediate pause, and (b) debits actual upstream attempts from the daily budget via `budget.consume(attempts-1)` → the ~5× under-count is closed. New tests: `TestFetch_RateLimited_NoRetry`, `TestFetch_RetriesCountAgainstBudget`, `providerhttp.TestGet_RetryableOverride`, `providerhttp.TestGet_AttemptsCount`.
+- **DRB-WP07-002 (Low) — RESOLVED.** `budget.pause` is now called with a fresh `a.clock.Now()`.
+- **DRB-WP07-003 (Low, docs) — RESOLVED.** Test count corrected to the verified 23 (openweather package) + 2 framework tests.
+- **Regression**: `openmeteo` and existing `providerhttp` suites unchanged and green; full `go test -race ./...` green; `gofmt`/`vet`/`golangci-lint` clean.
+
+Next action: capture the six mandatory CI jobs green on the pushed remediation SHA, then the board performs the confirmatory re-review. TC-07-01 converts to **Closed — Satisfied** on that confirmation. **Only the Delivery Review Board may mark WP-07 Accepted.**

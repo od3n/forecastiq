@@ -17,12 +17,13 @@
 - **Implemented this package**:
   - New adapter package `adapters/forecastproviders/openweather/` (`openweather.go`, `decompose.go`, `condition_map.go`) implementing `ports.ForecastProviderAdapter` + `ports.ReplayDecoder` over the shared `providerhttp` transport.
   - Daily rate-budget guard `budget.go` — a UTC-day counter that refuses collection pre-emptively once the day's budget is spent and **pauses on a 429** (honoring `Retry-After`, else resting until the next UTC day). Thread-safe; clock-injected for determinism.
-  - Contract-matrix + budget tests (`openweather_test.go`, `budget_test.go`) — 22 tests green under `-race`; 8 committed fixtures.
+  - Contract-matrix + budget tests (`openweather_test.go`, `budget_test.go`) — 23 tests green under `-race`; 8 committed fixtures.
   - Composition-root wiring (`cmd/forecastiq/app.go`): registered the adapter with a per-minute limiter and the configured daily budget.
   - Config `FIQ_PROVIDER_OPENWEATHER_DAILY_BUDGET` (default 1000) + `.env.example`.
   - Seeded OpenWeather operational configuration (`cmd/forecastiq/seed.go`, new `OpenWeatherConfigID`) — **disabled** pending ToS (D-05); staggered `:02` minute offset (WP-08 stagger note).
   - Tomorrow.io swap-path runbook (`docs/development/09-tomorrow-io-swap-path.md`) + capture script.
-- **Reused (WP-05 framework)**: `providerhttp` transport (User-Agent, capped redirects, bounded reads, FC-08 retry/backoff, FC-13 classification, rate-limit normalization), `collection.Registry`, `ports` contracts, the canonical condition taxonomy, physical validation ranges, and the payload/collection pipeline — all unchanged.
+  - **Post-review remediation (TC-07-01/002/003, 2026-07-23):** additive, backward-compatible extension of the shared `providerhttp` transport — an optional `RetryableOverride` retry-decision hook and a `Response.Attempts` counter (see §24). The OpenWeather adapter opts a daily-quota 429 out of transport retry and debits actual upstream attempts from the daily budget; the pause window now reads a fresh clock.
+- **Reused (WP-05 framework)**: `collection.Registry`, `ports` contracts, the canonical condition taxonomy, physical validation ranges, and the payload/collection pipeline — unchanged. The shared `providerhttp` transport was extended additively (§24); its existing behavior for current callers (Open-Meteo) is unchanged and covered by new framework tests.
 - **Deferred**: OpenWeather ToS review (D-05) is a public-launch gate, not a code blocker — recorded, config seeded disabled. Live smoke against the real API requires an API key (manual, documented §10).
 - **Final status**: Implementation Complete; awaiting CI on the pushed branch and Delivery Review Board.
 
@@ -89,6 +90,9 @@ The adapter implements `ports.ForecastProviderAdapter` + `ports.ReplayDecoder`; 
 | WP-07-A | Daily budget exhausted → no upstream call | `TestFetch_BudgetExhausted_NoUpstreamCall` | inline success + budget=2 |
 | WP-07-B | 429 → pause → resume | `TestFetch_RateLimit_EngagesPause` | `onecall_429` → success |
 | WP-07-C | Budget unit behaviour | `budget_test.go` (consume/reset/pause-resume/rest-until-next-day) | — |
+| WP-07-D | Daily-quota 429 → exactly one upstream request (TC-07-01) | `TestFetch_RateLimited_NoRetry` | `onecall_429` + call counter |
+| WP-07-E | Transport retries debited from budget (TC-07-01) | `TestFetch_RetriesCountAgainstBudget` | inline 5xx + call counter |
+| WP-07-F | Transport retry-override + attempt count (framework) | `providerhttp`: `TestGet_RetryableOverride`, `TestGet_AttemptsCount` | inline |
 
 Adjacent coverage: `TestFetch_ServerError` (provider_5xx), `TestCapabilities`, `TestFetch_RequestShape` (appid passed as query, never logged).
 
@@ -134,7 +138,8 @@ Existing pipeline metrics apply unchanged: `provider_rate_limit_hits_total` incr
 
 ## 13. Tests
 
-- **Unit / contract (adapter)**: `adapters/forecastproviders/openweather/openweather_test.go` + `budget_test.go` — 22 tests, all green under `-race`.
+- **Unit / contract (adapter)**: `adapters/forecastproviders/openweather/openweather_test.go` + `budget_test.go` — 23 tests, all green under `-race`.
+- **Framework transport**: `adapters/forecastproviders/providerhttp/client_test.go` — +2 tests for the additive `RetryableOverride` / `Response.Attempts` extension (§24); existing transport tests unchanged and green.
 - **Regression**: full `go test ./...` green locally (all pre-existing suites unchanged and passing).
 - **Lint / fmt / vet**: `gofmt -l` clean; `go vet ./...` clean; `golangci-lint run` clean on the changed packages.
 - **Security**: `govulncheck`, `gitleaks` in CI.
@@ -182,10 +187,11 @@ Overall CI result: **PASS**. The only annotations are Node.js-20 deprecation not
 
 - **New code**: `adapters/forecastproviders/openweather/{openweather.go,budget.go,decompose.go,condition_map.go}`
 - **New tests**: `adapters/forecastproviders/openweather/{openweather_test.go,budget_test.go}`
+- **Framework transport (additive, TC-07-01)**: `adapters/forecastproviders/providerhttp/client.go` (+`RetryableOverride`, +`Response.Attempts`), `client_test.go` (+2 tests)
 - **New fixtures**: `test/fixtures/openweather/{onecall_success_v3,onecall_edge_nulls,onecall_partial_invalid,onecall_schema_drift,onecall_majority_invalid,onecall_unmapped_condition,onecall_401,onecall_429}.json`
 - **Wiring / config / seed**: `cmd/forecastiq/app.go`, `cmd/forecastiq/seed.go`, `internal/catalog/domain/seed.go`, `internal/platform/config/config.go`, `.env.example`
 - **Scripts**: `deploy/scripts/capture-openweather-fixture.sh`
-- **Documentation**: `docs/development/09-tomorrow-io-swap-path.md`; this report; `docs/planning/06-work-package-status-registry.md`
+- **Documentation**: `docs/development/09-tomorrow-io-swap-path.md`; this report; `docs/reviews/work-packages/WP-07-delivery-review.md`; `docs/planning/06-work-package-status-registry.md`
 
 ## 17. ADRs
 
@@ -210,7 +216,7 @@ No approved-scope deviations.
 
 ## 20. Regression assessment
 
-- WP-05 framework / `providerhttp` / registry: untouched (adapter is additive).
+- WP-05 framework / `providerhttp`: **extended additively** (TC-07-01) — a new optional `Config.RetryableOverride` hook and a `Response.Attempts` counter. Both are zero-value inert: existing callers (Open-Meteo) get identical behavior (verified — `openmeteo` and existing `providerhttp` tests unchanged and green). `collection.Registry`: untouched.
 - WP-06 Open-Meteo adapter: untouched.
 - WP-08 scheduler: untouched; the disabled OpenWeather config generates no slots.
 - Mandatory CI controls (`ci.yml`): unchanged.
@@ -240,5 +246,21 @@ run 30011969157 on head SHA 1211878, six mandatory jobs green.
 ## 23. Final status
 
 ```text
-IMPLEMENTATION COMPLETE — READY FOR REVIEW (CI green — §15)
+IMPLEMENTATION COMPLETE — READY FOR CONFIRMATORY RE-REVIEW (CI green — §15; TC-07-01/002/003 remediated — §24)
 ```
+
+## 24. Post-review remediation (DRB findings, 2026-07-23)
+
+The Delivery Review Board CONDITIONALLY ACCEPTED WP-07 (`WP-07-delivery-review.md`) with blocking condition **TC-07-01**. This section records the remediation.
+
+| Finding | Severity | Resolution |
+|---------|----------|------------|
+| DRB-WP07-001 | Medium | **RESOLVED.** (a) The OpenWeather adapter now opts a daily-quota 429 out of transport retry via the new `providerhttp.Config.RetryableOverride` hook — a 429 makes exactly one upstream request and engages the pause immediately (no ~15s retry-backoff delay, no quota-burning retries). (b) The daily budget now debits **actual** upstream requests: the transport reports `Response.Attempts`, and the adapter calls `budget.consume(attempts-1)` so FC-08 retries (5xx/timeout) are counted, closing the ~5× under-count. Proven by `TestFetch_RateLimited_NoRetry` (429 → 1 call with a 3-retry budget) and `TestFetch_RetriesCountAgainstBudget` (a 3-attempt 5xx storm spends a budget of 3 → next call refused). |
+| DRB-WP07-002 | Low | **RESOLVED.** `FetchForecast` reads a fresh `a.clock.Now()` at the `budget.pause` site instead of the pre-call timestamp, so the Retry-After window is anchored to the current instant. |
+| DRB-WP07-003 | Low (docs) | **RESOLVED.** Test count corrected to the verified **23** discovered top-level tests in the openweather package (`go test -list`); framework transport gains +2 tests. |
+
+**Design decision:** the retry-decision hook (`RetryableOverride`) was added to the shared `providerhttp` transport rather than capping the adapter's `MaxRetries` to 1, so OpenWeather keeps FC-08 transient-5xx/timeout retry while opting only 429 out of retry. The change is additive and backward-compatible (zero-value inert for existing callers), and is covered by new framework tests (`TestGet_RetryableOverride`, `TestGet_AttemptsCount`).
+
+**Local validation (remediated tree):** `gofmt -l` clean; `go build ./...`; `go vet ./...`; `golangci-lint run` clean on changed packages; `go test -race ./...` all `ok` (no regression; openmeteo + existing providerhttp suites unchanged and green).
+
+**TC-07-01/TC-07-02 implementation-team assessment: SATISFIED — pending Delivery Review Board confirmatory re-review.**
