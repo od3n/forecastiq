@@ -159,6 +159,14 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		return p.Status, p
 	}
 
+	if errors.Is(err, collectiondomain.ErrReplayUnsupported) {
+		p.Type = errorBase + "validation"
+		p.Title = "Replay Unsupported"
+		p.Status = http.StatusUnprocessableEntity
+		p.Detail = "The provider adapter does not support payload replay."
+		return p.Status, p
+	}
+
 	if errors.Is(err, ErrUnauthorized) {
 		p.Type = errorBase + "unauthorized"
 		p.Title = "Unauthorized"

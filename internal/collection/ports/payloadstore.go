@@ -22,6 +22,10 @@ type PayloadStore interface {
 	Write(ctx context.Context, objectKey string, raw []byte) error
 	// Read returns the decompressed payload for objectKey.
 	Read(ctx context.Context, objectKey string) ([]byte, error)
+	// Quarantine moves a corrupt payload aside (checksum mismatch during
+	// replay; FC-14) so it is not served again, returning the new object key.
+	// The original stored bytes are preserved for forensic inspection.
+	Quarantine(ctx context.Context, objectKey string) (quarantineKey string, err error)
 }
 
 // Checksum returns the SHA-256 hex digest of raw. Computed on the raw
