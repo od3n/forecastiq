@@ -14,14 +14,18 @@ Two distinct contract surfaces: **provider adapter contracts** (upstream) and **
 
 ```text
 test/fixtures/
-├── openmeteo/
+├── openmeteo/                            # forecast provider (WP-06)
 │   ├── forecast_success_v1.json          # recorded real response (sanitized)
 │   ├── forecast_success_v1_edge.json     # nulls, missing optional fields
 │   ├── forecast_partial_invalid.json     # some rows out of range
-│   ├── forecast_schema_drift.json        # renamed fields (drift simulation)
+│   └── forecast_schema_drift.json        # renamed fields (drift simulation)
+├── openmeteo-historical/                 # observation source (WP-09)
 │   ├── historical_success_v1.json
-│   └── historical_corrected.json         # value change vs. prior fixture
-└── openweather/
+│   ├── historical_edge_nulls.json
+│   ├── historical_suspect.json           # OC-04 range violation → suspect
+│   ├── historical_corrected.json         # value change vs. prior fixture
+│   └── historical_schema_drift.json
+└── openweather/                          # forecast provider (WP-07)
     ├── onecall_success_v3.json
     ├── onecall_429.json
     ├── onecall_401.json

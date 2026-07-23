@@ -1,0 +1,15 @@
+{
+  "latitude": 1.4927,
+  "longitude": 103.7414,
+  "timezone": "GMT",
+  "hourly": {
+    "time": ["2026-07-22T09:00", "2026-07-22T10:00", "2026-07-22T11:00"],
+    "temperature_2m": [30.9, 31.2, 32.4],
+    "relative_humidity_2m": [72, 70, 68],
+    "wind_speed_10m": [3.2, 3.5, 3.8],
+    "wind_direction_10m": [175, 180, 185],
+    "surface_pressure": [1013.2, 1013.0, 1012.8],
+    "precipitation": [0.0, 0.2, 0.0],
+    "weather_code": [2, 3, 61]
+  }
+}
