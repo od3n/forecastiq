@@ -135,3 +135,5 @@ Status: **READY FOR CONFIRMATORY RE-REVIEW.** All three findings addressed withi
 - **Regression**: `openmeteo` and existing `providerhttp` suites unchanged and green; full `go test -race ./...` green; `gofmt`/`vet`/`golangci-lint` clean.
 
 Next action: capture the six mandatory CI jobs green on the pushed remediation SHA, then the board performs the confirmatory re-review. TC-07-01 converts to **Closed — Satisfied** on that confirmation. **Only the Delivery Review Board may mark WP-07 Accepted.**
+
+**Remediation CI evidence (captured):** CI run **30013888511** (`pull_request`, PR #6) **success** on head SHA `ce4910f` — all six mandatory jobs green (`backend-integration` cleared a transient Docker Hub image-pull flake on a same-SHA job re-run, no code change). Local == remote tip == CI head == `ce4910f`.

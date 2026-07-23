@@ -263,4 +263,6 @@ The Delivery Review Board CONDITIONALLY ACCEPTED WP-07 (`WP-07-delivery-review.m
 
 **Local validation (remediated tree):** `gofmt -l` clean; `go build ./...`; `go vet ./...`; `golangci-lint run` clean on changed packages; `go test -race ./...` all `ok` (no regression; openmeteo + existing providerhttp suites unchanged and green).
 
+**Remediation CI evidence:** the remediation commit `860e93b` + docs `ce4910f` were pushed; CI run **30013888511** (event `pull_request`, PR #6) is **success** on head SHA `ce4910fd342a77712db8678eb82fd5b2eba032e3` (`ce4910f`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled. `backend-integration` initially failed on a transient Docker Hub image-pull timeout (`registry-1.docker.io` context-deadline; not a code failure — the same suite passed on `1211878`/`3b87601`/`df6780e`) and went green on a job re-run of the **same** SHA (no code change). Local HEAD == remote tip == CI head SHA == `ce4910f` at the time of the run.
+
 **TC-07-01/TC-07-02 implementation-team assessment: SATISFIED — pending Delivery Review Board confirmatory re-review.**
