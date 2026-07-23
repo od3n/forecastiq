@@ -50,6 +50,7 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 			admin.PUT("/locations/:id", h.UpdateLocation)
 			admin.PATCH("/locations/:id/status", h.SetLocationStatus)
 			admin.POST("/admin/collections/trigger", h.TriggerCollection)
+			admin.POST("/admin/collections/:id/replay", h.ReplayCollection)
 			admin.GET("/forecast-collections", h.ListCollections)
 			admin.GET("/forecast-collections/:id", h.GetCollection)
 		}

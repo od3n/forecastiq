@@ -23,6 +23,7 @@ type Handlers struct {
 	Providers catalog.ProviderCatalog
 	Configs   catalog.ConfigurationManager
 	Collector collection.ForecastCollector
+	Replayer  collection.ForecastReplayer
 	Reader    collection.ForecastReader
 	Health    *health.Checker
 	Logger    *slog.Logger

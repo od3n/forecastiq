@@ -145,6 +145,24 @@
           "200": { "description": "Collection result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
           "401": { "$ref": "#/components/responses/Problem" },
           "409": { "$ref": "#/components/responses/Problem" },
+          "422": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/admin/collections/{id}/replay": {
+      "post": {
+        "tags": ["admin"],
+        "operationId": "replayCollection",
+        "summary": "Replay a stored collection payload through the current adapter (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Replay collection result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
           "422": { "$ref": "#/components/responses/Problem" }
         }
       }

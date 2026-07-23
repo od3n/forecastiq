@@ -62,6 +62,37 @@ func (h *Handlers) TriggerCollection(c *gin.Context) {
 		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
 		return
 	}
+	// Budget/rate guard (workflow 05 §6): a rate-limited outcome is reported as
+	// 429 with Retry-After rather than a 200 success envelope. The circuit-open
+	// guard is a 409 surfaced as a CircuitOpenError above.
+	if coll.Status == collectiondomain.StatusRateLimited {
+		c.Header("Retry-After", "60")
+		respond.Error(c, respond.ErrRateLimited, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	respond.OK(c, collectionDTO(coll), respond.Options{RequestID: respond.RequestID(c)})
+}
+
+// ReplayCollection godoc
+// @Summary      Replay a stored collection payload through the current adapter (admin)
+// @Tags         admin
+// @Produce      json
+// @Param        id path string true "collection id"
+// @Success      200 {object} respond.Envelope
+// @Failure      401 {object} respond.Problem
+// @Failure      404 {object} respond.Problem
+// @Failure      422 {object} respond.Problem
+// @Router       /admin/collections/{id}/replay [post]
+func (h *Handlers) ReplayCollection(c *gin.Context) {
+	id, ok := pathUUID(c, "id")
+	if !ok {
+		return
+	}
+	coll, err := h.Replayer.Replay(c.Request.Context(), id, actor(c))
+	if err != nil {
+		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
 	respond.OK(c, collectionDTO(coll), respond.Options{RequestID: respond.RequestID(c)})
 }
 
