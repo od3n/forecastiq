@@ -72,11 +72,7 @@ No public API change. No new external calls or credentials. All SQL parameterize
 
 ## 8. CI evidence
 
-```text
-PENDING — branch not yet pushed. Six mandatory jobs must be captured green on
-the pushed head SHA (migrations applies 20260801000008; backend-integration
-runs the matching batch/rematch tests against real PG16).
-```
+Branch pushed; PR #9 → `main` triggered CI run **30038659743** (event `pull_request`) **success** on head SHA `674dfddf1bc62005d582ee05eeedb6c4aab510b2` (`674dfdd`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == remote tip == CI head SHA. The `migrations` job applied `20260801000008`; `backend-integration` ran the matching batch/rematch tests against real PG16. Two earlier integration failures were test-harness-only bugs (a missing parent `forecast_collections` FK row, then two live observations at the same hour vs the partial dedup index) fixed in `0a190bc`/`674dfdd`; product code unchanged.
 
 ## 9. Files changed
 
@@ -109,6 +105,6 @@ Acceptance State: Not Accepted (pending pushed-branch CI + Delivery Review Board
 ## 12. Recommended next action
 
 ```text
-Push feature/wp11-matching-engine, capture the six mandatory CI jobs green on
-the head SHA, then convene the Delivery Review Board for WP-11.
+Convene the Delivery Review Board for WP-11. CI evidence is captured (§8):
+run 30038659743 on head SHA 674dfdd, six mandatory jobs green.
 ```
