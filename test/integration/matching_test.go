@@ -21,15 +21,24 @@ import (
 	"github.com/forecastiq/forecastiq/internal/platform/metrics"
 )
 
-// insertSnapshot inserts one forecast snapshot for the JB location.
+// insertSnapshot inserts one forecast snapshot for the JB location, first
+// creating the parent forecast_collections row it references (FK).
 func insertSnapshot(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id uuid.UUID, issuedAt, targetTime time.Time) {
 	t.Helper()
+	collID := uuid.New()
 	_, err := pool.Exec(ctx,
+		`INSERT INTO forecast_collections
+		   (id, provider_id, location_id, provider_configuration_id, requested_at, collection_status)
+		 VALUES ($1,$2,$3,$4,$5,'success')`,
+		collID, catalogdomain.OpenMeteoProviderID, catalogdomain.JohorBahruLocationID,
+		catalogdomain.OpenMeteoConfigID, issuedAt.UTC())
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
 		`INSERT INTO forecast_snapshots
 		   (id, forecast_collection_id, provider_id, location_id, issued_at, target_time,
 		    forecast_horizon_minutes, temperature_c, condition_taxonomy_version)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'1')`,
-		id, uuid.New(), catalogdomain.OpenMeteoProviderID, catalogdomain.JohorBahruLocationID,
+		id, collID, catalogdomain.OpenMeteoProviderID, catalogdomain.JohorBahruLocationID,
 		issuedAt.UTC(), targetTime.UTC(), int(targetTime.Sub(issuedAt).Minutes()), 30.0)
 	require.NoError(t, err)
 }
