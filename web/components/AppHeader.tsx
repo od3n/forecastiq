@@ -26,6 +26,9 @@ function HeaderInner() {
         <Link href="/methodology" className={styles.navLink}>
           Methodology
         </Link>
+        <Link href="/settings" className={styles.navLink}>
+          Settings
+        </Link>
       </nav>
       <span className={styles.spacer} />
       <LocationSelector
