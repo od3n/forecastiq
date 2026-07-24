@@ -323,12 +323,19 @@ Open-Meteo Forecast (OM), OpenWeather (OW), ProviderX (PX).
 
 **Step 2 — weighted sum (weights §6.3):**
 
-- OM: .30(.917)+.25(1.000)+.15(.944)+.15(1.000)+.05(.833)+.05(.98)+.05(.99) = **0.940**
-- OW: .30(.733)+.25(.923)+.15(.607)+.15(.846)+.05(.278)+.05(.92)+.05(.97) = **0.780**
-- PX: .30(1.000)+.25(.887)+.15(1.000)+.15(.688)+.05(1.000)+.05(.55)+.05(.90) = **0.899**
+- OM: .30(.917)+.25(1.000)+.15(.944)+.15(1.000)+.05(.833)+.05(.98)+.05(.99) = **0.957**
+- OW: .30(.733)+.25(.923)+.15(.607)+.15(.846)+.05(.278)+.05(.92)+.05(.97) = **0.777**
+- PX: .30(1.000)+.25(.887)+.15(1.000)+.15(.688)+.05(1.000)+.05(.55)+.05(.90) = **0.897**
+
+> **DR-06 (2026-07-23, WP-14):** the composite sums above were corrected from a prior
+> transcription that listed OM **0.940** / OW **0.780** / PX **0.899**; recomputing the
+> stated normalized values against the w-2026.1 weights yields **0.957 / 0.777 / 0.897**.
+> The formula, weights, normalized values, ranking order, and statuses are unchanged;
+> only the arithmetic totals are corrected. The WP-14 worked-example test asserts these
+> corrected values.
 
 **Step 3 — coverage penalty:** PX coverage 0.55 < 0.8 → ×(0.55/0.8)=0.6875 → PX final =
-**0.618**. OM and OW unchanged.
+**0.617**. OM and OW unchanged.
 
 **Step 4 — status:** OM (720 pairs, cov .98) → `ranked`. OW (700, .92) → `ranked`.
 PX (380 pairs but coverage 0.55 ∈ [0.5,0.8)) → `provisionally_ranked`, listed after
@@ -338,9 +345,9 @@ ranked providers.
 
 | Rank | Provider | Status | Composite | Sample | Coverage |
 |------|----------|--------|-----------|--------|----------|
-| 1 | Open-Meteo | ranked | 0.940 | 720 | 98% |
-| 2 | OpenWeather | ranked | 0.780 | 700 | 92% |
-| — | ProviderX | provisional | 0.618 | 380 | 55% |
+| 1 | Open-Meteo | ranked | 0.957 | 720 | 98% |
+| 2 | OpenWeather | ranked | 0.777 | 700 | 92% |
+| — | ProviderX | provisional | 0.617 | 380 | 55% |
 
 Each row is accompanied by the full metric breakdown (§4 tables) in API and UI.
 
