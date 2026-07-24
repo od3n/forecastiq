@@ -24,6 +24,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
+	"github.com/forecastiq/forecastiq/adapters/auth/supabaseadmin"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
 	"github.com/forecastiq/forecastiq/adapters/persistence/adminpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/analysispg"
@@ -306,13 +307,14 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	apiKeyRepo := identitypg.NewAPIKeyRepository()
 	identityUsers := identity.NewUserService(userRepo, devauth.New(clk), tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
 	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
+	adminUsers := identity.NewAdminUserService(userRepo, supabaseadmin.NewNoop(), tx, pool, recorder, clk, logger)
 
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
 		ProviderAdmin: providers, ConfigAdmin: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
 		AdminHealthReader: adminHealth, Audit: auditReader, Recompute: recompute,
-		Users: identityUsers, Keys: identityKeys,
+		Users: identityUsers, Keys: identityKeys, UserAdmin: adminUsers,
 		Health: checker, Logger: logger,
 	}
 	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)

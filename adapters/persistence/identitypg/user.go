@@ -115,6 +115,56 @@ func (r *UserRepository) TouchLastLogin(ctx context.Context, tx dbtx.DBTX, id uu
 	return nil
 }
 
+// List implements ports.UserRepository (admin S-14; keyset by id, newest first).
+func (r *UserRepository) List(ctx context.Context, tx dbtx.DBTX, limit int, cursor uuid.UUID) ([]*domain.User, error) {
+	var rows pgx.Rows
+	var err error
+	if cursor == uuid.Nil {
+		rows, err = tx.Query(ctx, `SELECT `+userColumns+` FROM users ORDER BY id DESC LIMIT $1`, limit)
+	} else {
+		rows, err = tx.Query(ctx, `SELECT `+userColumns+` FROM users WHERE id < $1 ORDER BY id DESC LIMIT $2`, cursor, limit)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+	var out []*domain.User
+	for rows.Next() {
+		u, serr := scanUser(rows)
+		if serr != nil {
+			return nil, serr
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// UpdateStatus implements ports.UserRepository (admin lifecycle).
+func (r *UserRepository) UpdateStatus(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, status string) error {
+	ct, err := tx.Exec(ctx, `UPDATE users SET status = $2 WHERE id = $1`, id, status)
+	if err != nil {
+		return fmt.Errorf("update user status: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
+// Delete implements ports.UserRepository (AUTH-09). api_keys cascade; audit
+// rows are anonymized by the FK (ON DELETE SET NULL) — the caller must set the
+// app.allow_immutable_write GUC so the immutability trigger permits it.
+func (r *UserRepository) Delete(ctx context.Context, tx dbtx.DBTX, id uuid.UUID) error {
+	ct, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete user: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
 func orEmptyMap(m map[string]any) map[string]any {
 	if m == nil {
 		return map[string]any{}

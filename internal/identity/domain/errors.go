@@ -27,4 +27,10 @@ var (
 	// with a concurrent provisioning of the same auth subject (unique
 	// violation); the service recovers by re-reading the existing user.
 	ErrDuplicateSubject = errors.New("user already provisioned for auth subject")
+	// ErrSelfLockout is returned when an admin attempts to disable or delete
+	// their own account through the admin surface (AUTH-09 self-lockout guard).
+	ErrSelfLockout = errors.New("cannot disable or delete your own admin account")
+	// ErrUpstreamAuth is returned when propagating a lifecycle change to the
+	// managed auth provider fails (ADR-008 §6 ban_user failure → 502).
+	ErrUpstreamAuth = errors.New("auth provider propagation failed")
 )

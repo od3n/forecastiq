@@ -189,6 +189,23 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		return p.Status, p
 	}
 
+	if errors.Is(err, identitydomain.ErrSelfLockout) {
+		p.Type = errorBase + "conflict"
+		p.Title = "Self-Lockout Prevented"
+		p.Status = http.StatusConflict
+		p.Detail = "You cannot disable or delete your own admin account."
+		return p.Status, p
+	}
+
+	if errors.Is(err, identitydomain.ErrUpstreamAuth) {
+		p.Type = errorBase + "upstream_unavailable"
+		p.Title = "Auth Provider Unavailable"
+		p.Status = http.StatusBadGateway
+		p.Detail = "The change could not be propagated to the authentication provider; no change was made."
+		p.Retryable = true
+		return p.Status, p
+	}
+
 	if errors.Is(err, ErrRateLimited) {
 		p.Type = errorBase + "rate_limited"
 		p.Title = "Rate Limited"
