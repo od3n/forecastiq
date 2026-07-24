@@ -18,6 +18,11 @@ import (
 type fakeReadRepo struct {
 	rankings []*ports.RankingReadRow
 	obs      *ports.ObservationContextRow
+	metrics  []*ports.MetricRow
+	statuses map[uuid.UUID]ports.ProviderStatus
+	windows  map[uuid.UUID]ports.CollectionWindow
+	cells    []*ports.ProviderSummaryCell
+	trends   []*ports.TrendBucket
 }
 
 func (f *fakeReadRepo) ListRankings(_ context.Context, _ dbtx.DBTX, _ uuid.UUID, _ int, _ string) ([]*ports.RankingReadRow, error) {
@@ -26,6 +31,30 @@ func (f *fakeReadRepo) ListRankings(_ context.Context, _ dbtx.DBTX, _ uuid.UUID,
 
 func (f *fakeReadRepo) LatestObservation(_ context.Context, _ dbtx.DBTX, _ uuid.UUID) (*ports.ObservationContextRow, error) {
 	return f.obs, nil
+}
+
+func (f *fakeReadRepo) LocationMetrics(_ context.Context, _ dbtx.DBTX, _ uuid.UUID, _ int) ([]*ports.MetricRow, error) {
+	return f.metrics, nil
+}
+
+func (f *fakeReadRepo) LocationProviderStatuses(_ context.Context, _ dbtx.DBTX, _ uuid.UUID, _ int) (map[uuid.UUID]ports.ProviderStatus, error) {
+	return f.statuses, nil
+}
+
+func (f *fakeReadRepo) LocationWindows(_ context.Context, _ dbtx.DBTX, _ uuid.UUID) (map[uuid.UUID]ports.CollectionWindow, error) {
+	return f.windows, nil
+}
+
+func (f *fakeReadRepo) ProviderRankingCells(_ context.Context, _ dbtx.DBTX, _ uuid.UUID) ([]*ports.ProviderSummaryCell, error) {
+	return f.cells, nil
+}
+
+func (f *fakeReadRepo) ProviderWindows(_ context.Context, _ dbtx.DBTX, _ uuid.UUID) (map[uuid.UUID]ports.CollectionWindow, error) {
+	return f.windows, nil
+}
+
+func (f *fakeReadRepo) AccuracyTrends(_ context.Context, _ dbtx.DBTX, _ ports.TrendFilter) ([]*ports.TrendBucket, error) {
+	return f.trends, nil
 }
 
 func fp(x float64) *float64 { return &x }
@@ -132,4 +161,72 @@ func TestMethodology_ConsistentWithEngine(t *testing.T) {
 	assert.Len(t, m.Statuses, 3)
 	assert.NotEmpty(t, m.Formulas)
 	assert.NotEmpty(t, m.TieRule)
+}
+
+func TestReadService_LocationSummary(t *testing.T) {
+	omID := uuid.New()
+	repo := &fakeReadRepo{
+		metrics: []*ports.MetricRow{
+			{ProviderID: omID, Variable: "temperature", MetricType: "mae", Value: fp(1.2), SampleCount: 720},
+			{ProviderID: omID, Variable: "precipitation", MetricType: "f1", Value: fp(0.769), SampleCount: 700},
+		},
+		statuses: map[uuid.UUID]ports.ProviderStatus{omID: {RankingStatus: "ranked", Coverage: fp(0.98), Reliability: fp(0.99)}},
+		windows:  map[uuid.UUID]ports.CollectionWindow{omID: {FirstSnapshotAt: tp(2026, 6, 1), LastSnapshotAt: tp(2026, 7, 22)}},
+	}
+	svc := NewReadService(repo, nil)
+	res, err := svc.LocationSummary(context.Background(), uuid.New(), 1440)
+	require.NoError(t, err)
+	require.True(t, res.HasData)
+	require.Len(t, res.Providers, 1)
+	p := res.Providers[0]
+	assert.Equal(t, "ranked", p.RankingStatus)
+	assert.Len(t, p.Metrics, 2)
+	// coverage/reliability fold onto the window from the ranking status.
+	require.NotNil(t, p.Window.Coverage)
+	assert.InDelta(t, 0.98, *p.Window.Coverage, 1e-9)
+	require.NotNil(t, res.LastSnapshotAt)
+}
+
+func TestReadService_ProviderSummary(t *testing.T) {
+	locID := uuid.New()
+	repo := &fakeReadRepo{
+		cells: []*ports.ProviderSummaryCell{
+			{LocationID: locID, LocationName: "Johor Bahru", HorizonMinutes: 1440, CompositeScore: fp(0.957), RankingStatus: "ranked", SampleCount: 720, Coverage: fp(0.98)},
+		},
+		windows: map[uuid.UUID]ports.CollectionWindow{locID: {FirstSnapshotAt: tp(2026, 6, 1), LastSnapshotAt: tp(2026, 7, 22)}},
+	}
+	svc := NewReadService(repo, nil)
+	res, err := svc.ProviderSummary(context.Background(), uuid.New())
+	require.NoError(t, err)
+	require.True(t, res.HasData)
+	require.Len(t, res.Cells, 1)
+	assert.Equal(t, "Johor Bahru", res.Cells[0].LocationName)
+}
+
+func TestReadService_TrendsGroupsByProvider(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	repo := &fakeReadRepo{trends: []*ports.TrendBucket{
+		{ProviderID: a, PeriodStart: mustDay(2026, 7, 1), PeriodEnd: mustDay(2026, 7, 2), Value: fp(1.1), SampleCount: 24},
+		{ProviderID: a, PeriodStart: mustDay(2026, 7, 2), PeriodEnd: mustDay(2026, 7, 3), SampleCount: 0}, // hollow point
+		{ProviderID: b, PeriodStart: mustDay(2026, 7, 1), PeriodEnd: mustDay(2026, 7, 2), Value: fp(1.4), SampleCount: 20},
+	}}
+	svc := NewReadService(repo, nil)
+	res, err := svc.Trends(context.Background(), ports.TrendFilter{Aggregation: "daily"})
+	require.NoError(t, err)
+	require.Len(t, res.Series, 2)
+	assert.Equal(t, a, res.Series[0].ProviderID)
+	assert.Len(t, res.Series[0].Buckets, 2)
+	// hollow point preserved: bucket with sample_count 0 and nil value retained.
+	assert.Nil(t, res.Series[0].Buckets[1].Value)
+	assert.Equal(t, 0, res.Series[0].Buckets[1].SampleCount)
+	require.NotNil(t, res.LastPeriodEnd)
+}
+
+func tp(y int, m time.Month, d int) *time.Time {
+	t := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	return &t
+}
+
+func mustDay(y int, m time.Month, d int) time.Time {
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }

@@ -644,6 +644,180 @@
           }
         }
       }
+    },
+    "/accuracy/summary": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "operationId": "getAccuracySummary",
+        "summary": "Accuracy summary (S-02 location / S-03 provider)",
+        "description": "Location mode (location_id): providers' metric grid + ranking status + collection window. Provider mode (provider_id): all ranking cells. Exactly one of location_id or provider_id required. Public; cached.",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "provider_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "horizon_minutes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1440
+            }
+          },
+          {
+            "name": "period_days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Accuracy summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/accuracy": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "operationId": "getAccuracyTrends",
+        "summary": "Accuracy trends (S-04)",
+        "description": "Time-bucketed metric series for a location+horizon+variable+metric_type over a bounded period (<=365d). Every bucket carries sample_count (hollow points). Public; cached.",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "variable",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "horizon_minutes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1440
+            }
+          },
+          {
+            "name": "aggregation",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "monthly"
+              ],
+              "default": "daily"
+            }
+          },
+          {
+            "name": "period_start",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_end",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "UTC"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 2000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Accuracy trends",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     }
   },
   "components": {

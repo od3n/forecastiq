@@ -13,6 +13,7 @@ import (
 
 	"github.com/forecastiq/forecastiq/internal/analysis"
 	analysisdomain "github.com/forecastiq/forecastiq/internal/analysis/domain"
+	analysisports "github.com/forecastiq/forecastiq/internal/analysis/ports"
 	"github.com/forecastiq/forecastiq/internal/api/respond"
 	"github.com/forecastiq/forecastiq/internal/catalog"
 	"github.com/forecastiq/forecastiq/internal/collection"
@@ -25,6 +26,9 @@ import (
 type RankingReader interface {
 	Rankings(ctx context.Context, q analysis.RankingsQuery) (*analysis.RankingsResult, error)
 	Methodology() analysisdomain.MethodologyDoc
+	LocationSummary(ctx context.Context, locationID uuid.UUID, horizonMinutes int) (*analysis.LocationSummary, error)
+	ProviderSummary(ctx context.Context, providerID uuid.UUID) (*analysis.ProviderSummary, error)
+	Trends(ctx context.Context, f analysisports.TrendFilter) (*analysis.TrendsResult, error)
 }
 
 // Handlers bundles the module services the slice endpoints need.

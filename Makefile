@@ -148,7 +148,7 @@ test-coverage: ## Unit tests with coverage report
 # /api/v1/openapi.json. `make docs` validates it is well-formed and complete.
 .PHONY: docs
 docs: ## Validate the committed OpenAPI spec
-	@python3 -c "import json; s=json.load(open('api/openapi/openapi.json')); assert s['openapi'].startswith('3.1'), 'must be OpenAPI 3.1'; req=['/locations','/providers','/forecasts/latest','/admin/collections/trigger','/forecast-collections','/rankings','/rankings/methodology']; missing=[p for p in req if p not in s['paths']]; assert not missing, 'missing paths: '+str(missing); print('OpenAPI valid:', len(s['paths']), 'paths')"
+	@python3 -c "import json; s=json.load(open('api/openapi/openapi.json')); assert s['openapi'].startswith('3.1'), 'must be OpenAPI 3.1'; req=['/locations','/providers','/forecasts/latest','/admin/collections/trigger','/forecast-collections','/rankings','/rankings/methodology','/accuracy/summary','/accuracy']; missing=[p for p in req if p not in s['paths']]; assert not missing, 'missing paths: '+str(missing); print('OpenAPI valid:', len(s['paths']), 'paths')"
 
 .PHONY: api-gen
 api-gen: docs ## Alias: validate API artifacts

@@ -66,6 +66,8 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 		// Public analysis reads (cached: rankings/accuracy class 60 s).
 		v1.GET("/rankings", analysisCache, h.Rankings)
 		v1.GET("/rankings/methodology", analysisCache, h.RankingsMethodology)
+		v1.GET("/accuracy/summary", analysisCache, h.AccuracySummary)
+		v1.GET("/accuracy", analysisCache, h.AccuracyTrends)
 
 		// Admin mutations + lineage queries.
 		admin := v1.Group("", RequireAdmin(cfg.DevAdminToken))

@@ -162,3 +162,132 @@ func rankGroups(subset []*ports.RankingReadRow, base int, out *[]RankedRow) int 
 	}
 	return rank
 }
+
+// ── Accuracy summary (S-02 location mode / S-03 provider mode) ──────────
+
+// LocationSummaryProvider is one provider's metric grid + status + window at a
+// location, grouped for the S-02 detail screen. Provider identity is resolved
+// by the API layer (catalog), keeping this read free of catalog concerns.
+type LocationSummaryProvider struct {
+	ProviderID    uuid.UUID
+	RankingStatus string
+	Metrics       []*ports.MetricRow
+	Window        ports.CollectionWindow
+}
+
+// LocationSummary is the assembled S-02 payload.
+type LocationSummary struct {
+	HorizonMinutes int
+	Providers      []LocationSummaryProvider
+	LastSnapshotAt *time.Time
+	HasData        bool
+}
+
+// ProviderSummary is the assembled S-03 payload (a provider's ranking cells).
+type ProviderSummary struct {
+	Cells   []*ports.ProviderSummaryCell
+	Windows map[uuid.UUID]ports.CollectionWindow
+	HasData bool
+}
+
+// LocationSummary assembles the per-provider metric grid, ranking status, and
+// collection window for a location + horizon (S-02).
+func (s *ReadService) LocationSummary(ctx context.Context, locationID uuid.UUID, horizonMinutes int) (*LocationSummary, error) {
+	metrics, err := s.repo.LocationMetrics(ctx, s.pool, locationID, horizonMinutes)
+	if err != nil {
+		return nil, err
+	}
+	statuses, err := s.repo.LocationProviderStatuses(ctx, s.pool, locationID, horizonMinutes)
+	if err != nil {
+		return nil, err
+	}
+	windows, err := s.repo.LocationWindows(ctx, s.pool, locationID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group metrics by provider, preserving first-seen order (query is ordered
+	// by provider_id).
+	byProvider := map[uuid.UUID]*LocationSummaryProvider{}
+	var order []uuid.UUID
+	for _, m := range metrics {
+		p, ok := byProvider[m.ProviderID]
+		if !ok {
+			st := statuses[m.ProviderID]
+			w := windows[m.ProviderID]
+			w.Coverage, w.Reliability = st.Coverage, st.Reliability
+			p = &LocationSummaryProvider{ProviderID: m.ProviderID, RankingStatus: st.RankingStatus, Window: w}
+			byProvider[m.ProviderID] = p
+			order = append(order, m.ProviderID)
+		}
+		p.Metrics = append(p.Metrics, m)
+	}
+
+	res := &LocationSummary{HorizonMinutes: horizonMinutes, HasData: len(order) > 0}
+	for _, id := range order {
+		p := byProvider[id]
+		if p.Window.LastSnapshotAt != nil && (res.LastSnapshotAt == nil || p.Window.LastSnapshotAt.After(*res.LastSnapshotAt)) {
+			res.LastSnapshotAt = p.Window.LastSnapshotAt
+		}
+		res.Providers = append(res.Providers, *p)
+	}
+	return res, nil
+}
+
+// ProviderSummary assembles a provider's ranking cells across locations +
+// horizons with per-location collection windows (S-03).
+func (s *ReadService) ProviderSummary(ctx context.Context, providerID uuid.UUID) (*ProviderSummary, error) {
+	cells, err := s.repo.ProviderRankingCells(ctx, s.pool, providerID)
+	if err != nil {
+		return nil, err
+	}
+	windows, err := s.repo.ProviderWindows(ctx, s.pool, providerID)
+	if err != nil {
+		return nil, err
+	}
+	return &ProviderSummary{Cells: cells, Windows: windows, HasData: len(cells) > 0}, nil
+}
+
+// ── Accuracy trends (S-04 / S-03 per-horizon detail) ────────────────────
+
+// TrendSeries is one provider's ordered metric buckets.
+type TrendSeries struct {
+	ProviderID uuid.UUID
+	Buckets    []*ports.TrendBucket
+}
+
+// TrendsResult is the assembled GET /accuracy payload.
+type TrendsResult struct {
+	Series        []TrendSeries
+	HasData       bool
+	LastPeriodEnd *time.Time
+}
+
+// Trends reads the metric buckets for a filter and groups them into per-provider
+// series (hollow points preserved: every bucket carries its sample_count).
+func (s *ReadService) Trends(ctx context.Context, f ports.TrendFilter) (*TrendsResult, error) {
+	buckets, err := s.repo.AccuracyTrends(ctx, s.pool, f)
+	if err != nil {
+		return nil, err
+	}
+	byProvider := map[uuid.UUID]*TrendSeries{}
+	var order []uuid.UUID
+	res := &TrendsResult{HasData: len(buckets) > 0}
+	for _, b := range buckets {
+		sr, ok := byProvider[b.ProviderID]
+		if !ok {
+			sr = &TrendSeries{ProviderID: b.ProviderID}
+			byProvider[b.ProviderID] = sr
+			order = append(order, b.ProviderID)
+		}
+		sr.Buckets = append(sr.Buckets, b)
+		if res.LastPeriodEnd == nil || b.PeriodEnd.After(*res.LastPeriodEnd) {
+			pe := b.PeriodEnd
+			res.LastPeriodEnd = &pe
+		}
+	}
+	for _, id := range order {
+		res.Series = append(res.Series, *byProvider[id])
+	}
+	return res, nil
+}
