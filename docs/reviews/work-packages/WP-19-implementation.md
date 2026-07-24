@@ -68,4 +68,8 @@ Delivered across three commits, each an independently green slice:
 
 ## 8. CI evidence
 
-_(captured on push — see the delivery-review report and the registry row.)_
+**CI run 30065631322** (`pull_request`, head `7be85e02fbf01054d68d7dacb9a955a81320cdb6` / `7be85e0`) — **success**, all six mandatory jobs green (none skipped/cancelled): `backend-checks`, `backend-integration` (real PG16 ran the authorization-matrix suite + the existing identity tests), `migrations`, `api-contract` (23-path drift gate), `security`, `image`. Commit identity verified: **local == `git ls-remote origin` == CI head == `7be85e0`**.
+
+Two earlier runs surfaced **test-harness-only** defects (no product-code change), fixed and re-verified:
+- Run 30065209115 (`8b48e9e`): `seedTestAdmin` ran inside `newTestEnv` **before** `seedCatalog`, so the `users_workspace_id` FK had no `workspaces` row (SQLSTATE 23503). Fixed in `31afb39` by upserting the system workspace first.
+- Run 30065436279 (`31afb39`): `TestProvisioningIdempotency` counted **all** users (the seeded bootstrap admin made it 2). Fixed in `7be85e0` by scoping the count to alice's subject (the property under test).
