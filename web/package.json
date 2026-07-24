@@ -1,0 +1,32 @@
+{
+  "name": "forecastiq-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ForecastIQ dashboard — Next.js static export (WP-20 foundation).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "15.5.21",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "eslint": "8.57.0",
+    "eslint-config-next": "15.5.21",
+    "typescript": "5.5.3"
+  },
+  "comments": {
+    "overrides": "Force patched transitive deps of Next (unused at runtime in a static export with unoptimized images, but flagged by the npm-audit gate): postcss XSS/file-read fixes; sharp libvips CVE fixes."
+  },
+  "overrides": {
+    "postcss": "8.5.22",
+    "sharp": "0.35.3"
+  }
+}

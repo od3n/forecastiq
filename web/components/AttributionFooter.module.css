@@ -1,0 +1,23 @@
+.footer {
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-body-sm);
+}
+
+.inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sources {
+  color: var(--color-text-primary);
+}
+
+.link {
+  color: var(--color-primary);
+}

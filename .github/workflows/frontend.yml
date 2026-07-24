@@ -1,0 +1,43 @@
+name: Frontend
+
+# Path-aware (ADR-023): frontend jobs run only when web/ (or this workflow)
+# changes, keeping backend PR feedback fast. The six backend jobs live in ci.yml.
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/frontend.yml"
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/frontend.yml"
+
+jobs:
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install (clean, from lockfile)
+        run: npm ci
+      - name: Audit (production deps; high+ blocks)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build (static export)
+        run: npm run build
+      - name: No service-role key in bundle
+        run: |
+          if grep -rIE "service_role|SERVICE_ROLE_KEY" out; then
+            echo "service-role key leaked into the static bundle" && exit 1
+          fi
