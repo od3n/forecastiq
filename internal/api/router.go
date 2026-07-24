@@ -69,6 +69,9 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 		v1.GET("/rankings/methodology", analysisCache, h.RankingsMethodology)
 		v1.GET("/accuracy/summary", analysisCache, h.AccuracySummary)
 		v1.GET("/accuracy", analysisCache, h.AccuracyTrends)
+		// Forecast-vs-Actual (S-05). Cached at 60 s (today's date bound; a
+		// per-date max-age=300 for past days is a documented follow-on).
+		v1.GET("/forecast-comparison", analysisCache, h.ForecastComparison)
 
 		// Admin mutations + lineage queries.
 		admin := v1.Group("", RequireAdmin(cfg.DevAdminToken))

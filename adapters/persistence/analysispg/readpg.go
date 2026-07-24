@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -260,6 +261,104 @@ func (r *ReadRepository) AccuracyTrends(ctx context.Context, tx dbtx.DBTX, f por
 			return nil, fmt.Errorf("scan trend bucket: %w", err)
 		}
 		out = append(out, &b)
+	}
+	return out, rows.Err()
+}
+
+// forecastColumn maps a validated variable to its forecast_snapshots column.
+// The service validates the variable against the closed set first, so the
+// returned identifier is never raw user input (no injection surface).
+func forecastColumn(variable string) (string, bool) {
+	switch variable {
+	case "temperature":
+		return "temperature_c", true
+	case "wind_speed":
+		return "wind_speed_ms", true
+	case "humidity":
+		return "humidity_pct", true
+	case "pressure":
+		return "pressure_hpa", true
+	case "precipitation":
+		return "precipitation_amount_mm", true
+	default:
+		return "", false
+	}
+}
+
+// observationColumn maps a validated variable to its observations column.
+func observationColumn(variable string) (string, bool) {
+	switch variable {
+	case "temperature":
+		return "temperature_c", true
+	case "wind_speed":
+		return "wind_speed_ms", true
+	case "humidity":
+		return "humidity_pct", true
+	case "pressure":
+		return "pressure_hpa", true
+	case "precipitation":
+		return "precipitation_mm", true
+	default:
+		return "", false
+	}
+}
+
+// ForecastComparisonPoints implements ports.ReadRepository. DISTINCT ON picks,
+// per (provider, target hour), the row with the largest horizon ≤ requested
+// (DR-02: exact horizon when present, else the nearest shorter). The variable
+// column is a validated constant; all values are parameterized.
+func (r *ReadRepository) ForecastComparisonPoints(ctx context.Context, tx dbtx.DBTX, locationID uuid.UUID, providerIDs []uuid.UUID, variable string, horizonMinutes int, from, to time.Time) ([]*ports.ForecastPoint, error) {
+	col, ok := forecastColumn(variable)
+	if !ok {
+		return nil, fmt.Errorf("forecast comparison: unsupported variable %q", variable)
+	}
+	q := `SELECT DISTINCT ON (provider_id, target_time)
+	        provider_id, target_time, issued_at, forecast_horizon_minutes, ` + col + `
+	      FROM forecast_snapshots
+	      WHERE location_id = $1 AND provider_id = ANY($2)
+	        AND target_time >= $3 AND target_time < $4
+	        AND forecast_horizon_minutes <= $5 AND ` + col + ` IS NOT NULL
+	      ORDER BY provider_id, target_time, forecast_horizon_minutes DESC`
+	rows, err := tx.Query(ctx, q, locationID, providerIDs, from.UTC(), to.UTC(), horizonMinutes)
+	if err != nil {
+		return nil, fmt.Errorf("forecast comparison points: %w", err)
+	}
+	defer rows.Close()
+	var out []*ports.ForecastPoint
+	for rows.Next() {
+		var p ports.ForecastPoint
+		if err := rows.Scan(&p.ProviderID, &p.TargetTime, &p.IssuedAt, &p.HorizonMinutes, &p.Value); err != nil {
+			return nil, fmt.Errorf("scan forecast point: %w", err)
+		}
+		out = append(out, &p)
+	}
+	return out, rows.Err()
+}
+
+// ComparisonObservations implements ports.ReadRepository.
+func (r *ReadRepository) ComparisonObservations(ctx context.Context, tx dbtx.DBTX, locationID uuid.UUID, variable string, from, to time.Time) ([]*ports.ComparisonObservation, error) {
+	col, ok := observationColumn(variable)
+	if !ok {
+		return nil, fmt.Errorf("comparison observations: unsupported variable %q", variable)
+	}
+	q := `SELECT observed_at, ` + col + `, source, observation_type, quality_flag
+	      FROM observations
+	      WHERE location_id = $1 AND observed_at >= $2 AND observed_at < $3
+	        AND superseded_observation_id IS NULL AND quality_flag <> 'suspect'
+	        AND ` + col + ` IS NOT NULL
+	      ORDER BY observed_at`
+	rows, err := tx.Query(ctx, q, locationID, from.UTC(), to.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("comparison observations: %w", err)
+	}
+	defer rows.Close()
+	var out []*ports.ComparisonObservation
+	for rows.Next() {
+		var o ports.ComparisonObservation
+		if err := rows.Scan(&o.ObservedAt, &o.Value, &o.Source, &o.ObservationType, &o.QualityFlag); err != nil {
+			return nil, fmt.Errorf("scan comparison observation: %w", err)
+		}
+		out = append(out, &o)
 	}
 	return out, rows.Err()
 }

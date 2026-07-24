@@ -29,6 +29,7 @@ type RankingReader interface {
 	LocationSummary(ctx context.Context, locationID uuid.UUID, horizonMinutes int) (*analysis.LocationSummary, error)
 	ProviderSummary(ctx context.Context, providerID uuid.UUID) (*analysis.ProviderSummary, error)
 	Trends(ctx context.Context, f analysisports.TrendFilter) (*analysis.TrendsResult, error)
+	ForecastComparison(ctx context.Context, q analysis.ComparisonQuery) (*analysis.ComparisonResult, error)
 }
 
 // Handlers bundles the module services the slice endpoints need.

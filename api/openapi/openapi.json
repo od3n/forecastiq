@@ -862,6 +862,87 @@
           }
         }
       }
+    },
+    "/forecast-comparison": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "operationId": "getForecastComparison",
+        "summary": "Forecast vs. Actual (S-05)",
+        "description": "Bounded public payload for one location + day + variable: per-provider forecast lines at the DR-02-selected issuance, the day's observations (gaps absent), and in-memory day metrics. Public; cached (ETag).",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "description": "ISO date interpreted in the location timezone",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "variable",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "temperature",
+                "wind_speed",
+                "humidity",
+                "pressure",
+                "precipitation"
+              ]
+            }
+          },
+          {
+            "name": "horizon_minutes",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "providers",
+            "in": "query",
+            "description": "CSV of provider UUIDs (default: all active)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Forecast comparison",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     }
   },
   "components": {
