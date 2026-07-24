@@ -1,0 +1,62 @@
+import { render, fireEvent } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { describe, it, expect } from "vitest";
+import { RankingTable, type RankingEntry } from "@/components/RankingTable";
+import { StatusBadge } from "@/components/StatusBadge";
+import { MetricTable } from "@/components/MetricTable";
+import { HorizonSelector } from "@/components/HorizonSelector";
+
+const SAMPLE_RANKINGS: RankingEntry[] = [
+  { rank: 1, provider_id: "a", provider_name: "Open-Meteo", composite_score: 0.94, ranking_status: "ranked", sample_count: 720, coverage: 0.98, components: { mae: 0.12, rmse: 0.15 }, penalty_applied: false },
+  { rank: null, provider_id: "b", provider_name: "OW", composite_score: null, ranking_status: "unranked", sample_count: 10, coverage: null },
+];
+
+describe("a11y: S-01/S-02 components", () => {
+  it("RankingTable has no axe violations", async () => {
+    const { container } = render(
+      <RankingTable rankings={SAMPLE_RANKINGS} freshness={{ state: "fresh", last_updated: "2026-07-24T00:00:00Z" }} methodologyVersion="2026.1" />,
+    );
+    const results = await axe(container, { rules: { region: { enabled: false }, "landmark-one-main": { enabled: false }, "page-has-heading-one": { enabled: false } } });
+    expect(results).toHaveNoViolations();
+  });
+
+  it("StatusBadge renders accessible text for all statuses", () => {
+    const { getByText, rerender } = render(<StatusBadge status="ranked" />);
+    expect(getByText("Ranked")).toBeTruthy();
+    rerender(<StatusBadge status="provisionally_ranked" sampleCount={15} />);
+    expect(getByText(/Provisional/)).toBeTruthy();
+    rerender(<StatusBadge status="unranked" sampleCount={10} />);
+    expect(getByText(/Insufficient data.*10\/30/)).toBeTruthy();
+  });
+
+  it("MetricTable has no axe violations", async () => {
+    const { container } = render(
+      <MetricTable variable="temperature" unit="°C" rows={[{ provider_id: "a", provider_name: "OM", mae: 1.22, rmse: 1.5, bias: 0.3, sample_count: 100 }]} />,
+    );
+    const results = await axe(container, { rules: { region: { enabled: false }, "landmark-one-main": { enabled: false }, "page-has-heading-one": { enabled: false } } });
+    expect(results).toHaveNoViolations();
+  });
+
+  it("RankingTable row expands on Enter key", () => {
+    const { container, getByText } = render(<RankingTable rankings={SAMPLE_RANKINGS} />);
+    const btn = container.querySelector("button[aria-expanded]") as HTMLElement;
+    fireEvent.keyDown(btn, { key: "Enter" });
+    expect(getByText("Component breakdown")).toBeTruthy();
+  });
+});
+
+describe("HorizonSelector interaction", () => {
+  it("calls onChange with the selected minutes", () => {
+    let selected = 1440;
+    const onChange = (m: number) => { selected = m; };
+    const { getByText } = render(<HorizonSelector selected={1440} onChange={onChange} />);
+    fireEvent.click(getByText("+3h"));
+    expect(selected).toBe(180);
+  });
+
+  it("marks the active pill with aria-checked", () => {
+    const { getByText } = render(<HorizonSelector selected={1440} onChange={() => {}} />);
+    expect(getByText("+24h").getAttribute("aria-checked")).toBe("true");
+    expect(getByText("+1h").getAttribute("aria-checked")).toBe("false");
+  });
+});
