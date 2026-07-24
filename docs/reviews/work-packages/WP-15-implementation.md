@@ -77,7 +77,7 @@ Full `go test -race ./internal/... ./adapters/...` green; `gofmt`/`go vet`/`gola
 
 ## 7. CI evidence
 
-_To be captured on the pushed branch (six mandatory jobs on the exact code+test SHA); recorded here and in the registry once green._
+Branch pushed; PR #13 → `main` triggered CI run **30059195672** (event `pull_request`) **success** on head SHA `20beb5958daf4787ec273ba6b07b0e7272514adc` (`20beb59`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == `git ls-remote origin` == CI head SHA. `backend-integration` ran the `/rankings`, `/accuracy/summary`, `/accuracy`, and `/providers` API tests against real PostgreSQL 16 (worked-example ordering, observation_context, ETag/304, collection_window, trend hollow points, partial-result warning, size bounds). One earlier run (30058982218 on `330a98e`) failed a **test-only** assertion (§8 ProviderX seeded as lowercase `providerx`); fixed in `20beb59` with no product-code change.
 
 ## 8. Files changed (by area)
 
