@@ -336,10 +336,18 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 
 // seedTestAdmin provisions the admin user backing the shared admin token. The
 // dev verifier maps the bearer "test-admin-token" to subject
-// "dev|test-admin-token"; this row makes that principal role=admin. Idempotent.
+// "dev|test-admin-token"; this row makes that principal role=admin. It runs in
+// newTestEnv (before seedCatalog), so it upserts the system workspace first to
+// satisfy the users_workspace_id FK. Idempotent.
 func seedTestAdmin(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	_, err := pool.Exec(ctx,
+		`INSERT INTO workspaces (id, name, slug, status, created_at, updated_at)
+		 VALUES ($1, 'System', 'system', 'active', now(), now())
+		 ON CONFLICT (id) DO NOTHING`,
+		catalogdomain.SystemWorkspaceID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
 		`INSERT INTO users (id, workspace_id, auth_subject, email, role, status, preferences, created_at, updated_at)
 		 VALUES ($1, $2, 'dev|test-admin-token', 'admin@dev.local', 'admin', 'active', '{}', now(), now())
 		 ON CONFLICT (auth_subject) DO UPDATE SET role = 'admin', status = 'active'`,
