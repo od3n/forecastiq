@@ -99,7 +99,8 @@ jobs:
           for required in ["/locations", "/providers", "/forecasts/latest",
                            "/admin/collections/trigger", "/forecast-collections",
                            "/rankings", "/rankings/methodology",
-                           "/accuracy/summary", "/accuracy", "/forecast-comparison"]:
+                           "/accuracy/summary", "/accuracy", "/forecast-comparison",
+                           "/admin/health"]:
               assert required in paths, f"missing path {required}"
           print(f"OpenAPI valid: {len(paths)} paths")
           PY

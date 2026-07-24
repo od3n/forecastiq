@@ -943,6 +943,65 @@
           }
         }
       }
+    },
+    "/admin/health": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getAdminHealth",
+        "summary": "Collection health (S-10, admin)",
+        "description": "Operational triage: per provider×location cell (last success, next scheduled, freshness), provider circuits, observation collector, and system section (payload volume, engine lag, backup/restore status). Served from application tables + statfs + backup status file. Admin only; no-store.",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "location_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fresh",
+                "delayed",
+                "stale",
+                "unavailable"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     }
   },
   "components": {

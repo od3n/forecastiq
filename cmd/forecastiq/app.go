@@ -12,10 +12,12 @@ import (
 
 	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
 	"github.com/forecastiq/forecastiq/adapters/auth/jwks"
+	"github.com/forecastiq/forecastiq/adapters/backupstatus"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openmeteo"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openweather"
 	obsopenmeteo "github.com/forecastiq/forecastiq/adapters/observationsources/openmeteo"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
+	"github.com/forecastiq/forecastiq/adapters/persistence/adminpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/analysispg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
@@ -23,6 +25,7 @@ import (
 	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/observationpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
+	"github.com/forecastiq/forecastiq/internal/admin"
 	"github.com/forecastiq/forecastiq/internal/analysis"
 	"github.com/forecastiq/forecastiq/internal/api"
 	"github.com/forecastiq/forecastiq/internal/api/handlers"
@@ -206,10 +209,12 @@ func buildApp(ctx context.Context) (*App, error) {
 	// HTTP layer.
 	ipLimiter := ratelimit.NewKeyedLimiter(float64(cfg.RateLimitIPPerMin), float64(cfg.RateLimitIPPerMin)/60.0, clk)
 	analysisRead := analysis.NewReadService(analysispg.NewReadRepository(), pool)
+	adminHealth := admin.NewHealthService(adminpg.NewHealthRepository(), pool,
+		payloadVolumeStater{store: payloadStore}, backupstatus.New(cfg.BackupStatusFile), clk)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
-		Health: checker, Logger: logger,
+		AdminHealthReader: adminHealth, Health: checker, Logger: logger,
 	}
 	router := api.NewRouter(h, m, logger, api.RouterConfig{
 		DevAdminToken:    cfg.DevAdminToken,
@@ -293,4 +298,17 @@ func (a *App) close() {
 	if a.pool != nil {
 		a.pool.Close()
 	}
+}
+
+// payloadVolumeStater adapts the filesystem payload store to admin.VolumeStater
+// (S-10 system section), mapping the store's usage struct to the admin type
+// without coupling the admin module to the storage adapter.
+type payloadVolumeStater struct{ store *payloadstore.FilesystemStore }
+
+func (v payloadVolumeStater) Usage() (admin.VolumeUsage, error) {
+	u, err := v.store.Usage()
+	if err != nil {
+		return admin.VolumeUsage{}, err
+	}
+	return admin.VolumeUsage{UsedBytes: u.UsedBytes, TotalBytes: u.TotalBytes, UsedPct: u.UsedPct}, nil
 }
