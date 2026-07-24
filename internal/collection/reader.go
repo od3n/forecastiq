@@ -83,6 +83,21 @@ func (s *ReaderService) SnapshotsByCollection(ctx context.Context, collectionID 
 	return s.snapshots.ByCollectionID(ctx, s.pool, collectionID)
 }
 
+// ProviderLineages returns the per-provider public lineage projection keyed by
+// provider id (adapter_version of the latest successful collection +
+// collecting_since). Providers with no collections are absent from the map.
+func (s *ReaderService) ProviderLineages(ctx context.Context) (map[uuid.UUID]ProviderLineage, error) {
+	rows, err := s.collections.ProviderLineages(ctx, s.pool)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]ProviderLineage, len(rows))
+	for _, l := range rows {
+		out[l.ProviderID] = ProviderLineage{AdapterVersion: l.AdapterVersion, CollectingSince: l.CollectingSince}
+	}
+	return out, nil
+}
+
 // GetSnapshot returns a snapshot by id (404 when unknown).
 func (s *ReaderService) GetSnapshot(ctx context.Context, id uuid.UUID) (*domain.ForecastSnapshot, error) {
 	return s.snapshots.GetByID(ctx, s.pool, id)

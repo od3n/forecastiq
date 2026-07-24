@@ -25,11 +25,13 @@ import (
 
 	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
+	"github.com/forecastiq/forecastiq/adapters/persistence/analysispg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/collectionpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
+	"github.com/forecastiq/forecastiq/internal/analysis"
 	"github.com/forecastiq/forecastiq/internal/api"
 	"github.com/forecastiq/forecastiq/internal/api/handlers"
 	"github.com/forecastiq/forecastiq/internal/audit"
@@ -286,9 +288,11 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	reader := collection.NewReaderService(collectionRepo, snapshotRepo, pool)
 
 	checker := health.NewChecker()
+	analysisRead := analysis.NewReadService(analysispg.NewReadRepository(), pool)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
-		Collector: collector, Replayer: collector, Reader: reader, Health: checker, Logger: logger,
+		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
+		Health: checker, Logger: logger,
 	}
 	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)
 	router := api.NewRouter(h, m, logger, api.RouterConfig{

@@ -51,6 +51,10 @@ type Metrics struct {
 	// Analysis / ranking (WP-14)
 	RankingsPublished prometheus.Counter
 
+	// HTTP read-path LRU cache (WP-15)
+	CacheHits   *prometheus.CounterVec
+	CacheMisses *prometheus.CounterVec
+
 	// Scheduler
 	SlotsClaimed *prometheus.CounterVec
 	MissedSlots  *prometheus.CounterVec
@@ -156,6 +160,16 @@ func New() *Metrics {
 		Help: "ProviderRanking rows published by the ranking batch (incl. recompute).",
 	})
 
+	m.CacheHits = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "lru_cache_hits_total",
+		Help: "Read-path LRU cache hits (fresh entry served or 304).",
+	}, []string{"route_template"})
+
+	m.CacheMisses = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "lru_cache_misses_total",
+		Help: "Read-path LRU cache misses (handler executed).",
+	}, []string{"route_template"})
+
 	m.SlotsClaimed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "scheduler_slots_claimed_total",
 		Help: "Scheduler slots claimed.",
@@ -185,6 +199,7 @@ func New() *Metrics {
 		m.ConditionUnmapped,
 		m.ObservationsCollected, m.ObservationsSuspect, m.ObservationFreshness,
 		m.MatchesCreated, m.MatchingBacklog, m.MetricRowsWritten, m.RankingsPublished,
+		m.CacheHits, m.CacheMisses,
 		m.SlotsClaimed, m.MissedSlots, m.SchedulerLag, m.JobDuration,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),

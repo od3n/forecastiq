@@ -15,6 +15,7 @@ type Envelope struct {
 	Data          any           `json:"data"`
 	Metadata      *Metadata     `json:"metadata,omitempty"`
 	Freshness     *Freshness    `json:"freshness,omitempty"`
+	Provenance    *Provenance   `json:"provenance,omitempty"`
 	Attribution   []Attribution `json:"attribution,omitempty"`
 	Warnings      []Warning     `json:"warnings,omitempty"`
 	Pagination    *Pagination   `json:"pagination,omitempty"`
@@ -23,10 +24,19 @@ type Envelope struct {
 
 // Metadata carries request correlation + presentation context.
 type Metadata struct {
-	RequestID   string            `json:"request_id"`
-	GeneratedAt time.Time         `json:"generated_at"`
-	Timezone    string            `json:"timezone,omitempty"`
-	Units       map[string]string `json:"units,omitempty"`
+	RequestID          string            `json:"request_id"`
+	GeneratedAt        time.Time         `json:"generated_at"`
+	Timezone           string            `json:"timezone,omitempty"`
+	Units              map[string]string `json:"units,omitempty"`
+	MethodologyVersion string            `json:"methodology_version,omitempty"`
+	WeightsVersion     string            `json:"weights_version,omitempty"`
+}
+
+// Provenance is the derived-payload data-lineage block (conventions §4).
+type Provenance struct {
+	ObservationProvenanceMix map[string]float64 `json:"observation_provenance_mix,omitempty"`
+	ObservationSources       []string           `json:"observation_sources,omitempty"`
+	QualityWeightingApplied  *bool              `json:"quality_weighting_applied,omitempty"`
 }
 
 // Freshness is the server-computed data-freshness block (BR-FRESH-02).
@@ -61,13 +71,26 @@ type Pagination struct {
 
 // Options customize an envelope response.
 type Options struct {
-	RequestID   string
-	Timezone    string
-	Units       map[string]string
-	Freshness   *Freshness
-	Attribution []Attribution
-	Warnings    []Warning
-	Pagination  *Pagination
+	RequestID          string
+	Timezone           string
+	Units              map[string]string
+	MethodologyVersion string
+	WeightsVersion     string
+	Freshness          *Freshness
+	Provenance         *Provenance
+	Attribution        []Attribution
+	Warnings           []Warning
+	Pagination         *Pagination
+}
+
+// WeatherUnits is the canonical unit map for weather-value payloads
+// (conventions §1: explicit per field family).
+var WeatherUnits = map[string]string{
+	"temperature":   "°C",
+	"precipitation": "mm",
+	"wind_speed":    "m/s",
+	"pressure":      "hPa",
+	"humidity":      "%",
 }
 
 // JSON writes data wrapped in the envelope with status code.
@@ -75,12 +98,15 @@ func JSON(c *gin.Context, status int, data any, opts Options) {
 	env := Envelope{
 		Data: data,
 		Metadata: &Metadata{
-			RequestID:   opts.RequestID,
-			GeneratedAt: time.Now().UTC(),
-			Timezone:    opts.Timezone,
-			Units:       opts.Units,
+			RequestID:          opts.RequestID,
+			GeneratedAt:        time.Now().UTC(),
+			Timezone:           opts.Timezone,
+			Units:              opts.Units,
+			MethodologyVersion: opts.MethodologyVersion,
+			WeightsVersion:     opts.WeightsVersion,
 		},
 		Freshness:   opts.Freshness,
+		Provenance:  opts.Provenance,
 		Attribution: opts.Attribution,
 		Warnings:    opts.Warnings,
 		Pagination:  opts.Pagination,

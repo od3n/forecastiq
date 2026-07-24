@@ -19,6 +19,15 @@ type CollectionFilter struct {
 	Limit      int
 }
 
+// ProviderLineage is the per-provider public lineage projection (WP-15 §4.1):
+// the adapter_version of the latest successful collection and the earliest
+// collection requested_at (collecting_since). Non-sensitive.
+type ProviderLineage struct {
+	ProviderID      uuid.UUID
+	AdapterVersion  string
+	CollectingSince *time.Time
+}
+
 // CollectionRepository persists ForecastCollection aggregates.
 type CollectionRepository interface {
 	// Insert writes the collection row (typically status=pending).
@@ -35,6 +44,9 @@ type CollectionRepository interface {
 	LatestSuccessful(ctx context.Context, tx dbtx.DBTX, providerID, locationID uuid.UUID) (*domain.ForecastCollection, error)
 	// List returns up to filter.Limit+1 rows (extra detects has_more).
 	List(ctx context.Context, tx dbtx.DBTX, f CollectionFilter) ([]*domain.ForecastCollection, error)
+	// ProviderLineages returns the per-provider lineage projection over all
+	// collections (adapter_version of the latest successful; collecting_since).
+	ProviderLineages(ctx context.Context, tx dbtx.DBTX) ([]ProviderLineage, error)
 }
 
 // SnapshotRepository persists immutable ForecastSnapshot children.

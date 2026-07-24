@@ -4,18 +4,32 @@
 package handlers
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/forecastiq/forecastiq/internal/analysis"
+	analysisdomain "github.com/forecastiq/forecastiq/internal/analysis/domain"
+	analysisports "github.com/forecastiq/forecastiq/internal/analysis/ports"
 	"github.com/forecastiq/forecastiq/internal/api/respond"
 	"github.com/forecastiq/forecastiq/internal/catalog"
 	"github.com/forecastiq/forecastiq/internal/collection"
 	collectiondomain "github.com/forecastiq/forecastiq/internal/collection/domain"
 	"github.com/forecastiq/forecastiq/internal/platform/health"
 )
+
+// RankingReader is the analysis read surface the public dashboard endpoints
+// consume (WP-15). Implemented by *analysis.ReadService.
+type RankingReader interface {
+	Rankings(ctx context.Context, q analysis.RankingsQuery) (*analysis.RankingsResult, error)
+	Methodology() analysisdomain.MethodologyDoc
+	LocationSummary(ctx context.Context, locationID uuid.UUID, horizonMinutes int) (*analysis.LocationSummary, error)
+	ProviderSummary(ctx context.Context, providerID uuid.UUID) (*analysis.ProviderSummary, error)
+	Trends(ctx context.Context, f analysisports.TrendFilter) (*analysis.TrendsResult, error)
+}
 
 // Handlers bundles the module services the slice endpoints need.
 type Handlers struct {
@@ -25,6 +39,7 @@ type Handlers struct {
 	Collector collection.ForecastCollector
 	Replayer  collection.ForecastReplayer
 	Reader    collection.ForecastReader
+	Analysis  RankingReader
 	Health    *health.Checker
 	Logger    *slog.Logger
 }
@@ -59,11 +74,13 @@ type AttributionDTO struct {
 
 // ProviderDTO is the public provider representation.
 type ProviderDTO struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Slug        string         `json:"slug"`
-	Status      string         `json:"status"`
-	Attribution AttributionDTO `json:"attribution"`
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	Slug            string         `json:"slug"`
+	Status          string         `json:"status"`
+	Attribution     AttributionDTO `json:"attribution"`
+	AdapterVersion  string         `json:"adapter_version,omitempty"`
+	CollectingSince *time.Time     `json:"collecting_since,omitempty"`
 }
 
 func providerDTO(p *catalog.Provider) ProviderDTO {
@@ -201,6 +218,14 @@ type badUUID struct{ field string }
 func (e *badUUID) Error() string   { return e.field + ": must be a valid UUID" }
 func (e *badUUID) Field() string   { return e.field }
 func (e *badUUID) Message() string { return "must be a valid UUID" }
+
+// fieldErr is a generic single-field validation error (query-param validation),
+// mapped to a 422 problem by the respond layer's fieldMessage path.
+type fieldErr struct{ field, message string }
+
+func (e *fieldErr) Error() string   { return e.field + ": " + e.message }
+func (e *fieldErr) Field() string   { return e.field }
+func (e *fieldErr) Message() string { return e.message }
 
 // parseUUIDParam parses a UUID string from a request field, returning a
 // field-validation error naming the field on failure.
