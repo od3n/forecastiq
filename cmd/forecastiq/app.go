@@ -205,14 +205,17 @@ func buildApp(ctx context.Context) (*App, error) {
 
 	// HTTP layer.
 	ipLimiter := ratelimit.NewKeyedLimiter(float64(cfg.RateLimitIPPerMin), float64(cfg.RateLimitIPPerMin)/60.0, clk)
+	analysisRead := analysis.NewReadService(analysispg.NewReadRepository(), pool)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
-		Collector: collector, Replayer: collector, Reader: reader, Health: checker, Logger: logger,
+		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
+		Health: checker, Logger: logger,
 	}
 	router := api.NewRouter(h, m, logger, api.RouterConfig{
 		DevAdminToken:    cfg.DevAdminToken,
 		CORSAllowOrigins: cfg.CORSAllowOrigins,
 		RateLimiter:      ipLimiter,
+		Clock:            clk,
 	})
 
 	// Scheduler / worker.

@@ -97,7 +97,8 @@ jobs:
           assert spec["openapi"].startswith("3.1"), "must be OpenAPI 3.1"
           paths = spec["paths"]
           for required in ["/locations", "/providers", "/forecasts/latest",
-                           "/admin/collections/trigger", "/forecast-collections"]:
+                           "/admin/collections/trigger", "/forecast-collections",
+                           "/rankings", "/rankings/methodology"]:
               assert required in paths, f"missing path {required}"
           print(f"OpenAPI valid: {len(paths)} paths")
           PY

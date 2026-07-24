@@ -6,322 +6,954 @@
     "description": "Weather forecast accuracy comparison platform. First vertical slice endpoints. All successful responses use the standard envelope (docs/api/02-response-conventions.md); errors use RFC 7807 (docs/api/03-error-and-partial-result-contracts.md)."
   },
   "servers": [
-    { "url": "/api/v1" }
+    {
+      "url": "/api/v1"
+    }
   ],
   "tags": [
-    { "name": "catalog" },
-    { "name": "data" },
-    { "name": "admin" },
-    { "name": "operations" }
+    {
+      "name": "catalog"
+    },
+    {
+      "name": "data"
+    },
+    {
+      "name": "admin"
+    },
+    {
+      "name": "operations"
+    },
+    {
+      "name": "analysis"
+    }
   ],
   "paths": {
     "/locations": {
       "get": {
-        "tags": ["catalog"],
+        "tags": [
+          "catalog"
+        ],
         "operationId": "listLocations",
         "summary": "List locations",
         "parameters": [
-          { "name": "active", "in": "query", "schema": { "type": "boolean" } },
-          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+          {
+            "name": "active",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Locations", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "422": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Locations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       },
       "post": {
-        "tags": ["catalog"],
+        "tags": [
+          "catalog"
+        ],
         "operationId": "createLocation",
         "summary": "Create a location (admin)",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateLocationRequest" } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLocationRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "401": { "$ref": "#/components/responses/Problem" },
-          "409": { "$ref": "#/components/responses/Problem" },
-          "422": { "$ref": "#/components/responses/Problem" }
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
     "/locations/{id}": {
       "get": {
-        "tags": ["catalog"],
+        "tags": [
+          "catalog"
+        ],
         "operationId": "getLocation",
         "summary": "Get a location",
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Location", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "404": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Location",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       },
       "put": {
-        "tags": ["catalog"],
+        "tags": [
+          "catalog"
+        ],
         "operationId": "updateLocation",
         "summary": "Update a location (admin)",
-        "description": "Updates mutable fields (name only). Coordinates, country_code, and timezone are immutable after creation (domain architecture \u00a72.3).",
-        "security": [{ "bearerAuth": [] }],
+        "description": "Updates mutable fields (name only). Coordinates, country_code, and timezone are immutable after creation (domain architecture §2.3).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateLocationRequest" } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLocationRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "401": { "$ref": "#/components/responses/Problem" },
-          "404": { "$ref": "#/components/responses/Problem" },
-          "409": { "$ref": "#/components/responses/Problem" },
-          "422": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
     "/locations/{id}/status": {
       "patch": {
-        "tags": ["catalog"],
+        "tags": [
+          "catalog"
+        ],
         "operationId": "setLocationStatus",
         "summary": "Enable or disable a location (admin)",
         "description": "Soft status change (BR-LOC-03): disabling stops future collection; historical data remains queryable.",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SetLocationStatusRequest" } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLocationStatusRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "401": { "$ref": "#/components/responses/Problem" },
-          "404": { "$ref": "#/components/responses/Problem" },
-          "409": { "$ref": "#/components/responses/Problem" },
-          "422": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
     "/providers": {
       "get": {
-        "tags": ["catalog"],
+        "tags": [
+          "catalog"
+        ],
         "operationId": "listProviders",
         "summary": "List providers",
         "responses": {
-          "200": { "description": "Providers", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } }
+          "200": {
+            "description": "Providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
         }
       }
     },
     "/forecasts/latest": {
       "get": {
-        "tags": ["data"],
+        "tags": [
+          "data"
+        ],
         "operationId": "getLatestForecast",
         "summary": "Latest forecast for a provider + location",
         "parameters": [
-          { "name": "location_id", "in": "query", "required": true, "schema": { "type": "string", "format": "uuid" } },
-          { "name": "provider_id", "in": "query", "required": true, "schema": { "type": "string", "format": "uuid" } }
+          {
+            "name": "location_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "provider_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Latest forecast", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "404": { "$ref": "#/components/responses/Problem" },
-          "422": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Latest forecast",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
     "/admin/collections/trigger": {
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "triggerCollection",
         "summary": "Trigger an immediate collection (admin)",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TriggerCollectionRequest" } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriggerCollectionRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "200": { "description": "Collection result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "401": { "$ref": "#/components/responses/Problem" },
-          "409": { "$ref": "#/components/responses/Problem" },
-          "422": { "$ref": "#/components/responses/Problem" },
-          "429": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Collection result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
     "/admin/collections/{id}/replay": {
       "post": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "replayCollection",
         "summary": "Replay a stored collection payload through the current adapter (admin)",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Replay collection result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "401": { "$ref": "#/components/responses/Problem" },
-          "404": { "$ref": "#/components/responses/Problem" },
-          "422": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Replay collection result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
     "/forecast-collections": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "listCollections",
         "summary": "List forecast collections (admin)",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "name": "provider_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
-          { "name": "location_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
-          { "name": "status", "in": "query", "schema": { "type": "string" } },
-          { "name": "cursor", "in": "query", "schema": { "type": "string" } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+          {
+            "name": "provider_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "location_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Collections", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "401": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Collections",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
     "/forecast-collections/{id}": {
       "get": {
-        "tags": ["admin"],
+        "tags": [
+          "admin"
+        ],
         "operationId": "getCollection",
         "summary": "Get a forecast collection (admin)",
-        "security": [{ "bearerAuth": [] }],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Collection", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Envelope" } } } },
-          "404": { "$ref": "#/components/responses/Problem" }
+          "200": {
+            "description": "Collection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/rankings": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "operationId": "getRankings",
+        "summary": "Provider rankings (S-01)",
+        "description": "Composite provider rankings for a location + horizon with per-component breakdown, CIs, statuses, ties, and the latest observation context. Public; cached (ETag + LRU 60s).",
+        "parameters": [
+          {
+            "name": "location_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "horizon_minutes",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1440
+            }
+          },
+          {
+            "name": "horizon_profile",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "uniform",
+                "short_term",
+                "daily_planning"
+              ],
+              "default": "uniform"
+            }
+          },
+          {
+            "name": "min_sample_count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 30
+            }
+          },
+          {
+            "name": "period_days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rankings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/rankings/methodology": {
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "operationId": "getRankingsMethodology",
+        "summary": "Ranking methodology (S-06)",
+        "description": "Published statistical methodology: formulas, default weights, thresholds, coverage penalty, statuses, tie rule, and change history. Static config; long-cached.",
+        "responses": {
+          "200": {
+            "description": "Methodology",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
         }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
     },
     "responses": {
       "Problem": {
         "description": "RFC 7807 problem",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
       }
     },
     "schemas": {
       "Envelope": {
         "type": "object",
-        "required": ["data"],
+        "required": [
+          "data"
+        ],
         "properties": {
           "data": {},
-          "metadata": { "$ref": "#/components/schemas/Metadata" },
-          "freshness": { "$ref": "#/components/schemas/Freshness" },
-          "attribution": { "type": "array", "items": { "$ref": "#/components/schemas/Attribution" } },
-          "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/Warning" } },
-          "pagination": { "$ref": "#/components/schemas/Pagination" },
-          "partial_result": { "type": "boolean" }
+          "metadata": {
+            "$ref": "#/components/schemas/Metadata"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "attribution": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attribution"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          },
+          "partial_result": {
+            "type": "boolean"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/Provenance"
+          }
         }
       },
       "Metadata": {
         "type": "object",
         "properties": {
-          "request_id": { "type": "string" },
-          "generated_at": { "type": "string", "format": "date-time" },
-          "timezone": { "type": "string" },
-          "units": { "type": "object", "additionalProperties": { "type": "string" } }
+          "request_id": {
+            "type": "string"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "units": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "methodology_version": {
+            "type": "string"
+          },
+          "weights_version": {
+            "type": "string"
+          }
         }
       },
       "Freshness": {
         "type": "object",
         "properties": {
-          "state": { "type": "string", "enum": ["fresh", "delayed", "stale", "unavailable"] },
-          "last_updated": { "type": "string", "format": "date-time" },
-          "age_seconds": { "type": "integer" },
-          "threshold_seconds": { "type": "integer" },
-          "reason": { "type": "string" }
+          "state": {
+            "type": "string",
+            "enum": [
+              "fresh",
+              "delayed",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "last_updated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "age_seconds": {
+            "type": "integer"
+          },
+          "threshold_seconds": {
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       },
       "Attribution": {
         "type": "object",
         "properties": {
-          "provider": { "type": "string" },
-          "text": { "type": "string" },
-          "url": { "type": "string" }
+          "provider": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
         }
       },
       "Warning": {
         "type": "object",
         "properties": {
-          "provider_id": { "type": "string" },
-          "code": { "type": "string", "enum": ["provider_unavailable", "stale"] },
-          "message": { "type": "string" },
-          "since": { "type": "string" }
+          "provider_id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "provider_unavailable",
+              "stale"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          }
         }
       },
       "Pagination": {
         "type": "object",
         "properties": {
-          "next_cursor": { "type": "string" },
-          "has_more": { "type": "boolean" }
+          "next_cursor": {
+            "type": "string"
+          },
+          "has_more": {
+            "type": "boolean"
+          }
         }
       },
       "Problem": {
         "type": "object",
-        "required": ["type", "title", "status", "request_id"],
+        "required": [
+          "type",
+          "title",
+          "status",
+          "request_id"
+        ],
         "properties": {
-          "type": { "type": "string" },
-          "title": { "type": "string" },
-          "status": { "type": "integer" },
-          "detail": { "type": "string" },
-          "instance": { "type": "string" },
-          "request_id": { "type": "string" },
-          "retryable": { "type": "boolean" },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
           "errors": {
             "type": "array",
             "items": {
               "type": "object",
-              "properties": { "field": { "type": "string" }, "message": { "type": "string" } }
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
       },
       "CreateLocationRequest": {
         "type": "object",
-        "required": ["name", "latitude", "longitude", "country_code", "timezone"],
+        "required": [
+          "name",
+          "latitude",
+          "longitude",
+          "country_code",
+          "timezone"
+        ],
         "properties": {
-          "name": { "type": "string", "maxLength": 120 },
-          "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
-          "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
-          "country_code": { "type": "string", "pattern": "^[A-Z]{2}$" },
-          "timezone": { "type": "string" },
-          "allow_near_duplicate": { "type": "boolean", "default": false },
-          "override_reason": { "type": "string", "maxLength": 500, "description": "Operator justification for accepting a near-duplicate (BR-LOC-01 override; audited). Required when allow_near_duplicate is true." }
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "country_code": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "allow_near_duplicate": {
+            "type": "boolean",
+            "default": false
+          },
+          "override_reason": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Operator justification for accepting a near-duplicate (BR-LOC-01 override; audited). Required when allow_near_duplicate is true."
+          }
         }
       },
       "UpdateLocationRequest": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string", "maxLength": 120 }
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          }
         }
       },
       "SetLocationStatusRequest": {
         "type": "object",
-        "required": ["status"],
+        "required": [
+          "status"
+        ],
         "properties": {
-          "status": { "type": "string", "enum": ["active", "disabled"], "description": "Target status. Only active and disabled are settable; archived is reserved." }
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "description": "Target status. Only active and disabled are settable; archived is reserved."
+          }
         }
       },
       "TriggerCollectionRequest": {
         "type": "object",
-        "required": ["provider_id", "location_id"],
+        "required": [
+          "provider_id",
+          "location_id"
+        ],
         "properties": {
-          "provider_id": { "type": "string", "format": "uuid" },
-          "location_id": { "type": "string", "format": "uuid" }
+          "provider_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "location_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Provenance": {
+        "type": "object",
+        "properties": {
+          "observation_provenance_mix": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "observation_sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quality_weighting_applied": {
+            "type": "boolean"
+          }
         }
       }
     }
