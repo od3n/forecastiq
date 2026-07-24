@@ -36,7 +36,7 @@ export function HealthGrid({ cells, onRetry }: HealthGridProps) {
             <th scope="col" style={{ padding: "var(--space-sm)", textAlign: "left" }}>Last Success</th>
             <th scope="col" style={{ padding: "var(--space-sm)", textAlign: "left" }}>Circuit</th>
             <th scope="col" style={{ padding: "var(--space-sm)", textAlign: "left" }}>Next Scheduled</th>
-            <th scope="col" style={{ padding: "var(--space-sm)" }}></th>
+            <th scope="col" style={{ padding: "var(--space-sm)" }}><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
