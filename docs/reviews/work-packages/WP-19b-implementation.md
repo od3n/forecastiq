@@ -65,4 +65,4 @@ Delivered across three commits, each an independently green slice:
 
 ## 7. CI evidence
 
-_(captured on push — see the delivery-review report and the registry row.)_
+**CI run 30067494937** (`pull_request`, head `13c1fd9dee1a62b2e668e5291cfe2fd0633d5b63` / `13c1fd9`) — **success on the first run**, all six mandatory jobs green (none skipped/cancelled): `backend-checks`, `backend-integration` (real PG16 ran the user-lifecycle + webhook suite), `migrations` (applied `20260801000011`), `api-contract` (27-path drift gate), `security`, `image`. Commit identity verified: **local == `git ls-remote origin` == CI head == `13c1fd9`**.
