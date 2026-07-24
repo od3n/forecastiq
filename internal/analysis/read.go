@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/forecastiq/forecastiq/internal/analysis/domain"
+	"github.com/forecastiq/forecastiq/internal/analysis/eval"
 	"github.com/forecastiq/forecastiq/internal/analysis/ports"
 	"github.com/forecastiq/forecastiq/internal/platform/dbtx"
 )
@@ -290,4 +291,130 @@ func (s *ReadService) Trends(ctx context.Context, f ports.TrendFilter) (*TrendsR
 		res.Series = append(res.Series, *byProvider[id])
 	}
 	return res, nil
+}
+
+// ── Forecast-vs-Actual (S-05 forecast-comparison) ──────────────────────
+
+// ComparisonQuery selects the FvA payload (GET /forecast-comparison). The day
+// window [From, To) is the requested date interpreted in the location timezone,
+// resolved to UTC by the API layer.
+type ComparisonQuery struct {
+	LocationID     uuid.UUID
+	ProviderIDs    []uuid.UUID
+	Variable       string
+	HorizonMinutes int
+	From           time.Time
+	To             time.Time
+}
+
+// ComparisonSeries is one provider's forecast line for the day. IssuedAt is the
+// earliest point's actual issuance (representative; per-point issuance rides on
+// each point for nearest-shorter honesty).
+type ComparisonSeries struct {
+	ProviderID uuid.UUID
+	IssuedAt   time.Time
+	Points     []*ports.ForecastPoint
+}
+
+// ComparisonDayMetric is one provider's in-memory day accuracy (≤ 24 pairs),
+// computed with the WP-12 evaluation kernel under observation-quality weights.
+type ComparisonDayMetric struct {
+	ProviderID  uuid.UUID
+	MAE         *float64
+	RMSE        *float64
+	Bias        *float64
+	SampleCount int
+}
+
+// ComparisonResult is the assembled GET /forecast-comparison payload.
+type ComparisonResult struct {
+	Series                []ComparisonSeries
+	Observations          []*ports.ComparisonObservation
+	DayMetrics            []ComparisonDayMetric
+	ErrorBandMAE          *float64
+	ObservationsAvailable bool
+	ProvenanceMix         map[string]float64
+	LatestObservedAt      *time.Time
+}
+
+// ForecastComparison assembles the S-05 payload: per-provider forecast lines at
+// the DR-02-selected issuance, the day's observations (gaps absent), and
+// in-memory day metrics computed against those observations with the WP-12
+// kernel. The error band is the pooled MAE across all matched pairs.
+func (s *ReadService) ForecastComparison(ctx context.Context, q ComparisonQuery) (*ComparisonResult, error) {
+	points, err := s.repo.ForecastComparisonPoints(ctx, s.pool, q.LocationID, q.ProviderIDs, q.Variable, q.HorizonMinutes, q.From, q.To)
+	if err != nil {
+		return nil, err
+	}
+	obs, err := s.repo.ComparisonObservations(ctx, s.pool, q.LocationID, q.Variable, q.From, q.To)
+	if err != nil {
+		return nil, err
+	}
+
+	obsByHour := make(map[time.Time]*ports.ComparisonObservation, len(obs))
+	for _, o := range obs {
+		obsByHour[o.ObservedAt.UTC()] = o
+	}
+
+	type seriesAcc struct {
+		series *ComparisonSeries
+		cont   eval.Continuous
+	}
+	accs := map[uuid.UUID]*seriesAcc{}
+	var pooled eval.Continuous
+	for _, p := range points {
+		a, ok := accs[p.ProviderID]
+		if !ok {
+			a = &seriesAcc{series: &ComparisonSeries{ProviderID: p.ProviderID, IssuedAt: p.IssuedAt}}
+			accs[p.ProviderID] = a
+		}
+		a.series.Points = append(a.series.Points, p)
+		if p.IssuedAt.Before(a.series.IssuedAt) {
+			a.series.IssuedAt = p.IssuedAt
+		}
+		if o, matched := obsByHour[p.TargetTime.UTC()]; matched {
+			w := eval.ProvenanceWeight(o.ObservationType)
+			a.cont.Add(p.Value, o.Value, w)
+			pooled.Add(p.Value, o.Value, w)
+		}
+	}
+
+	res := &ComparisonResult{
+		Observations:          obs,
+		ObservationsAvailable: len(obs) > 0,
+		ErrorBandMAE:          pooled.MAE(),
+		ProvenanceMix:         provenanceMix(obs),
+	}
+	// Emit series + day metrics in the requested provider order (deterministic).
+	for _, id := range q.ProviderIDs {
+		a, ok := accs[id]
+		if !ok {
+			continue
+		}
+		res.Series = append(res.Series, *a.series)
+		res.DayMetrics = append(res.DayMetrics, ComparisonDayMetric{
+			ProviderID: id, MAE: a.cont.MAE(), RMSE: a.cont.RMSE(), Bias: a.cont.Bias(), SampleCount: a.cont.N(),
+		})
+	}
+	if len(obs) > 0 {
+		last := obs[len(obs)-1].ObservedAt.UTC()
+		res.LatestObservedAt = &last
+	}
+	return res, nil
+}
+
+// provenanceMix returns the fraction of observations by observation_type.
+func provenanceMix(obs []*ports.ComparisonObservation) map[string]float64 {
+	if len(obs) == 0 {
+		return nil
+	}
+	counts := map[string]int{}
+	for _, o := range obs {
+		counts[o.ObservationType]++
+	}
+	mix := make(map[string]float64, len(counts))
+	for k, v := range counts {
+		mix[k] = float64(v) / float64(len(obs))
+	}
+	return mix
 }

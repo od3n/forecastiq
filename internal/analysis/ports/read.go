@@ -118,6 +118,27 @@ type TrendBucket struct {
 	SampleCount int
 }
 
+// ForecastPoint is one selected forecast value for a (provider, target hour)
+// under the DR-02 issuance rule (the row with the largest horizon ≤ requested).
+// IssuedAt + HorizonMinutes carry the actual issuance (subtitle honesty).
+type ForecastPoint struct {
+	ProviderID     uuid.UUID
+	TargetTime     time.Time
+	IssuedAt       time.Time
+	HorizonMinutes int
+	Value          float64
+}
+
+// ComparisonObservation is one live (non-superseded, non-suspect) observation
+// value for the FvA day. Gaps are simply absent (never interpolated; PC-10).
+type ComparisonObservation struct {
+	ObservedAt      time.Time
+	Value           float64
+	Source          string
+	ObservationType string
+	QualityFlag     string
+}
+
 // ReadRepository serves the public dashboard reads over pre-computed analysis
 // rows (WP-15). All queries hit the live (superseded_by IS NULL) surface.
 type ReadRepository interface {
@@ -145,4 +166,11 @@ type ReadRepository interface {
 	// AccuracyTrends returns the metric buckets matching a filter, ordered by
 	// provider then period_start.
 	AccuracyTrends(ctx context.Context, tx dbtx.DBTX, f TrendFilter) ([]*TrendBucket, error)
+	// ForecastComparisonPoints returns, per (provider, target hour) in [from, to),
+	// the forecast value of the requested variable at the DR-02-selected issuance
+	// (largest horizon ≤ horizonMinutes), for the given providers.
+	ForecastComparisonPoints(ctx context.Context, tx dbtx.DBTX, locationID uuid.UUID, providerIDs []uuid.UUID, variable string, horizonMinutes int, from, to time.Time) ([]*ForecastPoint, error)
+	// ComparisonObservations returns the live observation values of the requested
+	// variable for a location in [from, to), ordered by observed_at.
+	ComparisonObservations(ctx context.Context, tx dbtx.DBTX, locationID uuid.UUID, variable string, from, to time.Time) ([]*ComparisonObservation, error)
 }
