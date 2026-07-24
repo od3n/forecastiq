@@ -74,11 +74,13 @@ type AttributionDTO struct {
 
 // ProviderDTO is the public provider representation.
 type ProviderDTO struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Slug        string         `json:"slug"`
-	Status      string         `json:"status"`
-	Attribution AttributionDTO `json:"attribution"`
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	Slug            string         `json:"slug"`
+	Status          string         `json:"status"`
+	Attribution     AttributionDTO `json:"attribution"`
+	AdapterVersion  string         `json:"adapter_version,omitempty"`
+	CollectingSince *time.Time     `json:"collecting_since,omitempty"`
 }
 
 func providerDTO(p *catalog.Provider) ProviderDTO {

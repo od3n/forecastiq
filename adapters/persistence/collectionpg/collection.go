@@ -176,3 +176,31 @@ func (r *CollectionRepository) List(ctx context.Context, tx dbtx.DBTX, f ports.C
 	}
 	return out, rows.Err()
 }
+
+// ProviderLineages implements ports.CollectionRepository. Per provider it
+// returns the earliest collection requested_at (collecting_since) and the
+// adapter_version of the most recent successful/partial collection (latest
+// non-empty wins). Providers with no collections are simply absent.
+func (r *CollectionRepository) ProviderLineages(ctx context.Context, tx dbtx.DBTX) ([]ports.ProviderLineage, error) {
+	rows, err := tx.Query(ctx,
+		`SELECT provider_id,
+		        min(requested_at) AS collecting_since,
+		        COALESCE((array_agg(adapter_version ORDER BY requested_at DESC)
+		          FILTER (WHERE collection_status IN ('success','partial')
+		            AND adapter_version IS NOT NULL AND adapter_version <> ''))[1], '') AS adapter_version
+		 FROM forecast_collections
+		 GROUP BY provider_id`)
+	if err != nil {
+		return nil, fmt.Errorf("provider lineages: %w", err)
+	}
+	defer rows.Close()
+	var out []ports.ProviderLineage
+	for rows.Next() {
+		var l ports.ProviderLineage
+		if err := rows.Scan(&l.ProviderID, &l.CollectingSince, &l.AdapterVersion); err != nil {
+			return nil, fmt.Errorf("scan provider lineage: %w", err)
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}

@@ -7,6 +7,7 @@ package collection
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -65,6 +66,15 @@ type ForecastReader interface {
 	LatestForecast(ctx context.Context, providerID, locationID uuid.UUID) (*LatestForecast, error)
 	SnapshotsByCollection(ctx context.Context, collectionID uuid.UUID) ([]*domain.ForecastSnapshot, error)
 	GetSnapshot(ctx context.Context, id uuid.UUID) (*domain.ForecastSnapshot, error)
+	// ProviderLineages returns per-provider adapter_version + collecting_since
+	// (public lineage exposure; WP-15 §4.1).
+	ProviderLineages(ctx context.Context) (map[uuid.UUID]ProviderLineage, error)
+}
+
+// ProviderLineage is the public per-provider lineage projection (WP-15 §4.1).
+type ProviderLineage struct {
+	AdapterVersion  string
+	CollectingSince *time.Time
 }
 
 // PageInfo is a keyset-pagination result.

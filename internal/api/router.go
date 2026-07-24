@@ -61,6 +61,7 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 		v1.GET("/locations", catalogCache, h.ListLocations)
 		v1.GET("/locations/:id", catalogCache, h.GetLocation)
 		v1.GET("/providers", catalogCache, h.ListProviders)
+		v1.GET("/providers/:id", catalogCache, h.GetProvider)
 		v1.GET("/forecasts/latest", h.LatestForecast)
 
 		// Public analysis reads (cached: rankings/accuracy class 60 s).

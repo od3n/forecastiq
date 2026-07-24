@@ -59,6 +59,14 @@
               "maximum": 200,
               "default": 50
             }
+          },
+          {
+            "name": "bbox",
+            "in": "query",
+            "description": "reserved (MVP ignores; spatial filtering is post-MVP)",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -814,6 +822,42 @@
             }
           },
           "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/providers/{id}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "operationId": "getProvider",
+        "summary": "Get a provider",
+        "description": "One provider with attribution + lineage (adapter_version, collecting_since) for the S-03 header (§4.1).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "404": {
             "$ref": "#/components/responses/Problem"
           }
         }

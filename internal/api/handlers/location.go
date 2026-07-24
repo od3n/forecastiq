@@ -15,6 +15,7 @@ import (
 // @Tags         catalog
 // @Produce      json
 // @Param        active query bool false "filter by active status"
+// @Param        bbox   query string false "reserved (MVP ignores; spatial filtering is post-MVP)"
 // @Param        cursor query string false "pagination cursor (last id)"
 // @Param        limit  query int false "page size (1..200)" default(50)
 // @Success      200 {object} respond.Envelope
@@ -22,6 +23,10 @@ import (
 // @Router       /locations [get]
 func (h *Handlers) ListLocations(c *gin.Context) {
 	in := catalog.ListLocationsInput{Limit: 50}
+	// bbox is a reserved spatial-filter parameter (screen contract §2): the MVP
+	// accepts and ignores it (documented) rather than 422-ing, so clients can
+	// send it forward-compatibly.
+	_ = c.Query("bbox")
 	if v := c.Query("active"); v != "" {
 		b, _ := strconv.ParseBool(v)
 		in.Active = &b
