@@ -20,6 +20,7 @@ import (
 	"github.com/forecastiq/forecastiq/internal/catalog"
 	"github.com/forecastiq/forecastiq/internal/collection"
 	collectiondomain "github.com/forecastiq/forecastiq/internal/collection/domain"
+	"github.com/forecastiq/forecastiq/internal/identity"
 	"github.com/forecastiq/forecastiq/internal/platform/health"
 )
 
@@ -46,6 +47,21 @@ type Recomputer interface {
 	Recompute(ctx context.Context, actor admin.RecomputeActor) (int, error)
 }
 
+// UserProfile serves + updates the current user's profile (WP-19 self-service).
+// Implemented by *identity.UserService.
+type UserProfile interface {
+	GetMe(ctx context.Context, userID uuid.UUID) (*identity.User, error)
+	UpdateMe(ctx context.Context, userID uuid.UUID, in identity.UpdateProfileInput) (*identity.User, error)
+}
+
+// APIKeyManager manages a user's personal API keys (WP-19 self-service).
+// Implemented by *identity.APIKeyService.
+type APIKeyManager interface {
+	CreateKey(ctx context.Context, p identity.Principal, in identity.CreateKeyInput) (*identity.CreatedKey, error)
+	ListKeys(ctx context.Context, userID uuid.UUID) ([]*identity.APIKey, error)
+	RevokeKey(ctx context.Context, userID, keyID uuid.UUID, actor identity.Actor) error
+}
+
 // Handlers bundles the module services the slice endpoints need.
 type Handlers struct {
 	Locations         catalog.LocationManager
@@ -60,6 +76,8 @@ type Handlers struct {
 	AdminHealthReader HealthReader
 	Audit             audit.Reader
 	Recompute         Recomputer
+	Users             UserProfile
+	Keys              APIKeyManager
 	Health            *health.Checker
 	Logger            *slog.Logger
 }

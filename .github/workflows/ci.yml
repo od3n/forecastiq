@@ -100,7 +100,7 @@ jobs:
                            "/admin/collections/trigger", "/forecast-collections",
                            "/rankings", "/rankings/methodology",
                            "/accuracy/summary", "/accuracy", "/forecast-comparison",
-                           "/admin/health"]:
+                           "/admin/health", "/me", "/api-keys", "/api-keys/{id}"]:
               assert required in paths, f"missing path {required}"
           print(f"OpenAPI valid: {len(paths)} paths")
           PY

@@ -83,6 +83,12 @@ type Config struct {
 	AuthIssuer   string
 	AuthAudience string
 	AuthDevMode  bool
+
+	// Bootstrap admin (ADR-017): the auth subject promoted to the admin role at
+	// seed time so the operator surface is reachable ("first account seeded
+	// admin"). In dev-mode the subject is the dev token prefixed with "dev|".
+	AuthBootstrapAdminSubject string
+	AuthBootstrapAdminEmail   string
 }
 
 // Load reads configuration from the environment (optionally seeding from a
@@ -197,6 +203,8 @@ func Load() (Config, error) {
 	cfg.AuthIssuer = getEnv("FIQ_AUTH_ISSUER", "")
 	cfg.AuthAudience = getEnv("FIQ_AUTH_AUDIENCE", "")
 	cfg.AuthDevMode = getBool("FIQ_AUTH_DEV_MODE", cfg.Env != EnvProduction)
+	cfg.AuthBootstrapAdminSubject = getEnv("FIQ_BOOTSTRAP_ADMIN_SUBJECT", "")
+	cfg.AuthBootstrapAdminEmail = getEnv("FIQ_BOOTSTRAP_ADMIN_EMAIL", "")
 	if cfg.Env == EnvProduction {
 		if cfg.AuthDevMode {
 			fail("FIQ_AUTH_DEV_MODE must be false in production")

@@ -11,6 +11,7 @@ import (
 	"github.com/forecastiq/forecastiq/internal/platform/config"
 	"github.com/forecastiq/forecastiq/internal/platform/db"
 	"github.com/forecastiq/forecastiq/internal/platform/dbtx"
+	"github.com/forecastiq/forecastiq/internal/platform/ids"
 )
 
 // cmdSeed seeds reference data (idempotent).
@@ -26,6 +27,9 @@ func cmdSeed(_ []string) error {
 	}
 	defer pool.Close()
 	if err := seed(ctx, pool); err != nil {
+		return err
+	}
+	if err := seedBootstrapAdmin(ctx, pool, cfg.AuthBootstrapAdminSubject, cfg.AuthBootstrapAdminEmail); err != nil {
 		return err
 	}
 	fmt.Println("seed completed")
@@ -111,5 +115,30 @@ func seed(ctx context.Context, pool dbtx.DBTX) error {
 		return fmt.Errorf("seed location lookup: %w", lookupErr)
 	}
 
+	return nil
+}
+
+// seedBootstrapAdmin promotes (or provisions) the configured auth subject to the
+// admin role so the operator surface is reachable ("first account seeded admin";
+// ADR-017). A no-op when unset. Idempotent: re-running re-asserts role=admin +
+// active. The subject must match what the active verifier asserts (in dev-mode
+// the dev token prefixed with "dev|"; in production the Supabase user id).
+func seedBootstrapAdmin(ctx context.Context, pool dbtx.DBTX, subject, email string) error {
+	if subject == "" {
+		return nil
+	}
+	if email == "" {
+		email = "admin@forecastiq.local"
+	}
+	now := time.Now().UTC()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO users (id, workspace_id, auth_subject, email, role, status,
+		   preferences, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'admin', 'active', '{}', $5, $5)
+		 ON CONFLICT (auth_subject)
+		   DO UPDATE SET role = 'admin', status = 'active', updated_at = EXCLUDED.updated_at`,
+		ids.New(), catalogdomain.SystemWorkspaceID, subject, email, now); err != nil {
+		return fmt.Errorf("seed bootstrap admin: %w", err)
+	}
 	return nil
 }

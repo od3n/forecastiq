@@ -53,6 +53,9 @@ func cmdServe(args []string) error {
 		if err := seed(ctx, app.pool); err != nil {
 			return err
 		}
+		if err := seedBootstrapAdmin(ctx, app.pool, app.cfg.AuthBootstrapAdminSubject, app.cfg.AuthBootstrapAdminEmail); err != nil {
+			return err
+		}
 		app.logger.InfoContext(ctx, "seed.completed")
 	}
 

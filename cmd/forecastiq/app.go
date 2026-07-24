@@ -211,14 +211,38 @@ func buildApp(ctx context.Context) (*App, error) {
 	analysisRead := analysis.NewReadService(analysispg.NewReadRepository(), pool)
 	adminHealth := admin.NewHealthService(adminpg.NewHealthRepository(), pool,
 		payloadVolumeStater{store: payloadStore}, backupstatus.New(cfg.BackupStatusFile), clk)
+
+	// Identity (WP-03/WP-19). The verifier is the Supabase JWKS verifier in
+	// production; a local dev verifier otherwise (compiled out of release
+	// builds). Provisioned users belong to the system workspace (ADR-009). The
+	// services back the auth middleware (RequireAuth/Role/Scope) and the
+	// /me + /api-keys self-service handlers, so they are built before the router.
+	var verifier ports.TokenVerifier
+	if cfg.AuthDevMode {
+		verifier = devauth.New(clk)
+		logger.Warn("auth.dev_mode_enabled")
+	} else {
+		verifier = jwks.New(jwks.Config{
+			JWKSURL: cfg.AuthJWKSURL, Issuer: cfg.AuthIssuer, Audience: cfg.AuthAudience,
+		})
+	}
+	userRepo := identitypg.NewUserRepository()
+	apiKeyRepo := identitypg.NewAPIKeyRepository()
+	identityUsers := identity.NewUserService(userRepo, verifier, tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
+	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
+	auditReader := audit.NewReaderService(auditStore, pool)
+	logger.Info("identity.ready", slog.Bool("dev_mode", cfg.AuthDevMode))
+
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
 		ProviderAdmin: providers, ConfigAdmin: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
-		AdminHealthReader: adminHealth, Health: checker, Logger: logger,
+		AdminHealthReader: adminHealth, Audit: auditReader,
+		Users: identityUsers, Keys: identityKeys,
+		Health: checker, Logger: logger,
 	}
 	router := api.NewRouter(h, m, logger, api.RouterConfig{
-		DevAdminToken:    cfg.DevAdminToken,
+		Auth:             api.Auth{Users: identityUsers, Keys: identityKeys},
 		CORSAllowOrigins: cfg.CORSAllowOrigins,
 		RateLimiter:      ipLimiter,
 		Clock:            clk,
@@ -268,28 +292,11 @@ func buildApp(ctx context.Context) (*App, error) {
 		AnalysisConfigID:        catalogdomain.OpenMeteoConfigID,
 	})
 
-	// Identity (WP-03). The verifier is the Supabase JWKS verifier in
-	// production; a local dev verifier otherwise (compiled out of release
-	// builds). Provisioned users belong to the system workspace (ADR-009).
-	var verifier ports.TokenVerifier
-	if cfg.AuthDevMode {
-		verifier = devauth.New(clk)
-		logger.Warn("auth.dev_mode_enabled")
-	} else {
-		verifier = jwks.New(jwks.Config{
-			JWKSURL: cfg.AuthJWKSURL, Issuer: cfg.AuthIssuer, Audience: cfg.AuthAudience,
-		})
-	}
-	userRepo := identitypg.NewUserRepository()
-	apiKeyRepo := identitypg.NewAPIKeyRepository()
-	identityUsers := identity.NewUserService(userRepo, verifier, tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
-	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
-	auditReader := audit.NewReaderService(auditStore, pool)
-	logger.Info("identity.ready", slog.Bool("dev_mode", cfg.AuthDevMode))
+	// Identity (WP-03/WP-19) is constructed with the HTTP layer above (the auth
+	// middleware + self-service handlers depend on it).
 
-	// Admin operations reads/mutations wired now that the analysis dispatcher
-	// and audit reader exist (handlers read these fields at request time).
-	h.Audit = auditReader
+	// Admin recompute wired now that the analysis dispatcher exists (handlers
+	// read this field at request time).
 	h.Recompute = admin.NewRecomputeService(analysisDispatcher, tx, recorder, clk)
 
 	return &App{

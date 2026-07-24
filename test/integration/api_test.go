@@ -109,9 +109,11 @@ func TestAPI_TriggerCollectionAndLatestForecast(t *testing.T) {
 	assert.EqualValues(t, 3, collData["snapshots_stored"])
 
 	// Latest forecast returns the collection + snapshots + attribution.
+	// Raw forecast data is gated (RequireAuth + read:data scope); use the admin
+	// principal (JWT session ⇒ full scope).
 	rec = doRequest(e, http.MethodGet,
 		"/api/v1/forecasts/latest?provider_id="+catalogdomain.OpenMeteoProviderID.String()+
-			"&location_id="+catalogdomain.JohorBahruLocationID.String(), "", nil)
+			"&location_id="+catalogdomain.JohorBahruLocationID.String(), adminToken, nil)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	env = decodeEnvelope(t, rec)
 	data := env["data"].(map[string]any)

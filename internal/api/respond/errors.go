@@ -9,6 +9,7 @@ import (
 
 	catalogdomain "github.com/forecastiq/forecastiq/internal/catalog/domain"
 	collectiondomain "github.com/forecastiq/forecastiq/internal/collection/domain"
+	identitydomain "github.com/forecastiq/forecastiq/internal/identity/domain"
 )
 
 // Error type base URL (docs anchor per error class).
@@ -135,7 +136,8 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		return p.Status, p
 	}
 
-	if errors.Is(err, catalogdomain.ErrNotFound) || errors.Is(err, collectiondomain.ErrNotFound) {
+	if errors.Is(err, catalogdomain.ErrNotFound) || errors.Is(err, collectiondomain.ErrNotFound) ||
+		errors.Is(err, identitydomain.ErrUserNotFound) || errors.Is(err, identitydomain.ErrKeyNotFound) {
 		p.Type = errorBase + "not_found"
 		p.Title = "Not Found"
 		p.Status = http.StatusNotFound
@@ -167,7 +169,10 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		return p.Status, p
 	}
 
-	if errors.Is(err, ErrUnauthorized) {
+	if errors.Is(err, ErrUnauthorized) ||
+		errors.Is(err, identitydomain.ErrInvalidToken) || errors.Is(err, identitydomain.ErrTokenExpired) ||
+		errors.Is(err, identitydomain.ErrInvalidCredential) || errors.Is(err, identitydomain.ErrKeyInactive) ||
+		errors.Is(err, identitydomain.ErrUserDisabled) {
 		p.Type = errorBase + "unauthorized"
 		p.Title = "Unauthorized"
 		p.Status = http.StatusUnauthorized
