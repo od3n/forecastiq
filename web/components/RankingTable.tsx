@@ -75,12 +75,18 @@ function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; i
       <tr
         style={{ borderBottom: "1px solid var(--color-border)", cursor: "pointer", height: 44 }}
         onClick={onToggle}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        tabIndex={0}
-        aria-expanded={isExpanded}
       >
         <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontWeight: 500 }}>
-          {r.rank ?? "—"}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${r.provider_name}`}
+            style={{ background: "none", border: "none", cursor: "pointer", font: "inherit", fontFamily: "var(--font-data)", fontWeight: 500, padding: 0 }}
+          >
+            {r.rank ?? "\u2014"}
+          </button>
         </td>
         <td style={{ padding: "var(--space-sm)" }}>{r.provider_name}</td>
         <td style={{ padding: "var(--space-sm)", textAlign: "right", fontFamily: "var(--font-data)" }}>

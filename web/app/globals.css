@@ -147,3 +147,27 @@ a {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Responsive table wrapper — horizontal scroll on narrow viewports (doc 02 §12). */
+.tableWrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile: hide less-critical columns (coverage, rank #) on narrow screens;
+   the card layout per provider (doc 02 §12.3) is a polish follow-on. */
+@media (max-width: 639px) {
+  .hideOnMobile {
+    display: none;
+  }
+  .page {
+    padding: var(--space-md);
+  }
+}
+
+/* Tablet condensed (640-1024px). */
+@media (min-width: 640px) and (max-width: 1024px) {
+  .hideOnTablet {
+    display: none;
+  }
+}
