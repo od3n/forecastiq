@@ -5,7 +5,7 @@
 package api
 
 import (
-	"crypto/subtle"
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/forecastiq/forecastiq/internal/api/respond"
+	"github.com/forecastiq/forecastiq/internal/identity"
 	"github.com/forecastiq/forecastiq/internal/platform/metrics"
 	"github.com/forecastiq/forecastiq/internal/platform/ratelimit"
 )
@@ -80,27 +81,73 @@ func Metrics(m *metrics.Metrics) gin.HandlerFunc {
 	}
 }
 
-// authenticate resolves the caller from the dev-token seam. Until WP-03/19
-// lands Supabase JWKS auth, a configured FIQ_DEV_ADMIN_TOKEN grants an admin
-// principal; with no token configured, protected routes are rejected.
-func authenticate(c *gin.Context, devToken string) (respond.Principal, bool) {
-	if devToken == "" {
-		return respond.Principal{}, false
+// UserAuthenticator verifies a bearer JWT and resolves the database-backed
+// principal (provisioning on first use). Implemented by *identity.UserService.
+type UserAuthenticator interface {
+	Authenticate(ctx context.Context, rawToken string, actor identity.Actor) (*identity.Principal, error)
+}
+
+// KeyAuthenticator resolves a presented X-API-Key to its principal (with the
+// key's scopes). Implemented by *identity.APIKeyService.
+type KeyAuthenticator interface {
+	AuthenticateAPIKey(ctx context.Context, rawKey string) (*identity.Principal, error)
+}
+
+// Auth bundles the identity authenticators the middleware chain uses. It is the
+// single seam through which the HTTP layer verifies callers (ADR-008/ADR-017):
+// an X-API-Key takes precedence, otherwise a Bearer JWT is verified.
+type Auth struct {
+	Users UserAuthenticator
+	Keys  KeyAuthenticator
+}
+
+// principalFromIdentity maps the module-resolved principal onto the request
+// principal. Name defaults to the email for audit labelling.
+func principalFromIdentity(ip *identity.Principal) respond.Principal {
+	uid, wid := ip.UserID, ip.WorkspaceID
+	return respond.Principal{
+		UserID: &uid, WorkspaceID: &wid, Email: ip.Email,
+		Role: string(ip.Role), Name: ip.Email,
+		Method: string(ip.Method), Scopes: ip.Scopes,
 	}
-	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-	if token == "" {
-		token = c.GetHeader("X-API-Key")
+}
+
+// resolve authenticates the caller. An X-API-Key is tried first; otherwise a
+// Bearer JWT. Any verification failure (invalid/expired token, unusable key,
+// disabled user) returns ok=false so the caller emits a uniform 401 with no
+// oracle about which factor failed.
+func (a Auth) resolve(c *gin.Context) (respond.Principal, bool) {
+	ctx := c.Request.Context()
+	if key := strings.TrimSpace(c.GetHeader("X-API-Key")); key != "" {
+		if a.Keys == nil {
+			return respond.Principal{}, false
+		}
+		p, err := a.Keys.AuthenticateAPIKey(ctx, key)
+		if err != nil {
+			return respond.Principal{}, false
+		}
+		return principalFromIdentity(p), true
 	}
-	if token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(devToken)) == 1 {
-		return respond.Principal{Role: "admin", Name: "dev-admin"}, true
+	if h := c.GetHeader("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		token := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+		if token == "" || a.Users == nil {
+			return respond.Principal{}, false
+		}
+		p, err := a.Users.Authenticate(ctx, token, identity.Actor{IPAddress: c.ClientIP()})
+		if err != nil {
+			return respond.Principal{}, false
+		}
+		return principalFromIdentity(p), true
 	}
 	return respond.Principal{}, false
 }
 
-// RequireAuth gates user+ routes.
-func RequireAuth(devToken string) gin.HandlerFunc {
+// RequireAuth gates authenticated routes: a valid JWT or API key resolving to
+// an active user. The resolved principal is placed on the context for
+// downstream role/scope middleware and handlers.
+func (a Auth) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		p, ok := authenticate(c, devToken)
+		p, ok := a.resolve(c)
 		if !ok {
 			respond.Error(c, respond.ErrUnauthorized, respond.RequestID(c), c.Request.URL.Path)
 			return
@@ -110,19 +157,38 @@ func RequireAuth(devToken string) gin.HandlerFunc {
 	}
 }
 
-// RequireAdmin gates admin routes.
-func RequireAdmin(devToken string) gin.HandlerFunc {
+// RequireRole gates a route on the principal's database role (ADR-017: the role
+// is read per request, so an admin disable is immediately effective). It must
+// run after RequireAuth; a missing principal yields 401, a wrong role 403.
+func RequireRole(role string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		p, ok := authenticate(c, devToken)
+		p, ok := respond.PrincipalFrom(c)
 		if !ok {
 			respond.Error(c, respond.ErrUnauthorized, respond.RequestID(c), c.Request.URL.Path)
 			return
 		}
-		if !p.IsAdmin() {
+		if p.Role != role {
 			respond.Error(c, respond.ErrForbidden, respond.RequestID(c), c.Request.URL.Path)
 			return
 		}
-		respond.SetPrincipal(c, p)
+		c.Next()
+	}
+}
+
+// RequireScope gates a route on an API-key scope (AUTH-05). A JWT session has
+// full user rights (all scopes); an API key must carry the scope. It must run
+// after RequireAuth.
+func RequireScope(scope string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p, ok := respond.PrincipalFrom(c)
+		if !ok {
+			respond.Error(c, respond.ErrUnauthorized, respond.RequestID(c), c.Request.URL.Path)
+			return
+		}
+		if !p.HasScope(scope) {
+			respond.Error(c, respond.ErrForbidden, respond.RequestID(c), c.Request.URL.Path)
+			return
+		}
 		c.Next()
 	}
 }

@@ -293,31 +293,38 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	checker := health.NewChecker()
 	analysisRead := analysis.NewReadService(analysispg.NewReadRepository(), pool)
 	adminHealth := admin.NewHealthService(adminpg.NewHealthRepository(), pool, nil, nil, clk)
-	auditReaderSvc := audit.NewReaderService(auditStore, pool)
+	auditReader := audit.NewReaderService(auditStore, pool)
 	analysisDispatcher := scheduler.NewAnalysisDispatcher(
 		analysis.NewMatchService(analysispg.NewMatchRepository(), tx, pool, m, clk, logger),
 		analysis.NewAggregateService(analysispg.NewMetricRepository(), tx, pool, m, clk, logger),
 		analysis.NewRankService(analysispg.NewRankingRepository(), tx, pool, m, clk, logger), logger)
 	recompute := admin.NewRecomputeService(analysisDispatcher, tx, recorder, clk)
-	h := &handlers.Handlers{
-		Locations: locations, Providers: providers, Configs: configs,
-		ProviderAdmin: providers, ConfigAdmin: configs,
-		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
-		AdminHealthReader: adminHealth, Audit: auditReaderSvc, Recompute: recompute,
-		Health: checker, Logger: logger,
-	}
-	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)
-	router := api.NewRouter(h, m, logger, api.RouterConfig{
-		DevAdminToken: "test-admin-token",
-		RateLimiter:   limiter,
-	})
 
-	// Identity (WP-03): dev verifier + services over the same DB.
+	// Identity (WP-03/WP-19): dev verifier + services over the same DB, wired
+	// into the auth middleware and the /me + /api-keys self-service handlers.
 	userRepo := identitypg.NewUserRepository()
 	apiKeyRepo := identitypg.NewAPIKeyRepository()
 	identityUsers := identity.NewUserService(userRepo, devauth.New(clk), tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
 	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
-	auditReader := audit.NewReaderService(auditStore, pool)
+
+	h := &handlers.Handlers{
+		Locations: locations, Providers: providers, Configs: configs,
+		ProviderAdmin: providers, ConfigAdmin: configs,
+		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
+		AdminHealthReader: adminHealth, Audit: auditReader, Recompute: recompute,
+		Users: identityUsers, Keys: identityKeys,
+		Health: checker, Logger: logger,
+	}
+	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)
+	router := api.NewRouter(h, m, logger, api.RouterConfig{
+		Auth:        api.Auth{Users: identityUsers, Keys: identityKeys},
+		RateLimiter: limiter,
+	})
+
+	// Seed the admin user backing the shared admin token (a dev-mode bearer
+	// whose verified subject is "dev|test-admin-token") so existing admin tests
+	// authenticate through the real middleware as role=admin.
+	seedTestAdmin(ctx, t, pool)
 
 	return &testEnv{
 		pool: pool, tx: tx, locations: locations, providers: providers, configs: configs,
@@ -325,6 +332,19 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 		slots: schedulerpg.NewSlotRepository(), router: router, adapter: adapter, store: store,
 		identityUsers: identityUsers, identityKeys: identityKeys, auditReader: auditReader,
 	}
+}
+
+// seedTestAdmin provisions the admin user backing the shared admin token. The
+// dev verifier maps the bearer "test-admin-token" to subject
+// "dev|test-admin-token"; this row makes that principal role=admin. Idempotent.
+func seedTestAdmin(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(ctx,
+		`INSERT INTO users (id, workspace_id, auth_subject, email, role, status, preferences, created_at, updated_at)
+		 VALUES ($1, $2, 'dev|test-admin-token', 'admin@dev.local', 'admin', 'active', '{}', now(), now())
+		 ON CONFLICT (auth_subject) DO UPDATE SET role = 'admin', status = 'active'`,
+		uuid.New(), catalogdomain.SystemWorkspaceID)
+	require.NoError(t, err)
 }
 
 // seedCatalog inserts the system workspace, open-meteo provider + config, and

@@ -25,7 +25,7 @@ const (
 
 // RouterConfig configures the HTTP router.
 type RouterConfig struct {
-	DevAdminToken    string
+	Auth             Auth
 	CORSAllowOrigins []string
 	RateLimiter      *ratelimit.KeyedLimiter
 	Clock            clock.Clock
@@ -62,7 +62,6 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 		v1.GET("/locations/:id", catalogCache, h.GetLocation)
 		v1.GET("/providers", catalogCache, h.ListProviders)
 		v1.GET("/providers/:id", catalogCache, h.GetProvider)
-		v1.GET("/forecasts/latest", h.LatestForecast)
 
 		// Public analysis reads (cached: rankings/accuracy class 60 s).
 		v1.GET("/rankings", analysisCache, h.Rankings)
@@ -73,8 +72,22 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 		// per-date max-age=300 for past days is a documented follow-on).
 		v1.GET("/forecast-comparison", analysisCache, h.ForecastComparison)
 
-		// Admin mutations + lineage queries.
-		admin := v1.Group("", RequireAdmin(cfg.DevAdminToken))
+		// Raw forecast data is gated: authenticated user with the read:data
+		// scope (AUTH-08 — the bulk provider surface is not public).
+		v1.GET("/forecasts/latest", cfg.Auth.RequireAuth(), RequireScope("read:data"), h.LatestForecast)
+
+		// Self-service (any authenticated user; personal data → no-store).
+		self := v1.Group("", cfg.Auth.RequireAuth())
+		{
+			self.GET("/me", h.GetMe)
+			self.PATCH("/me", h.UpdateMe)
+			self.GET("/api-keys", h.ListAPIKeys)
+			self.POST("/api-keys", h.CreateAPIKey)
+			self.DELETE("/api-keys/:id", h.RevokeAPIKey)
+		}
+
+		// Admin mutations + lineage queries (authenticated + role=admin).
+		admin := v1.Group("", cfg.Auth.RequireAuth(), RequireRole("admin"))
 		{
 			admin.POST("/locations", h.CreateLocation)
 			admin.PUT("/locations/:id", h.UpdateLocation)

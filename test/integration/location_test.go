@@ -257,10 +257,11 @@ func TestAPI_DisabledLocationBlocksCollection(t *testing.T) {
 	locations := env["data"].(map[string]any)["locations"].([]any)
 	assert.Empty(t, locations)
 
-	// Historical data remains queryable (BR-LOC-03).
+	// Historical data remains queryable (BR-LOC-03). Raw forecast data is gated
+	// (RequireAuth + read:data scope); use the admin principal (full scope).
 	rec = doRequest(e, http.MethodGet,
 		"/api/v1/forecasts/latest?provider_id="+catalogdomain.OpenMeteoProviderID.String()+
-			"&location_id="+id, "", nil)
+			"&location_id="+id, adminToken, nil)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	env = decodeEnvelope(t, rec)
 	snapshots := env["data"].(map[string]any)["snapshots"].([]any)

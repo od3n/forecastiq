@@ -11,17 +11,40 @@ const (
 	PrincipalKey = "fiq.principal"
 )
 
-// Principal is the authenticated caller (populated by the auth middleware).
-// Until WP-03/19 lands Supabase JWKS auth, the dev-token seam yields an admin
-// principal with no UserID.
+// Principal is the authenticated caller (populated by the auth middleware from
+// the identity module: a verified Supabase/dev JWT or an API key). The role and
+// status always come from the database, never from a token claim (security
+// architecture §7 / ADR-017).
 type Principal struct {
-	UserID *uuid.UUID
-	Role   string // admin | user
-	Name   string
+	UserID      *uuid.UUID
+	WorkspaceID *uuid.UUID
+	Email       string
+	Role        string // admin | user
+	Name        string
+	Method      string   // jwt | api_key
+	Scopes      []string // API-key scopes; empty for a JWT session (full user rights)
 }
 
 // IsAdmin reports whether the principal has the admin role.
 func (p Principal) IsAdmin() bool { return p.Role == "admin" }
+
+// HasScope reports whether the principal may exercise scope. A JWT session
+// carries full user rights (empty Scopes ⇒ all scopes); API-key principals are
+// limited to their granted scopes plus the implicit public read (AUTH-05).
+func (p Principal) HasScope(scope string) bool {
+	if p.Method != "api_key" {
+		return true
+	}
+	if scope == "" || scope == "read:public" {
+		return true
+	}
+	for _, s := range p.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
 
 // SetRequestID stores the request id in the gin context.
 func SetRequestID(c *gin.Context, id string) { c.Set(RequestIDKey, id) }
