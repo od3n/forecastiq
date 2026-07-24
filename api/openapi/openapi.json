@@ -310,6 +310,11 @@
         ],
         "operationId": "getLatestForecast",
         "summary": "Latest forecast for a provider + location",
+        "description": "Raw forecast data (gated: authenticated user with the read:data API-key scope; AUTH-08).",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
         "parameters": [
           {
             "name": "location_id",
@@ -1182,6 +1187,180 @@
           }
         }
       }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "getMe",
+        "summary": "Current user profile (S-09)",
+        "description": "Returns the authenticated user's profile. Self-scope; no-store.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Envelope" }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "updateMe",
+        "summary": "Update current user profile (S-09)",
+        "description": "Updates the authenticated user's mutable fields (default location, preferences). Self-scope; audited; no-store.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "default_location_id": { "type": "string", "format": "uuid" },
+                  "preferences": { "type": "object" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Envelope" }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/api-keys": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "listApiKeys",
+        "summary": "List personal API keys (S-09)",
+        "description": "Lists the authenticated user's API keys (metadata only; never the secret). Self-scope; no-store.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Envelope" }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "createApiKey",
+        "summary": "Create a personal API key (S-09)",
+        "description": "Mints an API key. The plaintext key is returned exactly once (never re-derivable). Audited; no-store.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [ "name" ],
+                "properties": {
+                  "name": { "type": "string" },
+                  "scopes": { "type": "array", "items": { "type": "string" } },
+                  "rate_limit_per_min": { "type": "integer" },
+                  "expires_at": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Envelope" }
+              }
+            },
+            "description": "Created (plaintext key returned once)"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/api-keys/{id}": {
+      "delete": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "revokeApiKey",
+        "summary": "Revoke a personal API key (S-09)",
+        "description": "Revokes a key the authenticated user owns (idempotent). Unknown or non-owned keys return 404 (no existence disclosure). Audited.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1190,6 +1369,11 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      },
+      "apiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
       }
     },
     "responses": {
