@@ -26,9 +26,14 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
 export function absoluteLocal(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
+  // Explicit components: dateStyle/timeStyle cannot be combined with
+  // timeZoneName (spec), and we want the zone label (BR-TZ).
   return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
     timeZoneName: "short",
   }).format(d);
 }

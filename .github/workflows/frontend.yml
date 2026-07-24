@@ -39,6 +39,8 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Test (vitest + axe-core a11y)
+        run: npm test
       - name: Build (static export)
         run: npm run build
       - name: No service-role key in bundle
