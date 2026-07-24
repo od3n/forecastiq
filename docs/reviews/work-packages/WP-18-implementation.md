@@ -66,7 +66,7 @@ Full `go test -race ./internal/... ./adapters/...` green; `gofmt`/`go vet`/`gola
 
 ## 7. CI evidence
 
-_To be captured on the pushed branch (six mandatory jobs on the exact code+test SHA); recorded here and in the registry once green._
+Branch pushed; PR #16 → `main`. The first run (30062939998 on `41b2817`) surfaced two defects, both fixed in `b18a841`: (a) a Linux `golangci unconvert` on the statfs block fields — `Statfs_t.Blocks/Bavail` are `uint64` on both Linux and Darwin, so the conversions were unnecessary and the build tags unneeded (collapsed to one `usage.go`); (b) a wall-clock-fragile admin-health test — the cell `last_success` was read from `requested_at` (the forecast issuance, `now−1..2h` by design), so freshness flipped fresh↔delayed with the minute of the hour; **corrected to `completed_at`** (actual collection time) and the test made state-derived. CI run **30063273864** (`pull_request`, head `b18a841`) **success** with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == `git ls-remote origin` == CI head. `backend-integration` ran the `/admin/health`, provider/config admin, audit-events, and recompute tests against real PostgreSQL 16.
 
 ## 8. Deviations
 
