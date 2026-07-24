@@ -238,7 +238,10 @@ func buildApp(ctx context.Context) (*App, error) {
 	// Analysis aggregation (WP-13): the same batch aggregates matched pairs into
 	// AccuracyMetric rows (per cell-period, with CIs, coverage/reliability).
 	aggregator := analysis.NewAggregateService(analysispg.NewMetricRepository(), tx, pool, m, clk, logger)
-	analysisDispatcher := scheduler.NewAnalysisDispatcher(matcher, aggregator, logger)
+	// Analysis ranking (WP-14): the batch then ranks providers per cell into
+	// ProviderRanking rows (cohort normalization, weights, penalty, statuses).
+	ranker := analysis.NewRankService(analysispg.NewRankingRepository(), tx, pool, m, clk, logger)
+	analysisDispatcher := scheduler.NewAnalysisDispatcher(matcher, aggregator, ranker, logger)
 	jobRouter := scheduler.NewRouter(map[string]scheduler.Dispatcher{
 		scheduler.JobForecastCollection:    dispatcher,
 		scheduler.JobObservationCollection: obsDispatcher,
