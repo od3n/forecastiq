@@ -54,4 +54,4 @@ Delivered across three commits, each an independently green slice:
 
 ## 6. CI evidence
 
-_(captured on push — see the delivery-review report and the registry row.)_
+**CI run 30068633471** (`pull_request`, head `2dccab7a95423aec799a3dcf5fd730daf56edfc0` / `2dccab7`) — **success on the first run**, all six mandatory jobs green (none skipped/cancelled): `backend-checks`, `backend-integration` (real PG16 ran the export suite), `migrations` (applied `20260801000012`), `api-contract` (30-path drift gate), `security`, `image`. Commit identity verified: **local == `git ls-remote origin` == CI head == `2dccab7`**.
