@@ -3,6 +3,8 @@ import { axe } from "jest-axe";
 import { describe, it, expect, vi } from "vitest";
 import { ProviderGrid } from "@/components/ProviderGrid";
 import { TrendChart } from "@/components/TrendChart";
+import { OverlayChart } from "@/components/OverlayChart";
+import { DayMetricsTable } from "@/components/DayMetricsTable";
 import { ExportButton } from "@/components/ExportButton";
 import type { CsvExportInput } from "@/lib/csv/export";
 
@@ -81,5 +83,41 @@ describe("ExportButton", () => {
     expect(btn.disabled).toBe(false);
     fireEvent.click(btn);
     expect(global.URL.createObjectURL).toHaveBeenCalled();
+  });
+});
+
+describe("a11y: S-05 OverlayChart", () => {
+  const FVA_DATA = [
+    { period_start: "08:00", observation: 25.1, "Open-Meteo": 24.8 },
+    { period_start: "09:00", observation: 25.5, "Open-Meteo": 25.2 },
+  ];
+
+  it("wraps in role=img with aria-label", () => {
+    const { container } = render(<OverlayChart data={FVA_DATA} providers={["Open-Meteo"]} unit="\u00b0C" />);
+    const wrapper = container.querySelector("[role='img']");
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.getAttribute("aria-label")).toMatch(/Forecast vs\. Actual/);
+  });
+
+  it("renders hidden data table with observation column", () => {
+    const { container } = render(<OverlayChart data={FVA_DATA} providers={["Open-Meteo"]} unit="\u00b0C" />);
+    const table = container.querySelector("table[aria-label]");
+    expect(table?.textContent).toContain("observation");
+  });
+
+  it("legend distinguishes observed (dashed) from forecast", () => {
+    const { getByLabelText } = render(<OverlayChart data={FVA_DATA} providers={["Open-Meteo"]} unit="\u00b0C" />);
+    expect(getByLabelText("Hide Observation")).toBeTruthy();
+    expect(getByLabelText("Hide Open-Meteo")).toBeTruthy();
+  });
+});
+
+describe("a11y: DayMetricsTable", () => {
+  it("has no axe violations", async () => {
+    const { container } = render(
+      <DayMetricsTable metrics={[{ provider_name: "OM", mae: 1.2, rmse: 1.5, bias: 0.3 }]} unit="\u00b0C" />,
+    );
+    const results = await axe(container, { rules: { region: { enabled: false }, "landmark-one-main": { enabled: false }, "page-has-heading-one": { enabled: false } } });
+    expect(results).toHaveNoViolations();
   });
 });
