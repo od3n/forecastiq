@@ -244,6 +244,8 @@ func buildApp(ctx context.Context) (*App, error) {
 	}
 	adminUsers := identity.NewAdminUserService(userRepo, supabaseAdmin, tx, pool, recorder, clk, logger)
 	auditReader := audit.NewReaderService(auditStore, pool)
+	exports := identity.NewExportService(identitypg.NewExportJobRepository(), userRepo, apiKeyRepo,
+		auditReader, payloadStore, tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
 	logger.Info("identity.ready", slog.Bool("dev_mode", cfg.AuthDevMode))
 
 	h := &handlers.Handlers{
@@ -254,6 +256,7 @@ func buildApp(ctx context.Context) (*App, error) {
 		Users: identityUsers, Keys: identityKeys, UserAdmin: adminUsers,
 		Webhook:       identity.NewWebhookService(userRepo, tx, pool, recorder, clk, logger),
 		WebhookSecret: cfg.AuthWebhookSecret,
+		Exports:       exports,
 		Health:        checker, Logger: logger,
 	}
 	router := api.NewRouter(h, m, logger, api.RouterConfig{

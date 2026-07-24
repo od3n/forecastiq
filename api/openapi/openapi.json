@@ -1510,6 +1510,93 @@
           "401": { "$ref": "#/components/responses/Problem" }
         }
       }
+    },
+    "/me/export": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "requestMyExport",
+        "summary": "Request own GDPR export (S-09; AUTH-09)",
+        "description": "Creates an account-data export (user row + API-key metadata + own audit events). One active job per user (409). Self; no-store.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Envelope" }
+              }
+            },
+            "description": "Created"
+          },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "409": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/admin/users/{id}/export": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "requestUserExport",
+        "summary": "Request a user's GDPR export (S-14, admin; AUTH-09)",
+        "description": "Admin-triggered account-data export for a target user. One active job per user (409). Admin only; no-store.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Envelope" }
+              }
+            },
+            "description": "Created"
+          },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "409": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/exports/{id}": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "downloadExport",
+        "summary": "Download a GDPR export (AUTH-09)",
+        "description": "Streams the account-data JSON for a completed, unexpired export the caller may access (requester, target, or admin). Self/admin; no-store; 404 unknown/non-owned, 410 when the 24h window closed.",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyAuth": [] }
+        ],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": { "type": "object" }
+              }
+            },
+            "description": "Account-data export (attachment)"
+          },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "410": { "$ref": "#/components/responses/Problem" }
+        }
+      }
     }
   },
   "components": {

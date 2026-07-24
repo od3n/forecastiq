@@ -312,6 +312,8 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	identityUsers := identity.NewUserService(userRepo, devauth.New(clk), tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
 	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
 	adminUsers := identity.NewAdminUserService(userRepo, supabaseadmin.NewNoop(), tx, pool, recorder, clk, logger)
+	exports := identity.NewExportService(identitypg.NewExportJobRepository(), userRepo, apiKeyRepo,
+		auditReader, store, tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
 
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
@@ -321,6 +323,7 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 		Users: identityUsers, Keys: identityKeys, UserAdmin: adminUsers,
 		Webhook:       identity.NewWebhookService(userRepo, tx, pool, recorder, clk, logger),
 		WebhookSecret: testWebhookSecret,
+		Exports:       exports,
 		Health:        checker, Logger: logger,
 	}
 	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)

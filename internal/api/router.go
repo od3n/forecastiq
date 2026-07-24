@@ -88,6 +88,8 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 			self.GET("/me", h.GetMe)
 			self.PATCH("/me", h.UpdateMe)
 			self.DELETE("/me", h.DeleteMe)
+			self.POST("/me/export", h.RequestMyExport)
+			self.GET("/exports/:id", h.DownloadExport)
 			self.GET("/api-keys", h.ListAPIKeys)
 			self.POST("/api-keys", h.CreateAPIKey)
 			self.DELETE("/api-keys/:id", h.RevokeAPIKey)
@@ -111,6 +113,7 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 			admin.GET("/admin/users", h.ListUsers)
 			admin.PATCH("/admin/users/:id/status", h.SetUserStatus)
 			admin.DELETE("/admin/users/:id", h.DeleteUser)
+			admin.POST("/admin/users/:id/export", h.RequestUserExport)
 		}
 	}
 	return r

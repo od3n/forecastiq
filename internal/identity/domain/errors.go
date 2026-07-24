@@ -33,4 +33,13 @@ var (
 	// ErrUpstreamAuth is returned when propagating a lifecycle change to the
 	// managed auth provider fails (ADR-008 §6 ban_user failure → 502).
 	ErrUpstreamAuth = errors.New("auth provider propagation failed")
+	// ErrExportInProgress is returned when a GDPR export is requested for a user
+	// who already has a pending job (AUTH-09 one-active-per-user; → 409).
+	ErrExportInProgress = errors.New("an export is already in progress for this user")
+	// ErrExportNotFound is returned when no export job matches (also used to
+	// avoid disclosing existence to a non-owner).
+	ErrExportNotFound = errors.New("export not found")
+	// ErrExportExpired is returned when a completed export's 24h download window
+	// has closed (→ 410).
+	ErrExportExpired = errors.New("export download has expired")
 )
