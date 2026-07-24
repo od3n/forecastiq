@@ -1,0 +1,29 @@
+.skeleton {
+  background: var(--color-surface-secondary);
+  border-radius: var(--radius-md);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.card {
+  height: 80px;
+}
+
+.row {
+  height: 44px;
+}
+
+.chart {
+  height: 280px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    opacity: 0.6;
+  }
+}
