@@ -33,6 +33,17 @@ type TokenVerifier interface {
 	Verify(ctx context.Context, rawToken string) (*Claims, error)
 }
 
+// SupabaseAdmin propagates account-lifecycle changes to the managed auth
+// provider (ADR-008 §6). Implemented by adapters/auth/supabaseadmin (HTTP) in
+// production and a no-op in dev/test. The caller owns ordering: SetBanned runs
+// before the local disable (failure → 502, local unchanged); DeleteUser runs
+// after the local delete commits (best-effort, the local table is
+// authoritative). authSubject is users.auth_subject (the Supabase user id).
+type SupabaseAdmin interface {
+	SetBanned(ctx context.Context, authSubject string, banned bool) error
+	DeleteUser(ctx context.Context, authSubject string) error
+}
+
 // UserRepository persists User aggregates. Every method takes a dbtx.DBTX so it
 // can run on the pool or inside a caller-owned transaction.
 type UserRepository interface {
@@ -44,6 +55,15 @@ type UserRepository interface {
 	UpdateProfile(ctx context.Context, tx dbtx.DBTX, u *domain.User) error
 	// TouchLastLogin records a successful authentication timestamp.
 	TouchLastLogin(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, at time.Time) error
+	// List returns users for the admin surface (S-14), newest-first by id, up to
+	// limit; cursor is the last-seen id (exclusive) for keyset pagination.
+	List(ctx context.Context, tx dbtx.DBTX, limit int, cursor uuid.UUID) ([]*domain.User, error)
+	// UpdateStatus sets the entity status (active|disabled) for admin lifecycle.
+	UpdateStatus(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, status string) error
+	// Delete removes a user (AUTH-09). api_keys cascade; audit rows are
+	// anonymized (user_id → NULL) by the FK, which requires the caller to have
+	// set the app.allow_immutable_write GUC for the transaction.
+	Delete(ctx context.Context, tx dbtx.DBTX, id uuid.UUID) error
 }
 
 // APIKeyRepository persists APIKey aggregates. List and lookup methods used for

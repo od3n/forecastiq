@@ -62,6 +62,20 @@ type APIKeyManager interface {
 	RevokeKey(ctx context.Context, userID, keyID uuid.UUID, actor identity.Actor) error
 }
 
+// UserAdmin manages the S-14 user lifecycle + self-delete (WP-19b).
+// Implemented by *identity.AdminUserService.
+type UserAdmin interface {
+	List(ctx context.Context, limit int, cursor uuid.UUID) ([]*identity.User, error)
+	SetStatus(ctx context.Context, actor identity.Principal, targetID uuid.UUID, status, ip string) (*identity.User, error)
+	Delete(ctx context.Context, actor identity.Principal, targetID uuid.UUID, selfService bool, ip string) error
+}
+
+// WebhookIngester records a verified auth-provider webhook event into the audit
+// trail (WP-19b). Implemented by *identity.WebhookService.
+type WebhookIngester interface {
+	Ingest(ctx context.Context, ev identity.WebhookEvent) error
+}
+
 // Handlers bundles the module services the slice endpoints need.
 type Handlers struct {
 	Locations         catalog.LocationManager
@@ -78,6 +92,9 @@ type Handlers struct {
 	Recompute         Recomputer
 	Users             UserProfile
 	Keys              APIKeyManager
+	UserAdmin         UserAdmin
+	Webhook           WebhookIngester
+	WebhookSecret     string
 	Health            *health.Checker
 	Logger            *slog.Logger
 }

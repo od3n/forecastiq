@@ -12,6 +12,7 @@ import (
 
 	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
 	"github.com/forecastiq/forecastiq/adapters/auth/jwks"
+	"github.com/forecastiq/forecastiq/adapters/auth/supabaseadmin"
 	"github.com/forecastiq/forecastiq/adapters/backupstatus"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openmeteo"
 	"github.com/forecastiq/forecastiq/adapters/forecastproviders/openweather"
@@ -230,6 +231,18 @@ func buildApp(ctx context.Context) (*App, error) {
 	apiKeyRepo := identitypg.NewAPIKeyRepository()
 	identityUsers := identity.NewUserService(userRepo, verifier, tx, pool, recorder, clk, logger, catalogdomain.SystemWorkspaceID)
 	identityKeys := identity.NewAPIKeyService(apiKeyRepo, userRepo, tx, pool, recorder, clk, logger)
+	// Supabase Admin API propagation (ADR-008 §6; WP-19b): a no-op in dev/test or
+	// when unconfigured; the real client otherwise. Account disable/delete stay
+	// authoritative locally regardless.
+	var supabaseAdmin ports.SupabaseAdmin
+	if cfg.AuthDevMode || cfg.SupabaseServiceRoleKey == "" {
+		supabaseAdmin = supabaseadmin.NewNoop()
+	} else {
+		supabaseAdmin = supabaseadmin.New(supabaseadmin.Config{
+			ProjectURL: cfg.SupabaseProjectURL, ServiceRoleKey: cfg.SupabaseServiceRoleKey,
+		})
+	}
+	adminUsers := identity.NewAdminUserService(userRepo, supabaseAdmin, tx, pool, recorder, clk, logger)
 	auditReader := audit.NewReaderService(auditStore, pool)
 	logger.Info("identity.ready", slog.Bool("dev_mode", cfg.AuthDevMode))
 
@@ -238,8 +251,10 @@ func buildApp(ctx context.Context) (*App, error) {
 		ProviderAdmin: providers, ConfigAdmin: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
 		AdminHealthReader: adminHealth, Audit: auditReader,
-		Users: identityUsers, Keys: identityKeys,
-		Health: checker, Logger: logger,
+		Users: identityUsers, Keys: identityKeys, UserAdmin: adminUsers,
+		Webhook:       identity.NewWebhookService(userRepo, tx, pool, recorder, clk, logger),
+		WebhookSecret: cfg.AuthWebhookSecret,
+		Health:        checker, Logger: logger,
 	}
 	router := api.NewRouter(h, m, logger, api.RouterConfig{
 		Auth:             api.Auth{Users: identityUsers, Keys: identityKeys},

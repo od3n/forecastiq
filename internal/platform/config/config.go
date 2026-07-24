@@ -89,6 +89,16 @@ type Config struct {
 	// admin"). In dev-mode the subject is the dev token prefixed with "dev|".
 	AuthBootstrapAdminSubject string
 	AuthBootstrapAdminEmail   string
+
+	// Supabase Admin API (ADR-008 §6; WP-19b). Used to propagate account disable
+	// (ban) and delete to the managed auth provider. Empty ⇒ a no-op propagator
+	// (dev/test). The service-role key is a secret (env-only, never logged).
+	SupabaseProjectURL     string
+	SupabaseServiceRoleKey string
+
+	// AuthWebhookSecret is the HMAC secret for the signed Supabase auth-webhook
+	// receiver (WP-19b; audit-requirements §5). Empty disables the receiver.
+	AuthWebhookSecret string
 }
 
 // Load reads configuration from the environment (optionally seeding from a
@@ -205,6 +215,9 @@ func Load() (Config, error) {
 	cfg.AuthDevMode = getBool("FIQ_AUTH_DEV_MODE", cfg.Env != EnvProduction)
 	cfg.AuthBootstrapAdminSubject = getEnv("FIQ_BOOTSTRAP_ADMIN_SUBJECT", "")
 	cfg.AuthBootstrapAdminEmail = getEnv("FIQ_BOOTSTRAP_ADMIN_EMAIL", "")
+	cfg.SupabaseProjectURL = getEnv("FIQ_SUPABASE_URL", "")
+	cfg.SupabaseServiceRoleKey = getEnv("FIQ_SUPABASE_SERVICE_ROLE_KEY", "")
+	cfg.AuthWebhookSecret = getEnv("FIQ_AUTH_WEBHOOK_SECRET", "")
 	if cfg.Env == EnvProduction {
 		if cfg.AuthDevMode {
 			fail("FIQ_AUTH_DEV_MODE must be false in production")
