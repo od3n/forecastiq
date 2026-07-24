@@ -45,6 +45,18 @@ func (d *AnalysisDispatcher) Dispatch(ctx context.Context, slot *Slot) (int, err
 	if slot.JobType != JobAnalysisBatch {
 		return 0, fmt.Errorf("unsupported job type %q", slot.JobType)
 	}
+	return d.run(ctx)
+}
+
+// Recompute runs the analysis pipeline on demand (admin action; S-13), outside
+// the scheduler. Same match → aggregate → rank sequence as a scheduled batch.
+func (d *AnalysisDispatcher) Recompute(ctx context.Context) (int, error) {
+	return d.run(ctx)
+}
+
+// run executes match → aggregate → rank sequentially, returning the combined
+// records-affected count.
+func (d *AnalysisDispatcher) run(ctx context.Context) (int, error) {
 	pairs, err := d.matcher.MatchBatch(ctx)
 	if err != nil {
 		return pairs, err

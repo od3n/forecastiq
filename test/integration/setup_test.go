@@ -51,6 +51,7 @@ import (
 	"github.com/forecastiq/forecastiq/internal/platform/health"
 	"github.com/forecastiq/forecastiq/internal/platform/metrics"
 	"github.com/forecastiq/forecastiq/internal/platform/ratelimit"
+	"github.com/forecastiq/forecastiq/internal/scheduler"
 	"github.com/forecastiq/forecastiq/migrations"
 )
 
@@ -292,11 +293,18 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	checker := health.NewChecker()
 	analysisRead := analysis.NewReadService(analysispg.NewReadRepository(), pool)
 	adminHealth := admin.NewHealthService(adminpg.NewHealthRepository(), pool, nil, nil, clk)
+	auditReaderSvc := audit.NewReaderService(auditStore, pool)
+	analysisDispatcher := scheduler.NewAnalysisDispatcher(
+		analysis.NewMatchService(analysispg.NewMatchRepository(), tx, pool, m, clk, logger),
+		analysis.NewAggregateService(analysispg.NewMetricRepository(), tx, pool, m, clk, logger),
+		analysis.NewRankService(analysispg.NewRankingRepository(), tx, pool, m, clk, logger), logger)
+	recompute := admin.NewRecomputeService(analysisDispatcher, tx, recorder, clk)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
 		ProviderAdmin: providers, ConfigAdmin: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
-		AdminHealthReader: adminHealth, Health: checker, Logger: logger,
+		AdminHealthReader: adminHealth, Audit: auditReaderSvc, Recompute: recompute,
+		Health: checker, Logger: logger,
 	}
 	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)
 	router := api.NewRouter(h, m, logger, api.RouterConfig{

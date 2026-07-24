@@ -287,6 +287,11 @@ func buildApp(ctx context.Context) (*App, error) {
 	auditReader := audit.NewReaderService(auditStore, pool)
 	logger.Info("identity.ready", slog.Bool("dev_mode", cfg.AuthDevMode))
 
+	// Admin operations reads/mutations wired now that the analysis dispatcher
+	// and audit reader exist (handlers read these fields at request time).
+	h.Audit = auditReader
+	h.Recompute = admin.NewRecomputeService(analysisDispatcher, tx, recorder, clk)
+
 	return &App{
 		cfg: cfg, logger: logger, pool: pool, router: router,
 		metrics: m, scheduler: sched, payloadStore: payloadStore,
