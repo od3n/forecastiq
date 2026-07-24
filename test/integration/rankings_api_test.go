@@ -93,6 +93,36 @@ func TestAPI_Rankings(t *testing.T) {
 	assert.Less(t, rec.Body.Len(), 16*1024)
 }
 
+// TestAPI_RankingsPartialResult surfaces an active provider that has no ranking
+// for the cell as a provider_unavailable warning (omitted from rankings[]).
+func TestAPI_RankingsPartialResult(t *testing.T) {
+	ctx := context.Background()
+	connStr := startPostgres(ctx, t)
+	migrate(t, connStr)
+	e := newTestEnv(ctx, t, connStr, newSuccessAdapter(1))
+	e.seedCatalog(ctx, t)
+	// OpenWeather is an active provider with no ranking for this cell.
+	insertProvider(ctx, t, e.pool, catalogdomain.OpenWeatherProviderID, "openweather-test")
+
+	from := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	to := from.AddDate(0, 1, 0)
+	seedWorkedProvider(ctx, t, e.pool, catalogdomain.OpenMeteoProviderID, 1.20, 0.30, 0.769, 0.90, 1.10, 0.98, 0.99, 720, from, to)
+	newRanker(e.pool).RankPeriod(ctx, analysisdomain.Period{Kind: analysisdomain.PeriodMonthly, Start: from, End: to})
+
+	rec := doRequest(e, http.MethodGet,
+		"/api/v1/rankings?location_id="+catalogdomain.JohorBahruLocationID.String()+"&horizon_minutes=1440", "", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	env := decodeEnvelope(t, rec)
+	rankings := env["data"].(map[string]any)["rankings"].([]any)
+	assert.Len(t, rankings, 1) // only Open-Meteo has a ranking
+	assert.Equal(t, true, env["partial_result"])
+	warnings := env["warnings"].([]any)
+	require.Len(t, warnings, 1)
+	w := warnings[0].(map[string]any)
+	assert.Equal(t, catalogdomain.OpenWeatherProviderID.String(), w["provider_id"])
+	assert.Equal(t, "provider_unavailable", w["code"])
+}
+
 // TestAPI_RankingsValidation rejects a missing/invalid location_id with 422.
 func TestAPI_RankingsValidation(t *testing.T) {
 	ctx := context.Background()

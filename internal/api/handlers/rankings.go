@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/forecastiq/forecastiq/internal/analysis"
 	analysisdomain "github.com/forecastiq/forecastiq/internal/analysis/domain"
@@ -168,8 +169,10 @@ func (h *Handlers) Rankings(c *gin.Context) {
 	}
 	seenAttr := map[string]bool{}
 	var attribution []respond.Attribution
+	present := map[uuid.UUID]bool{}
 	for _, rr := range res.Rows {
 		row := rr.Row
+		present[row.ProviderID] = true
 		dto.Rankings = append(dto.Rankings, rankingRowDTO{
 			Rank: rr.Rank,
 			Tied: rr.Tied,
@@ -212,6 +215,13 @@ func (h *Handlers) Rankings(c *gin.Context) {
 		}
 	}
 
+	// Partial-result assembly: active providers absent from the cohort are
+	// surfaced as warnings (omitted from rankings[]; conventions §3 / caching §4.1).
+	var warnings []respond.Warning
+	if active, aerr := h.Providers.ListProviders(c.Request.Context()); aerr == nil {
+		warnings = absentProviderWarnings(active, present)
+	}
+
 	respond.OK(c, dto, respond.Options{
 		RequestID:          respond.RequestID(c),
 		MethodologyVersion: res.MethodologyVersion,
@@ -219,6 +229,7 @@ func (h *Handlers) Rankings(c *gin.Context) {
 		Freshness:          respond.ComputeFreshness(res.LastCalculatedAt, now, rankingsFreshMax, rankingsStaleMax, "no_rankings"),
 		Provenance:         provenance,
 		Attribution:        attribution,
+		Warnings:           warnings,
 	})
 }
 

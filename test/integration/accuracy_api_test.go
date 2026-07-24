@@ -52,6 +52,7 @@ func TestAPI_AccuracySummaryLocationMode(t *testing.T) {
 	assert.NotNil(t, window["coverage"])
 	assert.NotNil(t, window["last_snapshot_at"])
 	assert.Equal(t, "public, max-age=60", rec.Header().Get("Cache-Control"))
+	assert.Less(t, rec.Body.Len(), 40*1024) // size governance (caching §5)
 }
 
 // TestAPI_AccuracySummaryProviderMode returns a provider's ranking cells.

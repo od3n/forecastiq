@@ -124,7 +124,9 @@ func (h *Handlers) accuracySummaryByLocation(c *gin.Context, loc string) {
 	providers := make([]locationSummaryProviderDTO, 0, len(res.Providers))
 	var attribution []respond.Attribution
 	seen := map[string]bool{}
+	present := map[uuid.UUID]bool{}
 	for _, p := range res.Providers {
+		present[p.ProviderID] = true
 		metrics := make([]metricDTO, 0, len(p.Metrics))
 		for _, m := range p.Metrics {
 			metrics = append(metrics, metricDTO{
@@ -146,6 +148,7 @@ func (h *Handlers) accuracySummaryByLocation(c *gin.Context, loc string) {
 		}
 	}
 
+	refsList, _ := h.Providers.ListProviders(c.Request.Context())
 	respond.OK(c, gin.H{
 		"mode": "location", "location_id": locationID.String(),
 		"horizon_minutes": res.HorizonMinutes, "providers": providers,
@@ -156,6 +159,7 @@ func (h *Handlers) accuracySummaryByLocation(c *gin.Context, loc string) {
 		Freshness:          respond.ComputeFreshness(res.LastSnapshotAt, time.Now().UTC(), summaryFreshMax, summaryStaleMax, "no_data"),
 		Provenance:         &respond.Provenance{QualityWeightingApplied: boolPtr(true)},
 		Attribution:        attribution,
+		Warnings:           absentProviderWarnings(refsList, present),
 	})
 }
 
