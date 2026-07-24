@@ -943,6 +943,245 @@
           }
         }
       }
+    },
+    "/admin/health": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getAdminHealth",
+        "summary": "Collection health (S-10, admin)",
+        "description": "Operational triage: per provider×location cell (last success, next scheduled, freshness), provider circuits, observation collector, and system section (payload volume, engine lag, backup/restore status). Served from application tables + statfs + backup status file. Admin only; no-store.",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "location_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fresh",
+                "delayed",
+                "stale",
+                "unavailable"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/admin/providers/{id}/status": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "setProviderStatus",
+        "summary": "Enable or disable a provider (S-11, admin)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/admin/provider-configurations/{id}": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "updateProviderConfiguration",
+        "summary": "Update a provider configuration (S-11, admin)",
+        "description": "Operator-mutable fields only; the credential reference is never accepted or returned.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/admin/audit-events": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "getAuditEvents",
+        "summary": "Audit events (S-14, admin)",
+        "description": "Keyset-paginated audit trail (newest first), filterable by action, resource_type, user_id. Admin only.",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resource_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/admin/recompute": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "adminRecompute",
+        "summary": "Recompute analysis (S-13, admin)",
+        "description": "Runs the analysis pipeline on demand (match → aggregate → rank). Audited.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
     }
   },
   "components": {

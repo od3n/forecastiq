@@ -25,12 +25,14 @@ import (
 
 	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
 	"github.com/forecastiq/forecastiq/adapters/payloadstore"
+	"github.com/forecastiq/forecastiq/adapters/persistence/adminpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/analysispg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/auditpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/catalogpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/collectionpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
+	"github.com/forecastiq/forecastiq/internal/admin"
 	"github.com/forecastiq/forecastiq/internal/analysis"
 	"github.com/forecastiq/forecastiq/internal/api"
 	"github.com/forecastiq/forecastiq/internal/api/handlers"
@@ -49,6 +51,7 @@ import (
 	"github.com/forecastiq/forecastiq/internal/platform/health"
 	"github.com/forecastiq/forecastiq/internal/platform/metrics"
 	"github.com/forecastiq/forecastiq/internal/platform/ratelimit"
+	"github.com/forecastiq/forecastiq/internal/scheduler"
 	"github.com/forecastiq/forecastiq/migrations"
 )
 
@@ -272,8 +275,8 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	recorder := audit.NewRecorder(auditStore)
 
 	locations := catalog.NewLocationService(locationRepo, tx, pool, recorder, clk, logger)
-	providers := catalog.NewProviderService(providerRepo, pool)
-	configs := catalog.NewConfigurationService(configRepo, pool)
+	providers := catalog.NewProviderService(providerRepo, pool, tx, recorder, clk)
+	configs := catalog.NewConfigurationService(configRepo, pool, tx, recorder, clk)
 	circuits := catalog.NewCircuitService(circuitRepo, tx)
 
 	store, err := payloadstore.NewFilesystemStore(t.TempDir())
@@ -289,9 +292,18 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 
 	checker := health.NewChecker()
 	analysisRead := analysis.NewReadService(analysispg.NewReadRepository(), pool)
+	adminHealth := admin.NewHealthService(adminpg.NewHealthRepository(), pool, nil, nil, clk)
+	auditReaderSvc := audit.NewReaderService(auditStore, pool)
+	analysisDispatcher := scheduler.NewAnalysisDispatcher(
+		analysis.NewMatchService(analysispg.NewMatchRepository(), tx, pool, m, clk, logger),
+		analysis.NewAggregateService(analysispg.NewMetricRepository(), tx, pool, m, clk, logger),
+		analysis.NewRankService(analysispg.NewRankingRepository(), tx, pool, m, clk, logger), logger)
+	recompute := admin.NewRecomputeService(analysisDispatcher, tx, recorder, clk)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
+		ProviderAdmin: providers, ConfigAdmin: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
+		AdminHealthReader: adminHealth, Audit: auditReaderSvc, Recompute: recompute,
 		Health: checker, Logger: logger,
 	}
 	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)

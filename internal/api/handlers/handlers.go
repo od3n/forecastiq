@@ -11,10 +11,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/forecastiq/forecastiq/internal/admin"
 	"github.com/forecastiq/forecastiq/internal/analysis"
 	analysisdomain "github.com/forecastiq/forecastiq/internal/analysis/domain"
 	analysisports "github.com/forecastiq/forecastiq/internal/analysis/ports"
 	"github.com/forecastiq/forecastiq/internal/api/respond"
+	"github.com/forecastiq/forecastiq/internal/audit"
 	"github.com/forecastiq/forecastiq/internal/catalog"
 	"github.com/forecastiq/forecastiq/internal/collection"
 	collectiondomain "github.com/forecastiq/forecastiq/internal/collection/domain"
@@ -32,17 +34,34 @@ type RankingReader interface {
 	ForecastComparison(ctx context.Context, q analysis.ComparisonQuery) (*analysis.ComparisonResult, error)
 }
 
+// HealthReader assembles the S-10 admin collection-health view (WP-18).
+// Implemented by *admin.HealthService.
+type HealthReader interface {
+	Assemble(ctx context.Context) (*admin.Health, error)
+}
+
+// Recomputer runs an on-demand analysis recompute (S-13 admin; WP-18).
+// Implemented by *admin.RecomputeService.
+type Recomputer interface {
+	Recompute(ctx context.Context, actor admin.RecomputeActor) (int, error)
+}
+
 // Handlers bundles the module services the slice endpoints need.
 type Handlers struct {
-	Locations catalog.LocationManager
-	Providers catalog.ProviderCatalog
-	Configs   catalog.ConfigurationManager
-	Collector collection.ForecastCollector
-	Replayer  collection.ForecastReplayer
-	Reader    collection.ForecastReader
-	Analysis  RankingReader
-	Health    *health.Checker
-	Logger    *slog.Logger
+	Locations         catalog.LocationManager
+	Providers         catalog.ProviderCatalog
+	Configs           catalog.ConfigurationManager
+	ProviderAdmin     catalog.ProviderAdmin
+	ConfigAdmin       catalog.ConfigurationAdmin
+	Collector         collection.ForecastCollector
+	Replayer          collection.ForecastReplayer
+	Reader            collection.ForecastReader
+	Analysis          RankingReader
+	AdminHealthReader HealthReader
+	Audit             audit.Reader
+	Recompute         Recomputer
+	Health            *health.Checker
+	Logger            *slog.Logger
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────

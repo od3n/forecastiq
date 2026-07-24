@@ -59,6 +59,10 @@ type Config struct {
 
 	PayloadStoreDir string
 
+	// BackupStatusFile is the JSON status file written by the backup/restore
+	// scripts and read by /admin/health (WP-18). Empty disables the section.
+	BackupStatusFile string
+
 	ProviderTimeout        time.Duration
 	ProviderMaxRespBytes   int64
 	ProviderCredentialEnv  map[string]string // provider slug -> env var name
@@ -159,6 +163,7 @@ func Load() (Config, error) {
 
 	// Payload store
 	cfg.PayloadStoreDir = getEnv("FIQ_PAYLOAD_STORE_DIR", "./data/payloads")
+	cfg.BackupStatusFile = getEnv("FIQ_BACKUP_STATUS_FILE", "")
 
 	// Provider
 	cfg.ProviderTimeout = getDuration("FIQ_PROVIDER_TIMEOUT", 10*time.Second, &errs, "FIQ_PROVIDER_TIMEOUT")

@@ -69,6 +69,25 @@ func (r *ConfigurationRepository) ListActive(ctx context.Context, tx dbtx.DBTX) 
 	return out, rows.Err()
 }
 
+// Update implements ports.ConfigurationRepository: updates the operator-mutable
+// fields (status, collection schedule, adapter version, validation state). The
+// credential_ref is never mutated here (secret rotation is env-side; WP-18).
+func (r *ConfigurationRepository) Update(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error {
+	tag, err := tx.Exec(ctx,
+		`UPDATE provider_configurations
+		   SET status = $2, collection_schedule = $3, adapter_version = $4,
+		       validation_state = $5, updated_at = $6
+		 WHERE id = $1`,
+		c.ID, string(c.Status), c.CollectionSchedule, c.AdapterVersion, c.ValidationState, c.UpdatedAt.UTC())
+	if err != nil {
+		return fmt.Errorf("update configuration: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // Upsert implements ports.ConfigurationRepository (idempotent seed support).
 func (r *ConfigurationRepository) Upsert(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error {
 	credentialRef := any(nil)
