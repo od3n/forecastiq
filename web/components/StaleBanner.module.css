@@ -1,0 +1,8 @@
+.banner {
+  border-left: 4px solid var(--color-stale);
+  background: #fff7ed; /* orange-50 tint surface */
+  color: var(--color-text-primary);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--text-body-sm);
+}

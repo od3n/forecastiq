@@ -1,0 +1,149 @@
+/*
+ * ForecastIQ design tokens (docs/ui/02-ui-design-specification.md §1).
+ * Tokens are CSS custom properties; components consume them via CSS Modules.
+ * WCAG 2.1 AA: token pairs verified ≥ 4.5:1 text / ≥ 3:1 UI (doc 02 §1.3).
+ */
+
+:root {
+  /* Typography — two typefaces only (Inter body/label, JetBrains Mono data).
+     --font-sans / --font-mono are injected by next/font in the root layout. */
+  --font-body: var(--font-sans), system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-data: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-display: 1.75rem;   /* 28px / 700 — page titles */
+  --text-h1: 1.375rem;       /* 22px / 600 */
+  --text-h2: 1.125rem;       /* 18px / 600 */
+  --text-body: 0.875rem;     /* 14px / 400 */
+  --text-body-sm: 0.8125rem; /* 13px / 400 */
+  --text-label: 0.75rem;     /* 12px / 500 */
+
+  /* Semantic colors */
+  --color-primary: #1a56db;
+  --color-primary-hover: #1444b0;
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f9fafb;
+  --color-border: #e5e7eb;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+
+  /* Status colors (freshness + ranking) */
+  --color-fresh: #059669;
+  --color-delayed: #d97706;
+  --color-stale: #ea580c;
+  --color-unavailable: #dc2626;
+  --color-ranked: #059669;
+  --color-provisional: #d97706;
+  --color-unranked: #6b7280;
+
+  /* Provider colors (consistent across all charts) */
+  --color-provider-openmeteo: #2563eb;
+  --color-provider-openweather: #7c3aed;
+  --color-provider-3: #0891b2;
+  --color-provider-4: #db2777;
+  --color-observation: #111827;
+
+  /* Spacing scale — base 4px */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px; /* page gutters, between cards */
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  /* Elevation — borders for static containers; shadows only for overlays */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-card-hover: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* Motion */
+  --transition-base: 150ms ease-out;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background: var(--color-surface-secondary);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+/* Numeric/data values use the mono face (doc 02 §1.2). */
+.mono {
+  font-family: var(--font-data);
+  font-weight: 500;
+}
+
+/* Visible focus everywhere (WCAG 2.4.7): 2px primary outline, 2px offset. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Skip-to-content link (doc 07 §2 Global) — visible on focus. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.skip-link:focus {
+  left: var(--space-md);
+  top: var(--space-md);
+}
+
+/* Page container — 24px gutters (doc 02 §1.4). */
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+}
+
+/* Reduced motion: disable transitions/animations (WCAG 2.3.3). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

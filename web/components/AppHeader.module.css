@@ -1,0 +1,44 @@
+.header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.logo {
+  font-weight: 700;
+  font-size: var(--text-h2);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.navLink {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+}
+.navLink:hover {
+  color: var(--color-text-primary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.account {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
