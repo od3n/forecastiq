@@ -221,7 +221,7 @@ func TestReadService_TrendsGroupsByProvider(t *testing.T) {
 		{ProviderID: b, PeriodStart: mustDay(2026, 7, 1), PeriodEnd: mustDay(2026, 7, 2), Value: fp(1.4), SampleCount: 20},
 	}}
 	svc := NewReadService(repo, nil)
-	res, err := svc.Trends(context.Background(), ports.TrendFilter{Aggregation: "daily"})
+	res, err := svc.Trends(context.Background(), ports.TrendFilter{Aggregation: "daily"}, time.UTC)
 	require.NoError(t, err)
 	require.Len(t, res.Series, 2)
 	assert.Equal(t, a, res.Series[0].ProviderID)
@@ -239,6 +239,60 @@ func tp(y int, m time.Month, d int) *time.Time {
 
 func mustDay(y int, m time.Month, d int) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+func TestTruncToBucket_TZAlignedAndDST(t *testing.T) {
+	kl, err := time.LoadLocation("Asia/Kuala_Lumpur") // UTC+8, no DST
+	require.NoError(t, err)
+	// A UTC-day row maps to the tz day its UTC start falls in; the bucket is the
+	// tz-local midnight window (24 h for a non-DST zone).
+	start, end := truncToBucket(mustDay(2026, 7, 21), kl, "daily")
+	assert.Equal(t, time.Date(2026, 7, 20, 16, 0, 0, 0, time.UTC), start.UTC()) // 07-21 00:00 +08
+	assert.Equal(t, 24*time.Hour, end.Sub(start))
+
+	ny, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+	// Spring-forward day (2026-03-08): the tz "day" is 23 h long.
+	spring := time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC) // 07:00 EST, local 2026-03-08
+	sStart, sEnd := truncToBucket(spring, ny, "daily")
+	assert.Equal(t, 2026, sStart.In(ny).Year())
+	assert.Equal(t, 8, sStart.In(ny).Day())
+	assert.Equal(t, 0, sStart.In(ny).Hour())
+	assert.Equal(t, 23*time.Hour, sEnd.Sub(sStart), "spring-forward day is 23h")
+
+	// Fall-back day (2026-11-01): the tz "day" is 25 h long.
+	fall := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	fStart, fEnd := truncToBucket(fall, ny, "daily")
+	assert.Equal(t, 25*time.Hour, fEnd.Sub(fStart), "fall-back day is 25h")
+
+	// Monthly + weekly (Monday-start) alignment.
+	mStart, mEnd := truncToBucket(time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), kl, "monthly")
+	assert.Equal(t, 1, mStart.In(kl).Day())
+	assert.Equal(t, time.August, mEnd.In(kl).Month())
+	wStart, _ := truncToBucket(time.Date(2026, 7, 23, 0, 0, 0, 0, time.UTC), kl, "weekly") // Thu → Mon 07-20
+	assert.Equal(t, time.Monday, wStart.In(kl).Weekday())
+}
+
+func TestReadService_TrendsTZBucketing(t *testing.T) {
+	kl, err := time.LoadLocation("Asia/Kuala_Lumpur")
+	require.NoError(t, err)
+	prov := uuid.New()
+	// Two consecutive UTC daily rows; in UTC+8 they remain distinct tz days but
+	// the bucket boundaries shift to local midnights (07-20 16:00Z / 07-21 16:00Z).
+	repo := &fakeReadRepo{trends: []*ports.TrendBucket{
+		{ProviderID: prov, PeriodStart: mustDay(2026, 7, 21), PeriodEnd: mustDay(2026, 7, 22), Value: fp(1.2), SampleCount: 24},
+		{ProviderID: prov, PeriodStart: mustDay(2026, 7, 22), PeriodEnd: mustDay(2026, 7, 23), Value: fp(1.4), SampleCount: 24},
+	}}
+	svc := NewReadService(repo, nil)
+	res, err := svc.Trends(context.Background(), ports.TrendFilter{Aggregation: "daily"}, kl)
+	require.NoError(t, err)
+	require.Len(t, res.Series, 1)
+	buckets := res.Series[0].Buckets
+	require.Len(t, buckets, 2) // distinct tz days, not collapsed
+	assert.Equal(t, time.Date(2026, 7, 20, 16, 0, 0, 0, time.UTC), buckets[0].PeriodStart)
+	assert.Equal(t, 0, buckets[0].PeriodStart.In(kl).Hour()) // tz-local midnight
+	require.NotNil(t, buckets[0].Value)
+	assert.InDelta(t, 1.2, *buckets[0].Value, 1e-9) // 1:1 relabel preserves value
 }
 
 func TestReadService_ForecastComparison(t *testing.T) {

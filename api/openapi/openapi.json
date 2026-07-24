@@ -721,7 +721,7 @@
         ],
         "operationId": "getAccuracyTrends",
         "summary": "Accuracy trends (S-04)",
-        "description": "Time-bucketed metric series for a location+horizon+variable+metric_type over a bounded period (<=365d). Every bucket carries sample_count (hollow points). Public; cached.",
+        "description": "Time-bucketed metric series for a location + horizon + variable + metric_type over a bounded period (<=365 days), bucketed to the requested timezone's local day/week/month boundaries (tz-aware date_trunc, post-scan). Every bucket carries sample_count (hollow points). Public; cached.",
         "parameters": [
           {
             "name": "location_id",

@@ -140,6 +140,43 @@ func TestAPI_AccuracyTrends(t *testing.T) {
 	assert.Less(t, rec.Body.Len(), 80*1024)
 }
 
+// TestAPI_AccuracyTrendsTZBuckets proves tz-aware bucketing (WP-17): daily UTC
+// rows re-align to the requested timezone's local-midnight boundaries and echo
+// the tz, without collapsing distinct days.
+func TestAPI_AccuracyTrendsTZBuckets(t *testing.T) {
+	ctx := context.Background()
+	connStr := startPostgres(ctx, t)
+	migrate(t, connStr)
+	e := newTestEnv(ctx, t, connStr, newSuccessAdapter(1))
+	e.seedCatalog(ctx, t)
+
+	base := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 3; i++ {
+		day := base.AddDate(0, 0, i)
+		v := 1.0 + float64(i)*0.1
+		insertAccuracyMetric(ctx, t, e.pool, catalogdomain.OpenMeteoProviderID,
+			"temperature", "mae", &v, 24, day, day.AddDate(0, 0, 1))
+	}
+
+	url := "/api/v1/accuracy?location_id=" + catalogdomain.JohorBahruLocationID.String() +
+		"&horizon_minutes=1440&variable=temperature&metric_type=mae&aggregation=daily" +
+		"&tz=Asia/Kuala_Lumpur&period_start=2026-07-09&period_end=2026-07-20"
+	rec := doRequest(e, http.MethodGet, url, "", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	env := decodeEnvelope(t, rec)
+	data := env["data"].(map[string]any)
+	assert.Equal(t, "Asia/Kuala_Lumpur", data["tz"])
+	assert.Equal(t, "Asia/Kuala_Lumpur", env["metadata"].(map[string]any)["timezone"])
+	buckets := data["series"].([]any)[0].(map[string]any)["buckets"].([]any)
+	require.Len(t, buckets, 3) // distinct tz days, not collapsed
+	// The first daily row (07-10 00:00Z) aligns to KL midnight = 07-09 16:00Z.
+	start, perr := time.Parse(time.RFC3339, buckets[0].(map[string]any)["period_start"].(string))
+	require.NoError(t, perr)
+	kl, _ := time.LoadLocation("Asia/Kuala_Lumpur")
+	assert.Equal(t, 0, start.In(kl).Hour(), "bucket start is tz-local midnight")
+	assert.Equal(t, 16, start.UTC().Hour())
+}
+
 // TestAPI_AccuracyTrendsValidation rejects missing filters and over-range windows.
 func TestAPI_AccuracyTrendsValidation(t *testing.T) {
 	ctx := context.Background()
