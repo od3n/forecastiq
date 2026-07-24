@@ -1,0 +1,52 @@
+"use client";
+
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useCallback } from "react";
+
+/** The default horizon (+24h = 1440 minutes) per doc 02 §14.2. */
+export const DEFAULT_HORIZON = 1440;
+
+/** Horizon options (segmented control values per doc 02 §3.1). */
+export const HORIZON_OPTIONS = [
+  { label: "+1h", minutes: 60 },
+  { label: "+3h", minutes: 180 },
+  { label: "+6h", minutes: 360 },
+  { label: "+12h", minutes: 720 },
+  { label: "+24h", minutes: 1440 },
+  { label: "+3d", minutes: 4320 },
+  { label: "+7d", minutes: 10080 },
+] as const;
+
+export interface GlobalParams {
+  locationId: string | null;
+  horizonMinutes: number;
+}
+
+/**
+ * useGlobalParams reads + writes the URL-synced global controls (location_id +
+ * horizon_minutes). These persist across navigation (shareable URLs; doc 02
+ * §14.2). Defaults: first active location (resolved by the LocationSelector)
+ * and +24h.
+ */
+export function useGlobalParams() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const locationId = searchParams.get("location_id");
+  const horizonMinutes = Number(searchParams.get("horizon_minutes")) || DEFAULT_HORIZON;
+
+  const setParams = useCallback(
+    (updates: Partial<Record<"location_id" | "horizon_minutes", string>>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [k, v] of Object.entries(updates)) {
+        if (v) params.set(k, v);
+        else params.delete(k);
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  return { locationId, horizonMinutes, setParams } as const;
+}
