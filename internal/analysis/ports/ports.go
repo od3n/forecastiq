@@ -79,3 +79,56 @@ type MetricRepository interface {
 	// period), if any. Called after the new row is inserted.
 	SupersedePrevious(ctx context.Context, tx dbtx.DBTX, m *domain.AccuracyMetric) error
 }
+
+// LocationHorizon identifies a ranking cell's location and horizon.
+type LocationHorizon struct {
+	LocationID     uuid.UUID
+	HorizonMinutes int
+}
+
+// MetricValue is one live accuracy_metrics row read for ranking.
+type MetricValue struct {
+	ProviderID  uuid.UUID
+	Variable    string
+	MetricType  string
+	Value       *float64
+	CILower     *float64
+	CIUpper     *float64
+	SampleCount int
+}
+
+// RankingRow is a provider_rankings row to persist (WP-14).
+type RankingRow struct {
+	ID                  uuid.UUID
+	ProviderID          uuid.UUID
+	LocationID          uuid.UUID
+	HorizonMinutes      int
+	CompositeScore      *float64
+	CILower             *float64
+	CIUpper             *float64
+	Status              string
+	SampleCount         int
+	Coverage            *float64
+	Reliability         *float64
+	ComponentScoresJSON []byte
+	MethodologyVersion  string
+	WeightsVersion      string
+	HorizonProfile      string
+	PeriodStart         time.Time
+	PeriodEnd           time.Time
+}
+
+// RankingRepository is the ranking engine's persistence port (WP-14).
+type RankingRepository interface {
+	// ListRankingCells returns the (location, horizon) cells with live accuracy
+	// metrics for the exact period.
+	ListRankingCells(ctx context.Context, tx dbtx.DBTX, from, to time.Time) ([]LocationHorizon, error)
+	// ReadCohortMetrics returns every live accuracy-metric value for a cell-period
+	// across all providers (the ranking cohort inputs).
+	ReadCohortMetrics(ctx context.Context, tx dbtx.DBTX, locationID uuid.UUID, horizon int, from, to time.Time) ([]MetricValue, error)
+	// InsertRankings inserts new ranking rows (live: superseded_by NULL).
+	InsertRankings(ctx context.Context, tx dbtx.DBTX, rows []*RankingRow) error
+	// SupersedePreviousRankings sets superseded_by = row.ID on the prior live row
+	// sharing row's logical key (provider, location, horizon, profile, period).
+	SupersedePreviousRankings(ctx context.Context, tx dbtx.DBTX, row *RankingRow) error
+}
