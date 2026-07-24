@@ -84,6 +84,8 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 			admin.GET("/forecast-collections", h.ListCollections)
 			admin.GET("/forecast-collections/:id", h.GetCollection)
 			admin.GET("/admin/health", h.AdminHealth)
+			admin.PATCH("/admin/providers/:id/status", h.SetProviderStatus)
+			admin.PATCH("/admin/provider-configurations/:id", h.UpdateProviderConfiguration)
 		}
 	}
 	return r

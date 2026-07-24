@@ -96,8 +96,8 @@ func buildApp(ctx context.Context) (*App, error) {
 
 	// Catalog services.
 	locations := catalog.NewLocationService(locationRepo, tx, pool, recorder, clk, logger)
-	providers := catalog.NewProviderService(providerRepo, pool)
-	configs := catalog.NewConfigurationService(configRepo, pool)
+	providers := catalog.NewProviderService(providerRepo, pool, tx, recorder, clk)
+	configs := catalog.NewConfigurationService(configRepo, pool, tx, recorder, clk)
 	circuits := catalog.NewCircuitService(circuitRepo, tx)
 
 	// Payload store.
@@ -213,6 +213,7 @@ func buildApp(ctx context.Context) (*App, error) {
 		payloadVolumeStater{store: payloadStore}, backupstatus.New(cfg.BackupStatusFile), clk)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
+		ProviderAdmin: providers, ConfigAdmin: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
 		AdminHealthReader: adminHealth, Health: checker, Logger: logger,
 	}

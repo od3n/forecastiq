@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -64,6 +65,20 @@ func (r *ProviderRepository) List(ctx context.Context, tx dbtx.DBTX) ([]*domain.
 		out = append(out, &p)
 	}
 	return out, rows.Err()
+}
+
+// SetStatus implements ports.ProviderRepository: updates the lifecycle status
+// (admin enable/disable; WP-18). Returns domain.ErrNotFound when no row matches.
+func (r *ProviderRepository) SetStatus(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, status domain.Status, now time.Time) error {
+	tag, err := tx.Exec(ctx, `UPDATE providers SET status = $2, updated_at = $3 WHERE id = $1`,
+		id, string(status), now.UTC())
+	if err != nil {
+		return fmt.Errorf("set provider status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 // Upsert implements ports.ProviderRepository (idempotent seed support).

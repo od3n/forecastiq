@@ -7,6 +7,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -42,6 +43,8 @@ type ProviderRepository interface {
 	GetByID(ctx context.Context, tx dbtx.DBTX, id uuid.UUID) (*domain.Provider, error)
 	GetBySlug(ctx context.Context, tx dbtx.DBTX, slug string) (*domain.Provider, error)
 	List(ctx context.Context, tx dbtx.DBTX) ([]*domain.Provider, error)
+	// SetStatus updates the provider lifecycle status (admin enable/disable).
+	SetStatus(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, status domain.Status, now time.Time) error
 	Upsert(ctx context.Context, tx dbtx.DBTX, p *domain.Provider) error
 }
 
@@ -50,6 +53,8 @@ type ConfigurationRepository interface {
 	GetByID(ctx context.Context, tx dbtx.DBTX, id uuid.UUID) (*domain.ProviderConfiguration, error)
 	GetByProviderID(ctx context.Context, tx dbtx.DBTX, providerID uuid.UUID) (*domain.ProviderConfiguration, error)
 	ListActive(ctx context.Context, tx dbtx.DBTX) ([]*domain.ProviderConfiguration, error)
+	// Update writes the operator-mutable fields (never the credential ref).
+	Update(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error
 	Upsert(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error
 }
 

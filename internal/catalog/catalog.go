@@ -93,6 +93,16 @@ type ProviderCatalog interface {
 	ListProviders(ctx context.Context) ([]*domain.Provider, error)
 }
 
+// ProviderAdmin mutates provider lifecycle state (S-11 admin; WP-18).
+type ProviderAdmin interface {
+	SetProviderStatus(ctx context.Context, id uuid.UUID, status domain.Status, actor Actor) (*domain.Provider, error)
+}
+
+// ConfigurationAdmin mutates operator-editable provider configuration (S-11).
+type ConfigurationAdmin interface {
+	UpdateConfiguration(ctx context.Context, id uuid.UUID, in UpdateConfigInput, actor Actor) (*domain.ProviderConfiguration, error)
+}
+
 // ConfigurationManager reads provider operational configuration.
 type ConfigurationManager interface {
 	GetConfiguration(ctx context.Context, id uuid.UUID) (*domain.ProviderConfiguration, error)

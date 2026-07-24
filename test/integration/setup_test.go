@@ -274,8 +274,8 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	recorder := audit.NewRecorder(auditStore)
 
 	locations := catalog.NewLocationService(locationRepo, tx, pool, recorder, clk, logger)
-	providers := catalog.NewProviderService(providerRepo, pool)
-	configs := catalog.NewConfigurationService(configRepo, pool)
+	providers := catalog.NewProviderService(providerRepo, pool, tx, recorder, clk)
+	configs := catalog.NewConfigurationService(configRepo, pool, tx, recorder, clk)
 	circuits := catalog.NewCircuitService(circuitRepo, tx)
 
 	store, err := payloadstore.NewFilesystemStore(t.TempDir())
@@ -294,6 +294,7 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	adminHealth := admin.NewHealthService(adminpg.NewHealthRepository(), pool, nil, nil, clk)
 	h := &handlers.Handlers{
 		Locations: locations, Providers: providers, Configs: configs,
+		ProviderAdmin: providers, ConfigAdmin: configs,
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
 		AdminHealthReader: adminHealth, Health: checker, Logger: logger,
 	}

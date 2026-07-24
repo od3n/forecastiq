@@ -44,6 +44,8 @@ type Handlers struct {
 	Locations         catalog.LocationManager
 	Providers         catalog.ProviderCatalog
 	Configs           catalog.ConfigurationManager
+	ProviderAdmin     catalog.ProviderAdmin
+	ConfigAdmin       catalog.ConfigurationAdmin
 	Collector         collection.ForecastCollector
 	Replayer          collection.ForecastReplayer
 	Reader            collection.ForecastReader
