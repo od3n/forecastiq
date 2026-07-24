@@ -30,10 +30,18 @@ func fp(x float64) *float64 { return &x }
 
 func insertProviderX(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
+	// seedCatalog only seeds Open-Meteo; the worked example needs OpenWeather and
+	// ProviderX as providers too (accuracy_metrics.provider_id FK).
+	insertProvider(ctx, t, pool, catalogdomain.OpenWeatherProviderID, "openweather-test")
+	insertProvider(ctx, t, pool, providerX, "providerx")
+}
+
+func insertProvider(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id uuid.UUID, slug string) {
+	t.Helper()
 	_, err := pool.Exec(ctx,
 		`INSERT INTO providers (id, name, slug, api_base_url, attribution_text, attribution_url)
-		 VALUES ($1,'ProviderX','providerx','https://px.example','ProviderX','https://px.example')`,
-		providerX)
+		 VALUES ($1,$2,$2,'https://px.example',$2,'https://px.example') ON CONFLICT (id) DO NOTHING`,
+		id, slug)
 	require.NoError(t, err)
 }
 
