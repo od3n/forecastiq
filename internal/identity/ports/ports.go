@@ -82,3 +82,23 @@ type APIKeyRepository interface {
 	Revoke(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, at time.Time) error
 	TouchLastUsed(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, at time.Time) error
 }
+
+// ExportJobRepository persists GDPR export jobs (AUTH-09).
+type ExportJobRepository interface {
+	// Insert creates a job. A unique violation on the one-active-per-user
+	// partial index becomes domain.ErrExportInProgress.
+	Insert(ctx context.Context, tx dbtx.DBTX, j *domain.ExportJob) error
+	// GetByID returns a job or domain.ErrExportNotFound.
+	GetByID(ctx context.Context, tx dbtx.DBTX, id uuid.UUID) (*domain.ExportJob, error)
+	// Complete marks a job completed with its object key + expiry.
+	Complete(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, objectKey string, expiresAt, completedAt time.Time) error
+	// Fail marks a job failed with a sanitized error message.
+	Fail(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, msg string) error
+}
+
+// ExportStore reads/writes GDPR export files on the object store (ADR-019).
+// Satisfied by the filesystem payload store (gzip on a block volume).
+type ExportStore interface {
+	Write(ctx context.Context, objectKey string, raw []byte) error
+	Read(ctx context.Context, objectKey string) ([]byte, error)
+}
