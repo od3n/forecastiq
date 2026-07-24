@@ -30,6 +30,11 @@ jobs:
         run: npm ci
       - name: Audit (production deps; high+ blocks)
         run: npm audit --omit=dev --audit-level=high
+      - name: Regenerate API client from OpenAPI (drift gate)
+        run: |
+          npm run gen:api
+          git diff --exit-code -- lib/api/generated.ts \
+            || (echo "web/lib/api/generated.ts is stale — run 'npm run gen:api' and commit" && exit 1)
       - name: Lint
         run: npm run lint
       - name: Typecheck

@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:api": "openapi-typescript ../api/openapi/openapi.json -o lib/api/generated.ts"
   },
   "dependencies": {
     "next": "15.5.21",
@@ -20,6 +21,7 @@
     "@types/react-dom": "19.0.2",
     "eslint": "8.57.0",
     "eslint-config-next": "15.5.21",
+    "openapi-typescript": "^7.4.4",
     "typescript": "5.5.3"
   },
   "comments": {
