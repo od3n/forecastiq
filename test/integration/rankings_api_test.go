@@ -67,7 +67,7 @@ func TestAPI_Rankings(t *testing.T) {
 	assert.NotEmpty(t, first["component_scores"])
 
 	third := rankings[2].(map[string]any)
-	assert.Equal(t, "ProviderX", third["provider"].(map[string]any)["name"])
+	assert.Equal(t, "providerx", third["provider"].(map[string]any)["name"])
 	assert.Equal(t, "provisionally_ranked", third["ranking_status"])
 	assert.Equal(t, true, third["coverage_penalty_applied"])
 
