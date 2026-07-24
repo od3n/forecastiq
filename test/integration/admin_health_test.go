@@ -78,19 +78,28 @@ func TestAPI_AdminHealthStatusFilter(t *testing.T) {
 	migrate(t, connStr)
 	e := newTestEnv(ctx, t, connStr, newSuccessAdapter(1))
 	e.seedCatalog(ctx, t)
-	doRequest(e, http.MethodPost, "/api/v1/admin/collections/trigger", adminToken, map[string]any{
+	require.Equal(t, http.StatusOK, doRequest(e, http.MethodPost, "/api/v1/admin/collections/trigger", adminToken, map[string]any{
 		"provider_id": catalogdomain.OpenMeteoProviderID.String(),
 		"location_id": catalogdomain.JohorBahruLocationID.String(),
-	})
+	}).Code)
 
-	// The just-collected cell is fresh; filtering to stale yields no cells.
-	rec := doRequest(e, http.MethodGet, "/api/v1/admin/health?status=stale", adminToken, nil)
+	// Read the cell's actual freshness state, then prove the filter keeps it and
+	// a different state excludes it (deterministic regardless of the wall clock).
+	rec := doRequest(e, http.MethodGet, "/api/v1/admin/health", adminToken, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
 	cells := decodeEnvelope(t, rec)["data"].(map[string]any)["cells"].([]any)
-	assert.Empty(t, cells)
+	require.GreaterOrEqual(t, len(cells), 1)
+	state := cells[0].(map[string]any)["freshness"].(map[string]any)["state"].(string)
 
-	rec = doRequest(e, http.MethodGet, "/api/v1/admin/health?status=fresh", adminToken, nil)
+	rec = doRequest(e, http.MethodGet, "/api/v1/admin/health?status="+state, adminToken, nil)
 	require.Equal(t, http.StatusOK, rec.Code)
-	cells = decodeEnvelope(t, rec)["data"].(map[string]any)["cells"].([]any)
-	assert.GreaterOrEqual(t, len(cells), 1)
+	assert.GreaterOrEqual(t, len(decodeEnvelope(t, rec)["data"].(map[string]any)["cells"].([]any)), 1)
+
+	other := "stale"
+	if state == "stale" {
+		other = "fresh"
+	}
+	rec = doRequest(e, http.MethodGet, "/api/v1/admin/health?status="+other, adminToken, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, decodeEnvelope(t, rec)["data"].(map[string]any)["cells"].([]any))
 }

@@ -25,7 +25,7 @@ func NewHealthRepository() *HealthRepository { return &HealthRepository{} }
 func (r *HealthRepository) Cells(ctx context.Context, tx dbtx.DBTX, now time.Time) ([]admin.CellHealth, error) {
 	rows, err := tx.Query(ctx,
 		`SELECT p.id, p.name, p.slug, l.id, l.name,
-		        (SELECT max(fc.requested_at) FROM forecast_collections fc
+		        (SELECT max(fc.completed_at) FROM forecast_collections fc
 		           WHERE fc.provider_id = p.id AND fc.location_id = l.id
 		             AND fc.collection_status IN ('success','partial')) AS last_success,
 		        (SELECT fc.collection_status FROM forecast_collections fc
