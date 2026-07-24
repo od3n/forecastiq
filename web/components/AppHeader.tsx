@@ -29,6 +29,9 @@ function HeaderInner() {
         <Link href="/settings" className={styles.navLink}>
           Settings
         </Link>
+        <Link href="/admin/health" className={styles.navLink}>
+          Admin
+        </Link>
       </nav>
       <span className={styles.spacer} />
       <LocationSelector
