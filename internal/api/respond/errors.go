@@ -137,7 +137,8 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 	}
 
 	if errors.Is(err, catalogdomain.ErrNotFound) || errors.Is(err, collectiondomain.ErrNotFound) ||
-		errors.Is(err, identitydomain.ErrUserNotFound) || errors.Is(err, identitydomain.ErrKeyNotFound) {
+		errors.Is(err, identitydomain.ErrUserNotFound) || errors.Is(err, identitydomain.ErrKeyNotFound) ||
+		errors.Is(err, identitydomain.ErrExportNotFound) {
 		p.Type = errorBase + "not_found"
 		p.Title = "Not Found"
 		p.Status = http.StatusNotFound
@@ -194,6 +195,23 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		p.Title = "Self-Lockout Prevented"
 		p.Status = http.StatusConflict
 		p.Detail = "You cannot disable or delete your own admin account."
+		return p.Status, p
+	}
+
+	if errors.Is(err, identitydomain.ErrExportInProgress) {
+		p.Type = errorBase + "conflict"
+		p.Title = "Export In Progress"
+		p.Status = http.StatusConflict
+		p.Detail = "An export is already in progress for this user."
+		p.Retryable = true
+		return p.Status, p
+	}
+
+	if errors.Is(err, identitydomain.ErrExportExpired) {
+		p.Type = errorBase + "gone"
+		p.Title = "Export Expired"
+		p.Status = http.StatusGone
+		p.Detail = "The export download window has closed; request a new export."
 		return p.Status, p
 	}
 

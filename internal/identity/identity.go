@@ -20,6 +20,8 @@ type (
 	User   = domain.User
 	APIKey = domain.APIKey
 	Role   = domain.Role
+	// ExportJob is the GDPR account-data export record (WP-19c).
+	ExportJob = domain.ExportJob
 )
 
 // Role values re-exported for consumer convenience.

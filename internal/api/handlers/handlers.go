@@ -76,6 +76,13 @@ type WebhookIngester interface {
 	Ingest(ctx context.Context, ev identity.WebhookEvent) error
 }
 
+// ExportManager creates + serves GDPR account-data exports (WP-19c).
+// Implemented by *identity.ExportService.
+type ExportManager interface {
+	RequestExport(ctx context.Context, actor identity.Principal, targetID uuid.UUID, ip string) (*identity.ExportJob, error)
+	DownloadExport(ctx context.Context, actor identity.Principal, jobID uuid.UUID) ([]byte, error)
+}
+
 // Handlers bundles the module services the slice endpoints need.
 type Handlers struct {
 	Locations         catalog.LocationManager
@@ -95,6 +102,7 @@ type Handlers struct {
 	UserAdmin         UserAdmin
 	Webhook           WebhookIngester
 	WebhookSecret     string
+	Exports           ExportManager
 	Health            *health.Checker
 	Logger            *slog.Logger
 }
