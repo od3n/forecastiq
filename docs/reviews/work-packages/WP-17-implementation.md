@@ -59,7 +59,7 @@ Full `go test -race ./internal/... ./adapters/...` green; `gofmt`/`go vet`/`gola
 
 ## 7. CI evidence
 
-_To be captured on the pushed branch (six mandatory jobs on the exact code+test SHA); recorded here and in the registry once green._
+Branch pushed; PR #15 → `main` triggered CI run **30061310556** (event `pull_request`) **success** on head SHA `9531e56eea0a6c860c1b0c2e43d0f17cf698111a` (`9531e56`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == `git ls-remote origin` == CI head SHA. `backend-integration` ran the `/accuracy` tz-bucketing tests against real PostgreSQL 16 (tz-aligned buckets, UTC bucketing, hollow points, bound rejection). Green on the first run.
 
 ## 8. Deviations
 
