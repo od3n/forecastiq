@@ -57,6 +57,12 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 	{
 		v1.GET("/openapi.json", serveOpenAPI)
 
+		// Signed auth-provider webhook receiver (public route, HMAC-gated;
+		// audit-requirements §5). Mounted only when a secret is configured.
+		if h.WebhookSecret != "" {
+			v1.POST("/auth/webhook", h.AuthWebhook)
+		}
+
 		// Public catalog + data reads (cached: locations/providers class 300 s).
 		v1.GET("/locations", catalogCache, h.ListLocations)
 		v1.GET("/locations/:id", catalogCache, h.GetLocation)

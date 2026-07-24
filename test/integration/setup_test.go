@@ -56,6 +56,10 @@ import (
 	"github.com/forecastiq/forecastiq/migrations"
 )
 
+// testWebhookSecret is the HMAC secret the test router mounts the auth-webhook
+// receiver with (WP-19b).
+const testWebhookSecret = "test-webhook-secret"
+
 // testConfig builds a minimal config for the test pool.
 func testConfig(connStr string) config.Config {
 	return config.Config{
@@ -315,7 +319,9 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
 		AdminHealthReader: adminHealth, Audit: auditReader, Recompute: recompute,
 		Users: identityUsers, Keys: identityKeys, UserAdmin: adminUsers,
-		Health: checker, Logger: logger,
+		Webhook:       identity.NewWebhookService(userRepo, tx, pool, recorder, clk, logger),
+		WebhookSecret: testWebhookSecret,
+		Health:        checker, Logger: logger,
 	}
 	limiter := ratelimit.NewKeyedLimiter(1000, 1000, clk)
 	router := api.NewRouter(h, m, logger, api.RouterConfig{

@@ -70,6 +70,12 @@ type UserAdmin interface {
 	Delete(ctx context.Context, actor identity.Principal, targetID uuid.UUID, selfService bool, ip string) error
 }
 
+// WebhookIngester records a verified auth-provider webhook event into the audit
+// trail (WP-19b). Implemented by *identity.WebhookService.
+type WebhookIngester interface {
+	Ingest(ctx context.Context, ev identity.WebhookEvent) error
+}
+
 // Handlers bundles the module services the slice endpoints need.
 type Handlers struct {
 	Locations         catalog.LocationManager
@@ -87,6 +93,8 @@ type Handlers struct {
 	Users             UserProfile
 	Keys              APIKeyManager
 	UserAdmin         UserAdmin
+	Webhook           WebhookIngester
+	WebhookSecret     string
 	Health            *health.Checker
 	Logger            *slog.Logger
 }

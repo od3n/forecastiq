@@ -252,7 +252,9 @@ func buildApp(ctx context.Context) (*App, error) {
 		Collector: collector, Replayer: collector, Reader: reader, Analysis: analysisRead,
 		AdminHealthReader: adminHealth, Audit: auditReader,
 		Users: identityUsers, Keys: identityKeys, UserAdmin: adminUsers,
-		Health: checker, Logger: logger,
+		Webhook:       identity.NewWebhookService(userRepo, tx, pool, recorder, clk, logger),
+		WebhookSecret: cfg.AuthWebhookSecret,
+		Health:        checker, Logger: logger,
 	}
 	router := api.NewRouter(h, m, logger, api.RouterConfig{
 		Auth:             api.Auth{Users: identityUsers, Keys: identityKeys},
