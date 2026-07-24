@@ -28,7 +28,7 @@ type RankingReader interface {
 	Methodology() analysisdomain.MethodologyDoc
 	LocationSummary(ctx context.Context, locationID uuid.UUID, horizonMinutes int) (*analysis.LocationSummary, error)
 	ProviderSummary(ctx context.Context, providerID uuid.UUID) (*analysis.ProviderSummary, error)
-	Trends(ctx context.Context, f analysisports.TrendFilter) (*analysis.TrendsResult, error)
+	Trends(ctx context.Context, f analysisports.TrendFilter, loc *time.Location) (*analysis.TrendsResult, error)
 	ForecastComparison(ctx context.Context, q analysis.ComparisonQuery) (*analysis.ComparisonResult, error)
 }
 

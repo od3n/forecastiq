@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -264,33 +265,133 @@ type TrendsResult struct {
 	LastPeriodEnd *time.Time
 }
 
-// Trends reads the metric buckets for a filter and groups them into per-provider
-// series (hollow points preserved: every bucket carries its sample_count).
-func (s *ReadService) Trends(ctx context.Context, f ports.TrendFilter) (*TrendsResult, error) {
-	buckets, err := s.repo.AccuracyTrends(ctx, s.pool, f)
+// Trends reads the metric span-rows for a filter and groups them into per-
+// provider series, re-bucketed into the requested timezone (WP-17): buckets are
+// aligned to tz-local day/week/month boundaries — the presentation-layer
+// equivalent of date_trunc(granularity, period_start AT TIME ZONE tz), applied
+// post-scan on ≤ 365 rows (query doc §bucketing). Metric values remain the
+// UTC-computed aggregates (methodology §3.1 matches in UTC); the tz alignment is
+// display-only (BR-TZ-02..05). Where a tz bucket spans multiple stored rows the
+// values combine by sample-count-weighted mean (CI dropped); the common daily
+// case is a 1:1 relabel that preserves value + CI. Hollow points (sample_count
+// 0, value nil) are preserved.
+func (s *ReadService) Trends(ctx context.Context, f ports.TrendFilter, loc *time.Location) (*TrendsResult, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+	rows, err := s.repo.AccuracyTrends(ctx, s.pool, f)
 	if err != nil {
 		return nil, err
 	}
-	byProvider := map[uuid.UUID]*TrendSeries{}
+	byProvider := map[uuid.UUID]*trendGrouping{}
 	var order []uuid.UUID
-	res := &TrendsResult{HasData: len(buckets) > 0}
-	for _, b := range buckets {
-		sr, ok := byProvider[b.ProviderID]
+	res := &TrendsResult{HasData: len(rows) > 0}
+	for _, b := range rows {
+		g, ok := byProvider[b.ProviderID]
 		if !ok {
-			sr = &TrendSeries{ProviderID: b.ProviderID}
-			byProvider[b.ProviderID] = sr
+			g = newTrendGrouping()
+			byProvider[b.ProviderID] = g
 			order = append(order, b.ProviderID)
 		}
-		sr.Buckets = append(sr.Buckets, b)
-		if res.LastPeriodEnd == nil || b.PeriodEnd.After(*res.LastPeriodEnd) {
-			pe := b.PeriodEnd
-			res.LastPeriodEnd = &pe
-		}
+		g.add(b, loc, f.Aggregation)
 	}
 	for _, id := range order {
-		res.Series = append(res.Series, *byProvider[id])
+		buckets := byProvider[id].buckets()
+		res.Series = append(res.Series, TrendSeries{ProviderID: id, Buckets: buckets})
+		if n := len(buckets); n > 0 {
+			if end := buckets[n-1].PeriodEnd; res.LastPeriodEnd == nil || end.After(*res.LastPeriodEnd) {
+				pe := end
+				res.LastPeriodEnd = &pe
+			}
+		}
 	}
 	return res, nil
+}
+
+// trendBucketAcc accumulates the stored rows that fall in one tz bucket.
+type trendBucketAcc struct {
+	start  time.Time
+	end    time.Time
+	sumVW  float64 // Σ value·sample_count (sample-count-weighted)
+	sumW   float64 // Σ sample_count over rows with a non-null value
+	sample int
+	n      int
+	single *ports.TrendBucket
+}
+
+// trendGrouping re-buckets one provider's stored rows into tz-aligned buckets.
+type trendGrouping struct {
+	by    map[int64]*trendBucketAcc
+	order []int64
+}
+
+func newTrendGrouping() *trendGrouping {
+	return &trendGrouping{by: map[int64]*trendBucketAcc{}}
+}
+
+func (g *trendGrouping) add(b *ports.TrendBucket, loc *time.Location, aggregation string) {
+	start, end := truncToBucket(b.PeriodStart, loc, aggregation)
+	key := start.UnixNano()
+	a, ok := g.by[key]
+	if !ok {
+		a = &trendBucketAcc{start: start, end: end}
+		g.by[key] = a
+		g.order = append(g.order, key)
+	}
+	a.n++
+	a.single = b
+	a.sample += b.SampleCount
+	if b.Value != nil {
+		w := float64(b.SampleCount)
+		if w == 0 {
+			w = 1 // a valued row with zero sample count still contributes its value
+		}
+		a.sumVW += *b.Value * w
+		a.sumW += w
+	}
+}
+
+func (g *trendGrouping) buckets() []*ports.TrendBucket {
+	sort.Slice(g.order, func(i, j int) bool { return g.order[i] < g.order[j] })
+	out := make([]*ports.TrendBucket, 0, len(g.order))
+	for _, key := range g.order {
+		a := g.by[key]
+		b := &ports.TrendBucket{
+			ProviderID:  a.single.ProviderID,
+			PeriodStart: a.start.UTC(),
+			PeriodEnd:   a.end.UTC(),
+			SampleCount: a.sample,
+		}
+		if a.n == 1 {
+			// 1:1 relabel — preserve the stored value + CI exactly.
+			b.Value, b.CILower, b.CIUpper = a.single.Value, a.single.CILower, a.single.CIUpper
+		} else if a.sumW > 0 {
+			v := a.sumVW / a.sumW
+			b.Value = &v // combined buckets drop CI (not recoverable from row values)
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+// truncToBucket returns the tz-local bucket [start, end) containing t for the
+// aggregation granularity (daily/weekly/monthly). Week starts Monday. DST and
+// variable month length are handled by time.AddDate normalization.
+func truncToBucket(t time.Time, loc *time.Location, aggregation string) (start, end time.Time) {
+	lt := t.In(loc)
+	switch aggregation {
+	case "weekly":
+		back := (int(lt.Weekday()) + 6) % 7 // days since Monday
+		start = time.Date(lt.Year(), lt.Month(), lt.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -back)
+		end = start.AddDate(0, 0, 7)
+	case "monthly":
+		start = time.Date(lt.Year(), lt.Month(), 1, 0, 0, 0, 0, loc)
+		end = start.AddDate(0, 1, 0)
+	default: // daily
+		start = time.Date(lt.Year(), lt.Month(), lt.Day(), 0, 0, 0, 0, loc)
+		end = start.AddDate(0, 0, 1)
+	}
+	return start, end
 }
 
 // ── Forecast-vs-Actual (S-05 forecast-comparison) ──────────────────────

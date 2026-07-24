@@ -268,7 +268,8 @@ func (h *Handlers) AccuracyTrends(c *gin.Context) {
 		return
 	}
 	tz := c.DefaultQuery("tz", "UTC")
-	if _, terr := time.LoadLocation(tz); terr != nil {
+	loc, terr := time.LoadLocation(tz)
+	if terr != nil {
 		respond.Error(c, &fieldErr{"tz", "must be a valid IANA timezone"}, respond.RequestID(c), c.Request.URL.Path)
 		return
 	}
@@ -322,7 +323,7 @@ func (h *Handlers) AccuracyTrends(c *gin.Context) {
 	}
 	f.ProviderID = pid // nil when absent (all providers)
 
-	res, err := h.Analysis.Trends(c.Request.Context(), f)
+	res, err := h.Analysis.Trends(c.Request.Context(), f, loc)
 	if err != nil {
 		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
 		return
