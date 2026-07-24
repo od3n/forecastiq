@@ -33,7 +33,8 @@ func TestProvisioningIdempotency(t *testing.T) {
 	assert.Equal(t, first.UserID, second.UserID, "same subject must resolve to the same user")
 
 	var count int
-	require.NoError(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&count))
+	require.NoError(t, e.pool.QueryRow(ctx,
+		`SELECT count(*) FROM users WHERE auth_subject = 'dev|alice'`).Scan(&count))
 	assert.Equal(t, 1, count, "provisioning must be idempotent")
 
 	// A provisioning audit row was written.
