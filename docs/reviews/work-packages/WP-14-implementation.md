@@ -70,11 +70,7 @@ Adds migration `20260801000010` (up + down): `ranking_status` enum, `provider_ra
 
 ## 8. CI evidence
 
-```text
-PENDING — branch not yet pushed. The six mandatory jobs must be captured green
-on the pushed head SHA (migrations applies 20260801000010; backend-integration
-runs the §8 worked-example + supersede ranking tests against real PG16).
-```
+Branch pushed; PR #12 → `main` triggered CI run **30055978366** (event `pull_request`) **success** on head SHA `04695ede2d6ea10bf86761e8be64455591599c6f` (`04695ed`) with all six mandatory jobs green (`backend-checks`, `backend-integration`, `migrations`, `api-contract`, `security`, `image`), none skipped/cancelled; local == remote tip == CI head SHA. The `migrations` job applied `20260801000010`; `backend-integration` ran the §8 worked-example + supersede ranking tests against real PostgreSQL 16. One earlier integration failure was a test-harness-only FK gap (seedCatalog seeds only Open-Meteo) fixed in `04695ed`; product ranking code unchanged.
 
 ## 9. Files changed
 
@@ -107,6 +103,6 @@ Acceptance State: Not Accepted (pending pushed-branch CI + Delivery Review Board
 ## 12. Recommended next action
 
 ```text
-Push feature/wp14-provider-ranking, capture the six mandatory CI jobs green on
-the head SHA, then convene the Delivery Review Board for WP-14.
+Convene the Delivery Review Board for WP-14. CI evidence is captured (§8):
+run 30055978366 on head SHA 04695ed, six mandatory jobs green.
 ```
