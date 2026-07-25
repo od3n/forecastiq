@@ -38,7 +38,7 @@ type RouterConfig struct {
 func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cfg RouterConfig) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(Recovery(logger), RequestID(), RequestLogger(logger), Metrics(m), CORS(cfg.CORSAllowOrigins))
+	r.Use(Recovery(logger), RequestID(), SecurityHeaders(), RequestBodyLimit(1<<20), RequestLogger(logger), Metrics(m), CORS(cfg.CORSAllowOrigins))
 
 	clk := cfg.Clock
 	if clk == nil {
