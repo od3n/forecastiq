@@ -1,0 +1,20 @@
+# ForecastIQ — Terraform Variables Template
+# Copy to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars (it is gitignored).
+#
+# Secrets can alternatively be supplied via environment variables:
+#   export TF_VAR_cloudflare_api_token="..."
+#   export TF_VAR_neon_api_key="..."
+
+# Cloudflare — create an API token with DNS:Edit permission for your zone.
+cloudflare_api_token = "REPLACE_ME"
+cloudflare_zone_id   = "REPLACE_ME"
+
+# Neon — create an API key at https://console.neon.tech/app/settings/api-keys
+neon_api_key = "REPLACE_ME"
+
+# VPS public IPv4 (Hetzner Cloud console → server → networking)
+vps_ip = "203.0.113.1"
+
+# Base domain (without subdomain prefix)
+domain = "forecastiq.example"

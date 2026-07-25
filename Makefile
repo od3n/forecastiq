@@ -162,7 +162,20 @@ docs-check: ## CI gate: committed OpenAPI spec must be valid
 docker-build: ## Build the production (distroless) image
 	$(DOCKER) build -t forecastiq:$(VERSION) .
 
+# ── Deploy ────────────────────────────────────────────────────────────
+.PHONY: deploy-release
+deploy-release: ## Build a release artifact (linux/amd64) with checksums
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/forecastiq $(APP_PKG)
+	sha256sum $(BIN_DIR)/forecastiq > checksums.txt
+	@echo "Release artifact: $(BIN_DIR)/forecastiq ($(VERSION))"
+	@echo "Checksums: checksums.txt"
+
+.PHONY: deploy-smoke
+deploy-smoke: ## Run smoke tests against a running instance (default: localhost:8080)
+	@bash deploy/scripts/smoke-test.sh $(SMOKE_URL)
+
 # ── Housekeeping ──────────────────────────────────────────────────────
 .PHONY: clean
 clean: ## Remove build/test artifacts
-	rm -rf $(BIN_DIR) coverage /tmp/fiq-openapi
+	rm -rf $(BIN_DIR) coverage /tmp/fiq-openapi checksums.txt

@@ -130,3 +130,119 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build production image (distroless)
         run: docker build --target prod -t forecastiq:ci .
+      - name: Trivy image scan (critical blocks)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: forecastiq:ci
+          severity: CRITICAL
+          exit-code: 1
+
+  # ── Main branch only: build release artifact ─────────────────────────────
+  build-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend-checks, backend-integration, migrations, api-contract, security, image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.12"
+          cache: true
+      - name: Build production binary (linux/amd64)
+        env:
+          VERSION: ${{ github.ref_name }}-${{ github.run_number }}
+          COMMIT: ${{ github.sha }}
+          BUILDDATE: ${{ github.event.head_commit.timestamp }}
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w \
+              -X github.com/forecastiq/forecastiq/internal/platform/buildinfo.Version=${VERSION} \
+              -X github.com/forecastiq/forecastiq/internal/platform/buildinfo.Commit=${COMMIT} \
+              -X github.com/forecastiq/forecastiq/internal/platform/buildinfo.BuildDate=${BUILDDATE}" \
+            -o forecastiq ./cmd/forecastiq
+      - name: Generate checksums
+        run: sha256sum forecastiq > checksums.txt
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forecastiq-release
+          path: |
+            forecastiq
+            checksums.txt
+            migrations/
+            deploy/
+          retention-days: 90
+
+  # ── Main branch only: deploy to production VPS ──────────────────────────
+  deploy-api:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-release]
+    runs-on: ubuntu-latest
+    environment: production  # manual approval gate
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: forecastiq-release
+      - name: Verify checksums
+        run: sha256sum -c checksums.txt
+      - name: Deploy to VPS
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER || 'deploy' }}
+          VERSION: ${{ github.ref_name }}-${{ github.run_number }}
+        run: |
+          # Configure SSH
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "StrictHostKeyChecking no" > ~/.ssh/config
+
+          # rsync artifact to VPS
+          RELEASE_DIR="/opt/forecastiq/releases/${VERSION}"
+          rsync -avz -e "ssh -i ~/.ssh/deploy_key" \
+            forecastiq checksums.txt migrations/ deploy/ \
+            "${VPS_USER}@${VPS_HOST}:${RELEASE_DIR}/"
+
+          # Execute deploy steps on VPS
+          ssh -i ~/.ssh/deploy_key "${VPS_USER}@${VPS_HOST}" bash <<REMOTE
+            set -euo pipefail
+            cd /opt/forecastiq
+
+            # Symlink swap
+            ln -sfn "${RELEASE_DIR}" /opt/forecastiq/current
+
+            # Install configs
+            cp ${RELEASE_DIR}/deploy/systemd/forecastiq.service /etc/systemd/system/
+            cp ${RELEASE_DIR}/deploy/caddy/Caddyfile /etc/caddy/Caddyfile
+            systemctl daemon-reload
+
+            # Run migrations
+            /opt/forecastiq/current/forecastiq migrate --confirm
+
+            # Restart service
+            systemctl restart forecastiq
+
+            # Wait for readyz (max 30s)
+            READY=0
+            for i in \$(seq 1 30); do
+              if curl -sf http://127.0.0.1:8080/readyz > /dev/null 2>&1; then
+                echo "readyz OK after \${i}s"
+                READY=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "\$READY" -ne 1 ]; then
+              echo "ERROR: /readyz not green after 30s — deploy failed"
+              exit 1
+            fi
+
+            # Smoke tests
+            bash ${RELEASE_DIR}/deploy/scripts/smoke-test.sh
+
+            # Cleanup: keep only last 5 releases
+            ls -1dt /opt/forecastiq/releases/*/ | tail -n +6 | xargs rm -rf || true
+
+            echo "Deploy complete: ${VERSION}"
+          REMOTE

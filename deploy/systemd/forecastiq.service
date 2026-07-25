@@ -1,0 +1,54 @@
+# ForecastIQ — systemd service unit
+# Deployed to /etc/systemd/system/forecastiq.service on the production VPS.
+#
+# Reference: docs/architecture/06-deployment-architecture.md §3
+# Reference: docs/operations/05-deployment-and-rollback.md §1
+#
+# The binary runs as the 'forecastiq' user with secrets loaded from
+# /etc/forecastiq/secrets.env (EnvironmentFile, 0600 root-only).
+# Graceful shutdown: SIGTERM → 30s drain → process exits.
+
+[Unit]
+Description=ForecastIQ API + Worker
+Documentation=https://github.com/forecastiq/forecastiq
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=forecastiq
+Group=forecastiq
+
+ExecStart=/opt/forecastiq/current/forecastiq serve --mode=all
+ExecStop=/bin/kill -SIGTERM $MAINPID
+
+# Graceful shutdown: 30s drain (app config) + 5s margin
+TimeoutStopSec=35
+
+Restart=always
+RestartSec=5
+
+# Secrets loaded from EnvironmentFile (never in repo/images/logs)
+EnvironmentFile=/etc/forecastiq/secrets.env
+
+# Runtime environment (non-secret)
+Environment=FIQ_ENV=production
+Environment=FIQ_LOG_FORMAT=json
+Environment=FIQ_LOG_LEVEL=info
+Environment=FIQ_HTTP_ADDR=127.0.0.1:8080
+Environment=FIQ_METRICS_ADDR=127.0.0.1:9090
+Environment=FIQ_PAYLOAD_STORE_DIR=/var/lib/forecastiq/payloads
+Environment=FIQ_BACKUP_STATUS_FILE=/var/lib/forecastiq/backups/status.json
+
+WorkingDirectory=/opt/forecastiq
+LimitNOFILE=65535
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/forecastiq/payloads /var/lib/forecastiq/backups
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
