@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   title: "ForecastIQ",
   description:
     "ForecastIQ measures forecast accuracy. We don't deliver weather forecasts.",
+  icons: { icon: "/favicon.ico" },
+  viewport: "width=device-width, initial-scale=1",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

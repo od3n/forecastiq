@@ -48,3 +48,14 @@ jobs:
           if grep -rIE "service_role|SERVICE_ROLE_KEY" out; then
             echo "service-role key leaked into the static bundle" && exit 1
           fi
+      - name: Bundle size guard (full export < 4 MB)
+        run: |
+          SIZE=$(du -sb out | cut -f1)
+          echo "Export size: $SIZE bytes"
+          if [ "$SIZE" -gt 4194304 ]; then
+            echo "Static export exceeds 4 MB budget" && exit 1
+          fi
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: E2E critical flows (Playwright)
+        run: npm run e2e
