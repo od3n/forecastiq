@@ -1,0 +1,52 @@
+# ForecastIQ — SLO Recording Rules
+# Reference: docs/operations/02-sli-slo.md §4
+# Format: Prometheus recording rules (Grafana Cloud compatible)
+#
+# These rules pre-compute SLO indicators for dashboard display and burn-rate
+# alerting. They run within Grafana Cloud's hosted Prometheus ruler.
+
+groups:
+  - name: forecastiq.slo
+    interval: 1m
+    rules:
+      # Availability: proportion of successful /healthz probes over 30 days.
+      - record: forecastiq:availability:ratio_rate30d
+        expr: avg_over_time(up{job="forecastiq"}[30d])
+
+      # Latency p95: 5-minute rolling 95th percentile of HTTP request duration.
+      - record: forecastiq:latency_p95:5m
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="forecastiq"}[5m])) by (le)
+          )
+
+      # Latency p50: 5-minute rolling 50th percentile.
+      - record: forecastiq:latency_p50:5m
+        expr: |
+          histogram_quantile(0.50,
+            sum(rate(http_request_duration_seconds_bucket{job="forecastiq"}[5m])) by (le)
+          )
+
+      # Collection success: ratio of completed slots over 30 days.
+      - record: forecastiq:collection_success:ratio_rate30d
+        expr: |
+          sum(rate(collection_attempts_total{job="forecastiq", status=~"success|partial"}[30d]))
+          / sum(rate(collection_attempts_total{job="forecastiq"}[30d]))
+
+      # Error budget burn rate: 6-hour window (2× threshold → warning).
+      - record: forecastiq:error_budget_burn:6h
+        expr: |
+          1 - (
+            sum(rate(http_requests_total{job="forecastiq", status_class!="5xx"}[6h]))
+            / sum(rate(http_requests_total{job="forecastiq"}[6h]))
+          )
+          / (1 - 0.995)
+
+      # Error budget burn rate: 1-hour window (10× threshold → critical page).
+      - record: forecastiq:error_budget_burn:1h
+        expr: |
+          1 - (
+            sum(rate(http_requests_total{job="forecastiq", status_class!="5xx"}[1h]))
+            / sum(rate(http_requests_total{job="forecastiq"}[1h]))
+          )
+          / (1 - 0.995)

@@ -1,13 +1,14 @@
 // Package metrics owns the Prometheus registry and the metric catalog
 // (observability architecture §3). Metrics are registered against a
-// dedicated registry (no global state) so tests stay isolated. The slice
-// instruments HTTP RED, collection, provider, circuit, condition-mapping,
-// and scheduler metrics; later work packages extend the catalog.
+// dedicated registry (no global state) so tests stay isolated. The full
+// catalog covers HTTP RED, collection, provider, circuit, condition-mapping,
+// observation, analysis engine, scheduler, and runtime metrics (WP-22).
 package metrics
 
 import (
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -60,6 +61,17 @@ type Metrics struct {
 	MissedSlots  *prometheus.CounterVec
 	SchedulerLag *prometheus.HistogramVec
 	JobDuration  *prometheus.HistogramVec
+
+	// Engine (WP-22, architecture §3.4)
+	EvaluationBacklog  prometheus.Gauge
+	EngineLag          prometheus.Gauge
+	RankingFreshness   *prometheus.GaugeVec
+	BatchDuration      *prometheus.HistogramVec
+
+	// Runtime (WP-22, architecture §3.6)
+	// Note: payload_volume_used_bytes and payload_volume_total_bytes are
+	// registered as GaugeFunc in the composition root (app.go) since they
+	// require the payloadStore reference for scrape-time reads.
 }
 
 // New builds and registers the metric catalog on a fresh registry.
@@ -192,6 +204,31 @@ func New() *Metrics {
 		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60},
 	}, []string{"job_type"})
 
+	// Engine metrics (architecture §3.4)
+	m.EvaluationBacklog = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "evaluation_backlog",
+		Help: "Matched pairs not yet aggregated into accuracy metrics.",
+	})
+
+	m.EngineLag = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "engine_lag_seconds",
+		Help: "Seconds since the last accuracy-metric batch completed (now − max calculated_at).",
+	})
+
+	m.RankingFreshness = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ranking_freshness_age_seconds",
+		Help: "Age of the newest ranking per location and horizon.",
+	}, []string{"location_id", "horizon_minutes"})
+
+	m.BatchDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "batch_duration_seconds",
+		Help:    "Duration of individual analysis batch sub-steps.",
+		Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600},
+	}, []string{"batch_type"})
+
+	// Runtime metrics (architecture §3.6)
+	// payload_volume_*_bytes registered as GaugeFunc in app.go (scrape-time reads).
+
 	reg.MustRegister(
 		m.HTTPRequestsTotal, m.HTTPRequestDuration, m.HTTPErrorsTotal,
 		m.CollectionAttempts, m.CollectionDuration, m.SnapshotsStored, m.RecordsRejected,
@@ -201,10 +238,17 @@ func New() *Metrics {
 		m.MatchesCreated, m.MatchingBacklog, m.MetricRowsWritten, m.RankingsPublished,
 		m.CacheHits, m.CacheMisses,
 		m.SlotsClaimed, m.MissedSlots, m.SchedulerLag, m.JobDuration,
+		m.EvaluationBacklog, m.EngineLag, m.RankingFreshness, m.BatchDuration,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	return m
+}
+
+// RegisterPoolCollector registers a custom collector that exposes pgxpool
+// connection-pool statistics as Prometheus metrics at scrape time.
+func (m *Metrics) RegisterPoolCollector(pool *pgxpool.Pool) {
+	m.Registry.MustRegister(newPoolCollector(pool))
 }
 
 // Handler returns the Prometheus exposition HTTP handler.

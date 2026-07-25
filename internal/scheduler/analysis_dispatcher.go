@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
+
+	"github.com/forecastiq/forecastiq/internal/platform/metrics"
 )
 
 // BatchMatcher runs one matching batch, returning pairs created. Implemented by
@@ -31,12 +34,13 @@ type AnalysisDispatcher struct {
 	matcher    BatchMatcher
 	aggregator BatchAggregator
 	ranker     BatchRanker
+	metrics    *metrics.Metrics
 	logger     *slog.Logger
 }
 
 // NewAnalysisDispatcher wires an AnalysisDispatcher.
-func NewAnalysisDispatcher(matcher BatchMatcher, aggregator BatchAggregator, ranker BatchRanker, logger *slog.Logger) *AnalysisDispatcher {
-	return &AnalysisDispatcher{matcher: matcher, aggregator: aggregator, ranker: ranker, logger: logger}
+func NewAnalysisDispatcher(matcher BatchMatcher, aggregator BatchAggregator, ranker BatchRanker, m *metrics.Metrics, logger *slog.Logger) *AnalysisDispatcher {
+	return &AnalysisDispatcher{matcher: matcher, aggregator: aggregator, ranker: ranker, metrics: m, logger: logger}
 }
 
 // Dispatch implements Dispatcher: match → aggregate → rank. Returns the total
@@ -54,20 +58,44 @@ func (d *AnalysisDispatcher) Recompute(ctx context.Context) (int, error) {
 	return d.run(ctx)
 }
 
-// run executes match → aggregate → rank sequentially, returning the combined
-// records-affected count.
+// run executes match → aggregate → rank sequentially, recording per-step
+// durations on batch_duration_seconds and updating engine lag after completion.
 func (d *AnalysisDispatcher) run(ctx context.Context) (int, error) {
+	var total int
+
+	// Matching
+	start := time.Now()
 	pairs, err := d.matcher.MatchBatch(ctx)
+	d.metrics.BatchDuration.WithLabelValues("matching").Observe(time.Since(start).Seconds())
+	total += pairs
 	if err != nil {
-		return pairs, err
+		return total, err
 	}
+
+	// Aggregation
+	start = time.Now()
 	rows, err := d.aggregator.AggregateBatch(ctx)
+	d.metrics.BatchDuration.WithLabelValues("aggregation").Observe(time.Since(start).Seconds())
+	total += rows
 	if err != nil {
-		return pairs + rows, err
+		return total, err
 	}
+
+	// Ranking
+	start = time.Now()
 	rankings, err := d.ranker.RankBatch(ctx)
+	d.metrics.BatchDuration.WithLabelValues("ranking").Observe(time.Since(start).Seconds())
+	total += rankings
 	if err != nil {
-		return pairs + rows + rankings, err
+		return total, err
 	}
-	return pairs + rows + rankings, nil
+
+	// Update engine lag: zero immediately after a successful batch (the next
+	// scrape will see the just-completed state; a real lag only develops when
+	// the batch hasn't run for a while, which the admin health service computes
+	// from the DB as the authoritative source). Setting 0 here signals "batch
+	// just ran" to the Prometheus-side alerting.
+	d.metrics.EngineLag.Set(0)
+
+	return total, nil
 }
