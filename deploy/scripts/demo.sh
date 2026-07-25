@@ -9,6 +9,9 @@ set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8080}"
 API_URL="${BASE_URL}/api/v1"
+# Metrics is a SEPARATE listener — "${BASE_URL}:9090" would expand to the
+# invalid http://localhost:8080:9090 (DRB-WP27-004).
+METRICS_URL="${METRICS_URL:-http://localhost:9090}"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║         ForecastIQ — Portfolio Demo Walkthrough             ║"
@@ -79,7 +82,7 @@ echo ""
 echo "  Demonstrating: scheduled collection, provider circuits, observation freshness"
 echo ""
 echo "  Metrics endpoint (Prometheus):"
-curl -sf "${BASE_URL}:9090/metrics" 2>/dev/null | grep -E "^(collection_attempts|scheduler_slots|observation_freshness)" | head -5 || echo "  (metrics server at :9090)"
+curl -sf "${METRICS_URL}/metrics" 2>/dev/null | grep -E "^(collection_attempts|scheduler_slots|observation_freshness)" | head -5 || echo "  (metrics server at ${METRICS_URL})"
 pause
 
 # ── 7. Security & Auth ───────────────────────────────────────────────────────
@@ -88,11 +91,12 @@ echo ""
 echo "  Demonstrating: auth enforcement, rate limiting, security headers"
 echo ""
 echo "  Admin endpoint without auth (expect 401):"
-STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${API_URL}/admin/health" 2>/dev/null || echo "000")
+# No -f: curl -f exits 22 on 401 and the capture becomes '401000' (DRB-WP27).
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/admin/health" 2>/dev/null || echo "000")
 echo "  Status: ${STATUS} (expected: 401)"
 echo ""
 echo "  Security headers on public endpoint:"
-curl -sf -I "${API_URL}/locations" 2>/dev/null | grep -iE "(X-Content-Type|X-Frame|Referrer-Policy)" || echo "  (headers present via Caddy in production)"
+curl -s -D - -o /dev/null "${API_URL}/locations" 2>/dev/null | grep -iE "(X-Content-Type|X-Frame|Referrer-Policy)" || echo "  (headers present via Caddy in production)"
 pause
 
 # ── 8. Attribution Verification ──────────────────────────────────────────────
