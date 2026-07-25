@@ -12,6 +12,9 @@ export interface ProviderEntry {
   /** If the provider is actively collecting, a credential must be configured. */
   collecting_since?: string | null;
   minute_offset: number;
+  /** Operational configuration id (PATCH target) and its status. */
+  config_id?: string;
+  config_status?: string;
 }
 
 export interface ProviderAdminTableProps {

@@ -1,13 +1,38 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useApi } from "@/lib/api/hooks";
+import { apiBase } from "@/lib/api/client";
 import { ProviderAdminTable, type ProviderEntry } from "@/components/ProviderAdminTable";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
 
-interface ProvidersData {
-  providers: ProviderEntry[];
+interface ApiProvider {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  collecting_since?: string | null;
+}
+
+interface ProvidersData { providers: ApiProvider[]; }
+
+interface ApiProviderConfig {
+  id: string;
+  provider_id: string;
+  status: string;
+  has_credential: boolean;
+  collection_schedule: { interval: string; minute_offset: number };
+}
+
+interface ConfigsData { configurations: ApiProviderConfig[]; }
+
+// Authenticated fetch for admin mutations (dev token in local dev).
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = process.env.NEXT_PUBLIC_DEV_TOKEN;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
 }
 
 // S-11 Admin Providers (doc 02 §4.11). Enable/disable + config edit (minute
@@ -15,24 +40,51 @@ interface ProvidersData {
 // secrets per BR-08). The admin layout handles the role guard.
 export default function AdminProvidersPage() {
   const { data: envelope, error, isLoading, mutate } = useApi<ProvidersData>("/providers");
+  const { data: configsEnv, mutate: mutateConfigs } = useApi<ConfigsData>("/admin/provider-configurations");
+
+  // Merge provider identity with its operational configuration.
+  const providers: ProviderEntry[] = useMemo(() => {
+    const configByProvider = new Map(
+      (configsEnv?.data?.configurations ?? []).map((c) => [c.provider_id, c]),
+    );
+    return (envelope?.data?.providers ?? []).map((p) => {
+      const cfg = configByProvider.get(p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        status: p.status,
+        has_credential: cfg?.has_credential ?? false,
+        collecting_since: p.collecting_since ?? null,
+        minute_offset: cfg?.collection_schedule?.minute_offset ?? 0,
+        config_id: cfg?.id,
+        config_status: cfg?.status,
+      };
+    });
+  }, [envelope, configsEnv]);
 
   const handleToggle = useCallback(async (id: string, newStatus: string) => {
-    await fetch(`/api/v1/admin/providers/${id}/status`, {
+    await fetch(`${apiBase}/admin/providers/${id}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ status: newStatus }),
     });
     mutate();
-  }, [mutate]);
+    mutateConfigs();
+  }, [mutate, mutateConfigs]);
 
-  const handleEditConfig = useCallback(async (id: string, minuteOffset: number) => {
-    await fetch(`/api/v1/admin/provider-configurations/${id}`, {
+  const handleEditConfig = useCallback(async (providerId: string, minuteOffset: number) => {
+    // The PATCH targets the configuration id, not the provider id.
+    const cfg = (configsEnv?.data?.configurations ?? []).find((c) => c.provider_id === providerId);
+    if (!cfg) return;
+    await fetch(`${apiBase}/admin/provider-configurations/${cfg.id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ minute_offset: minuteOffset }),
     });
     mutate();
-  }, [mutate]);
+    mutateConfigs();
+  }, [configsEnv, mutate, mutateConfigs]);
 
   if (isLoading) {
     return (
@@ -51,8 +103,6 @@ export default function AdminProvidersPage() {
       </section>
     );
   }
-
-  const providers = envelope?.data?.providers ?? [];
 
   return (
     <section aria-labelledby="providers-heading">
