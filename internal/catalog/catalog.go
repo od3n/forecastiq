@@ -101,6 +101,9 @@ type ProviderAdmin interface {
 // ConfigurationAdmin mutates operator-editable provider configuration (S-11).
 type ConfigurationAdmin interface {
 	UpdateConfiguration(ctx context.Context, id uuid.UUID, in UpdateConfigInput, actor Actor) (*domain.ProviderConfiguration, error)
+	// ListConfigurations returns all configurations (active + disabled) for
+	// the admin surface.
+	ListConfigurations(ctx context.Context) ([]*domain.ProviderConfiguration, error)
 }
 
 // ConfigurationManager reads provider operational configuration.
