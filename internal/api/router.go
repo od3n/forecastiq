@@ -38,7 +38,9 @@ type RouterConfig struct {
 func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cfg RouterConfig) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(Recovery(logger), RequestID(), SecurityHeaders(), RequestBodyLimit(1<<20), RequestLogger(logger), Metrics(m), CORS(cfg.CORSAllowOrigins))
+	// RequestBodyLimit runs after logger/metrics/CORS so 413 responses are
+	// logged, counted, and carry CORS headers (DRB-WP25 ordering finding).
+	r.Use(Recovery(logger), RequestID(), SecurityHeaders(), RequestLogger(logger), Metrics(m), CORS(cfg.CORSAllowOrigins), RequestBodyLimit(1<<20))
 
 	clk := cfg.Clock
 	if clk == nil {

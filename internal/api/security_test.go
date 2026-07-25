@@ -62,6 +62,39 @@ func TestRequestBodyLimit_AllowsSmall(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+// TestRequestBodyLimit_AllowsExactLimit is the DRB-WP25 off-by-one regression
+// test: a body of EXACTLY maxBytes must be readable to EOF without error
+// (http.MaxBytesReader is inclusive of the limit).
+func TestRequestBodyLimit_AllowsExactLimit(t *testing.T) {
+	const limit = 100
+	handler := api.RequestBodyLimit(limit)
+	w := performRequestWithBody(handler, "POST", "/test", strings.Repeat("x", limit))
+	assert.Equal(t, http.StatusOK, w.Code, "a body of exactly maxBytes must be accepted")
+}
+
+// TestRequestBodyLimit_StreamedOverflow verifies that a body exceeding the
+// limit WITHOUT a declared Content-Length (chunked) fails the read with a
+// MaxBytesError (mapped to 413 by callers via IsBodyTooLarge).
+func TestRequestBodyLimit_StreamedOverflow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	_, r := gin.CreateTestContext(w)
+	r.Use(api.RequestBodyLimit(50))
+	r.POST("/test", func(c *gin.Context) {
+		_, err := io.ReadAll(c.Request.Body)
+		if api.IsBodyTooLarge(err) {
+			c.Status(http.StatusRequestEntityTooLarge)
+			return
+		}
+		require.NoError(t, err)
+		c.Status(200)
+	})
+	req := httptest.NewRequest("POST", "/test", strings.NewReader(strings.Repeat("y", 200)))
+	req.ContentLength = -1 // simulate chunked (no declared length)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+}
+
 // TestCORS_RejectsUnknownOrigin verifies that non-allowlisted origins get no
 // CORS headers (threat model §15: insecure CORS).
 func TestCORS_RejectsUnknownOrigin(t *testing.T) {
@@ -141,7 +174,17 @@ func performRequestWithBody(mw gin.HandlerFunc, method, path, body string) *http
 	_, r := gin.CreateTestContext(w)
 	r.Use(mw)
 	r.Handle(method, path, func(c *gin.Context) {
-		_, _ = io.ReadAll(c.Request.Body)
+		// Surface read errors: a MaxBytesReader breach must yield 413, and any
+		// other unexpected read error must fail the request (not be discarded —
+		// the discarded error masked the DRB-WP25 off-by-one).
+		if _, err := io.ReadAll(c.Request.Body); err != nil {
+			if api.IsBodyTooLarge(err) {
+				c.Status(http.StatusRequestEntityTooLarge)
+			} else {
+				c.Status(http.StatusInternalServerError)
+			}
+			return
+		}
 		c.Status(200)
 	})
 	req := httptest.NewRequest(method, path, strings.NewReader(body))

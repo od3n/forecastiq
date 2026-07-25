@@ -1,6 +1,11 @@
 package api
 
-import "github.com/gin-gonic/gin"
+import (
+	"errors"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
 
 // SecurityHeaders adds defense-in-depth response headers at the application
 // layer (security architecture §4). Caddy is the primary enforcement point
@@ -36,44 +41,25 @@ func SecurityHeaders() gin.HandlerFunc {
 }
 
 // RequestBodyLimit enforces a maximum request body size (security architecture
-// §4: 1 MB). Requests exceeding the limit receive 413 Payload Too Large.
+// §4: 1 MB). Declared oversizes (Content-Length) are rejected immediately with
+// 413; chunked/streamed bodies are bounded via http.MaxBytesReader, whose
+// *http.MaxBytesError is mapped to 413 by MapBodyLimitError at read time.
+// A body of exactly maxBytes is allowed (MaxBytesReader is inclusive).
 func RequestBodyLimit(maxBytes int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.ContentLength > maxBytes {
-			c.AbortWithStatus(413)
+			c.AbortWithStatus(http.StatusRequestEntityTooLarge)
 			return
 		}
-		c.Request.Body = &limitedReader{c.Request.Body, maxBytes}
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 		c.Next()
 	}
 }
 
-// limitedReader wraps a reader to enforce byte limits; returns an error after
-// the limit is exceeded so partially-streamed large bodies are rejected.
-type limitedReader struct {
-	inner     interface{ Read([]byte) (int, error) }
-	remaining int64
+// IsBodyTooLarge reports whether err (from reading a request body) was caused
+// by the MaxBytesReader limit, so handlers/binding errors can map it to 413
+// instead of a generic 400.
+func IsBodyTooLarge(err error) bool {
+	var mbe *http.MaxBytesError
+	return errors.As(err, &mbe)
 }
-
-func (lr *limitedReader) Read(p []byte) (int, error) {
-	if lr.remaining <= 0 {
-		return 0, &bodyTooLargeError{}
-	}
-	if int64(len(p)) > lr.remaining {
-		p = p[:lr.remaining]
-	}
-	n, err := lr.inner.Read(p)
-	lr.remaining -= int64(n)
-	return n, err
-}
-
-func (lr *limitedReader) Close() error {
-	if closer, ok := lr.inner.(interface{ Close() error }); ok {
-		return closer.Close()
-	}
-	return nil
-}
-
-type bodyTooLargeError struct{}
-
-func (e *bodyTooLargeError) Error() string { return "request body too large" }

@@ -79,9 +79,9 @@ fi
 echo ""
 echo "[4/5] OWASP checklist (automated checks)..."
 
-# Check no secrets in repo
+# Check no secrets in repo (grep -E for BSD/GNU portability; \| is GNU-only BRE)
 if command -v git &>/dev/null; then
-  SECRET_FILES=$(git -C "$(dirname "$0")/../.." ls-files | grep -iE "(secret|password|token|api.key)" | grep -v "example\|test\|fixture\|\.md\|\.go" || true)
+  SECRET_FILES=$(git -C "$(dirname "$0")/../.." ls-files | grep -iE "(secret|password|token|api.key)" | grep -vE "example|test|fixture|\.md|\.go" || true)
   check "no secret files in repo" "$([ -z "$SECRET_FILES" ] && echo true || echo false)"
 fi
 
@@ -90,11 +90,14 @@ if [ -f "$(dirname "$0")/../../.gitignore" ]; then
   check ".env in gitignore" "$(grep -q '\.env' "$(dirname "$0")/../../.gitignore" && echo true || echo false)"
 fi
 
-# Check security headers present
-HEADERS=$(curl -sf -I "${BASE_URL}/healthz" 2>/dev/null || echo "")
+# Check security headers present (GET with header dump — curl -I sends HEAD,
+# which Gin routes as 404, silently voiding the check; DRB-WP25 finding)
+HEADERS=$(curl -s -D - -o /dev/null "${BASE_URL}/healthz" 2>/dev/null || echo "")
 if [ -n "$HEADERS" ]; then
   check "X-Content-Type-Options header" "$(echo "$HEADERS" | grep -qi 'X-Content-Type-Options' && echo true || echo false)"
   check "X-Frame-Options header" "$(echo "$HEADERS" | grep -qi 'X-Frame-Options' && echo true || echo false)"
+else
+  check "security headers reachable" "false"
 fi
 
 # 5. Post-drill summary
