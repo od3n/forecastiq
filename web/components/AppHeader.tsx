@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useGlobalParams } from "@/lib/state/use-global-params";
 import { LocationSelector } from "./LocationSelector";
 import { HorizonSelector } from "./HorizonSelector";
@@ -10,6 +11,17 @@ import styles from "./AppHeader.module.css";
 // Inner header content (uses hooks; needs Suspense boundary for useSearchParams).
 function HeaderInner() {
   const { locationId, horizonMinutes, setParams } = useGlobalParams();
+  const pathname = usePathname();
+
+  // The FvA daily comparison always shows the full 24-hour day, so only +24h
+  // is selectable there; any other selection is clamped to 1440.
+  const isDailyComparison = pathname.startsWith("/forecast-comparison");
+  const allowedMinutes = isDailyComparison ? [1440] : undefined;
+  useEffect(() => {
+    if (isDailyComparison && horizonMinutes !== 1440) {
+      setParams({ horizon_minutes: "1440" });
+    }
+  }, [isDailyComparison, horizonMinutes, setParams]);
 
   return (
     <div className={styles.inner}>
@@ -22,6 +34,9 @@ function HeaderInner() {
         </Link>
         <Link href="/trends" className={styles.navLink}>
           Trends
+        </Link>
+        <Link href="/forecast-comparison" className={styles.navLink}>
+          Compare
         </Link>
         <Link href="/methodology" className={styles.navLink}>
           Methodology
@@ -41,6 +56,7 @@ function HeaderInner() {
       <HorizonSelector
         selected={horizonMinutes}
         onChange={(m) => setParams({ horizon_minutes: String(m) })}
+        allowedMinutes={allowedMinutes}
       />
       <Link href="/auth/signin" className={styles.account}>
         Sign in
