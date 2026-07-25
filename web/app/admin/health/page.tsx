@@ -15,6 +15,7 @@ interface ApiCell {
   location_name: string;
   last_success_at: string | null;
   last_status: string;
+  next_scheduled_at?: string | null;
   freshness: Freshness;
 }
 
@@ -65,7 +66,7 @@ export default function AdminHealthPage() {
       status: c.last_status,
       freshness: c.freshness?.state ?? "unavailable",
       circuit_state: circuitMap.get(c.provider.id) ?? "unknown",
-      next_scheduled_at: null,
+      next_scheduled_at: c.next_scheduled_at ?? null,
     }));
   }, [envelope]);
 
