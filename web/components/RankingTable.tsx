@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { StatusBadge, type RankingStatus } from "./StatusBadge";
 import { FreshnessBadge } from "./FreshnessBadge";
 import type { FreshnessState } from "@/lib/api/types";
@@ -71,7 +71,7 @@ export function RankingTable({ rankings, freshness, methodologyVersion }: Rankin
 function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; isExpanded: boolean; onToggle: () => void }) {
   const sampleBelowThreshold = r.sample_count < 30;
   return (
-    <>
+    <Fragment>
       <tr
         style={{ borderBottom: "1px solid var(--color-border)", cursor: "pointer", height: 44 }}
         onClick={onToggle}
@@ -83,7 +83,7 @@ function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; i
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
             aria-expanded={isExpanded}
             aria-label={`${isExpanded ? "Collapse" : "Expand"} ${r.provider_name}`}
-            style={{ background: "none", border: "none", cursor: "pointer", font: "inherit", fontFamily: "var(--font-data)", fontWeight: 500, padding: 0 }}
+            style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-data)", fontWeight: 500, padding: 0 }}
           >
             {r.rank ?? "\u2014"}
           </button>
@@ -121,6 +121,6 @@ function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; i
           </td>
         </tr>
       )}
-    </>
+    </Fragment>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { useGlobalParams } from "@/lib/state/use-global-params";
 import { useApi } from "@/lib/api/hooks";
 import { RankingTable, type RankingEntry } from "@/components/RankingTable";
@@ -12,8 +12,20 @@ import { PartialWarnings } from "@/components/PartialWarnings";
 import { AttributionFooter } from "@/components/AttributionFooter";
 import type { Freshness, Warning, Attribution } from "@/lib/api/types";
 
+interface ApiRanking {
+  rank: number | null;
+  provider: { id: string; name: string; slug: string };
+  composite_score: number | null;
+  ranking_status: string;
+  sample_count: number;
+  coverage: number | null;
+  reliability: number | null;
+  coverage_penalty_applied: boolean;
+  component_scores?: Record<string, number | null>;
+}
+
 interface RankingsData {
-  rankings: RankingEntry[];
+  rankings: ApiRanking[];
 }
 
 // S-01 Overview (Rankings). Displays the live ranking cohort for the selected
@@ -29,6 +41,25 @@ function OverviewContent() {
     : null;
 
   const { data: envelope, error, isLoading } = useApi<RankingsData>(path);
+
+  const rawRankings = envelope?.data?.rankings ?? [];
+  const rankings: RankingEntry[] = useMemo(() =>
+    rawRankings.map((r) => ({
+      rank: r.rank,
+      provider_id: r.provider.id,
+      provider_name: r.provider.name,
+      composite_score: r.composite_score,
+      ranking_status: r.ranking_status as RankingEntry["ranking_status"],
+      sample_count: r.sample_count,
+      coverage: r.coverage,
+      components: r.component_scores ?? undefined,
+      penalty_applied: r.coverage_penalty_applied,
+    })),
+  [rawRankings]);
+  const freshness = envelope?.freshness as Freshness | undefined;
+  const warnings = envelope?.warnings as Warning[] | undefined;
+  const attribution = envelope?.attribution as Attribution[] | undefined;
+  const methodology = envelope?.metadata?.methodology_version;
 
   // Loading state.
   if (isLoading) {
@@ -60,12 +91,6 @@ function OverviewContent() {
       </section>
     );
   }
-
-  const rankings = envelope?.data?.rankings ?? [];
-  const freshness = envelope?.freshness as Freshness | undefined;
-  const warnings = envelope?.warnings as Warning[] | undefined;
-  const attribution = envelope?.attribution as Attribution[] | undefined;
-  const methodology = envelope?.metadata?.methodology_version;
 
   // No locations selected (locationId null and no auto-select yet).
   if (!locationId) {

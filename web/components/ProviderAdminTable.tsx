@@ -8,7 +8,9 @@ export interface ProviderEntry {
   name: string;
   slug: string;
   status: string; // "active" | "disabled"
-  has_credential: boolean;
+  has_credential?: boolean;
+  /** If the provider is actively collecting, a credential must be configured. */
+  collecting_since?: string | null;
   minute_offset: number;
 }
 
@@ -50,8 +52,8 @@ export function ProviderAdminTable({ providers, onToggleStatus, onEditConfig }: 
                     {p.status}
                   </span>
                 </td>
-                <td style={{ padding: "var(--space-sm)", color: p.has_credential ? "var(--color-fresh)" : "var(--color-text-muted)" }}>
-                  {p.has_credential ? "Configured" : "Not set"}
+                <td style={{ padding: "var(--space-sm)", color: p.has_credential || p.collecting_since ? "var(--color-fresh)" : "var(--color-text-muted)" }}>
+                  {p.has_credential || p.collecting_since ? "Configured" : "Not required"}
                 </td>
                 <td style={{ padding: "var(--space-sm)", textAlign: "right", fontFamily: "var(--font-data)" }}>
                   {editing === p.id ? (
@@ -63,7 +65,7 @@ export function ProviderAdminTable({ providers, onToggleStatus, onEditConfig }: 
                   ) : (
                     <span>
                       {p.minute_offset}
-                      <button type="button" onClick={() => { setEditing(p.id); setEditOffset(p.minute_offset); }} aria-label={`Edit offset for ${p.name}`} style={{ marginLeft: "var(--space-xs)", background: "none", border: "none", color: "var(--color-primary)", cursor: "pointer", textDecoration: "underline", font: "inherit", fontSize: "var(--text-label)" }}>edit</button>
+                      <button type="button" onClick={() => { setEditing(p.id); setEditOffset(p.minute_offset); }} aria-label={`Edit offset for ${p.name}`} style={{ marginLeft: "var(--space-xs)", background: "none", border: "none", color: "var(--color-primary)", cursor: "pointer", textDecoration: "underline", fontFamily: "inherit", fontSize: "var(--text-label)" }}>edit</button>
                     </span>
                   )}
                 </td>

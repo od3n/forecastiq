@@ -1,13 +1,33 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useApi } from "@/lib/api/hooks";
 import { HealthGrid, type HealthCell } from "@/components/HealthGrid";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
+import type { Freshness } from "@/lib/api/types";
+
+import { apiBase } from "@/lib/api/client";
+
+interface ApiCell {
+  provider: { id: string; name: string; slug: string };
+  location_id: string;
+  location_name: string;
+  last_success_at: string | null;
+  last_status: string;
+  freshness: Freshness;
+}
+
+interface ApiCircuit {
+  provider_id: string;
+  provider_name: string;
+  state: string;
+  consecutive_failures: number;
+}
 
 interface HealthData {
-  cells: HealthCell[];
+  cells: ApiCell[];
+  circuits: ApiCircuit[];
 }
 
 // S-10 Admin Health (doc 02 §4.10). Auto-refreshes every 60s (no-store;
@@ -18,15 +38,36 @@ export default function AdminHealthPage() {
   });
 
   const handleRetry = useCallback(async (providerId: string, locationId: string) => {
+    const token = process.env.NEXT_PUBLIC_DEV_TOKEN;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
     try {
-      await fetch("/api/v1/admin/collections/trigger", {
+      await fetch(`${apiBase}/admin/collections/trigger`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ provider_id: providerId, location_id: locationId }),
       });
       mutate(); // Refresh after trigger.
     } catch { /* best-effort */ }
   }, [mutate]);
+
+  const cells: HealthCell[] = useMemo(() => {
+    const apiCells = envelope?.data?.cells ?? [];
+    const circuits = envelope?.data?.circuits ?? [];
+    const circuitMap = new Map(circuits.map((c) => [c.provider_id, c.state]));
+
+    return apiCells.map((c) => ({
+      provider_name: c.provider.name,
+      provider_id: c.provider.id,
+      location_id: c.location_id,
+      location_name: c.location_name,
+      last_success: c.last_success_at,
+      status: c.last_status,
+      freshness: c.freshness?.state ?? "unavailable",
+      circuit_state: circuitMap.get(c.provider.id) ?? "unknown",
+      next_scheduled_at: null,
+    }));
+  }, [envelope]);
 
   if (isLoading) {
     return (
@@ -45,8 +86,6 @@ export default function AdminHealthPage() {
       </section>
     );
   }
-
-  const cells = envelope?.data?.cells ?? [];
 
   return (
     <section aria-labelledby="health-heading">
