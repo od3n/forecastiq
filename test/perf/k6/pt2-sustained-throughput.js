@@ -1,6 +1,9 @@
 // k6 Performance Test — PT-2: Sustained Throughput
 // Ramp to 100 req/s, 5 min hold. Target: ≥ 100 req/s at p95 < 200ms.
 // Reference: docs/testing/04-performance-testing.md §2
+//
+// ENVIRONMENT REQUIREMENT: raise FIQ_RATE_LIMIT_PER_IP_PER_MIN in the perf
+// environment (single-source-IP load vs the per-IP limiter; see PT-1 header).
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 

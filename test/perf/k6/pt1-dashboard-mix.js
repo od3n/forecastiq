@@ -1,6 +1,12 @@
 // k6 Performance Test — PT-1: Dashboard Read Mix
 // 100 VU, 10 min. Target: p50 < 50ms, p95 < 200ms, p99 < 500ms, 0 errors.
 // Reference: docs/testing/04-performance-testing.md §2
+//
+// ENVIRONMENT REQUIREMENT: all k6 traffic originates from ONE source IP, so
+// the per-IP rate limiter (FIQ_RATE_LIMIT_PER_IP_PER_MIN, default 120/min)
+// will 429 this load long before 100 VU. The perf environment MUST raise it,
+// e.g. FIQ_RATE_LIMIT_PER_IP_PER_MIN=100000, or thresholds fail for reasons
+// unrelated to performance (DRB-WP26 finding).
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';

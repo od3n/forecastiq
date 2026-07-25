@@ -20,10 +20,23 @@ export default function () {
   const res = http.get(`${BASE_URL}/admin/health`, {
     headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
   });
+
+  // Parse once, defensively: JSON.parse inside a check callback throws on
+  // 401/5xx or empty bodies, aborting the iteration instead of failing the
+  // check cleanly (DRB-WP26 finding).
+  let body = null;
+  if (res.status === 200) {
+    try {
+      body = JSON.parse(res.body);
+    } catch (_) {
+      body = null;
+    }
+  }
+
   check(res, {
     'health 200': (r) => r.status === 200,
-    'has cells': (r) => JSON.parse(r.body).data.cells !== undefined,
-    'has system': (r) => JSON.parse(r.body).data.system !== undefined,
+    'has cells': () => body !== null && body.data && body.data.cells !== undefined,
+    'has system': () => body !== null && body.data && body.data.system !== undefined,
   });
   sleep(60); // 60s polling interval
 }
