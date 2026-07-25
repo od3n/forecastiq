@@ -21,7 +21,7 @@
     "swr": "^2.4.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0",
+    "@playwright/test": "^1.62.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",
     "@types/jest-axe": "^3.5.9",
