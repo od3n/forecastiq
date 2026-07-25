@@ -55,9 +55,11 @@ Complete catalog of all MVP endpoints. Response envelope per `docs/api/02-respon
 | GET | `/admin/health` | Collection health (S-10) | admin | provider_id, location_id, status filters | cells[] (last success, circuit, errors, next_scheduled_at), observation_collector{}, system{payload_volume, engine_lag, last_backup, last_restore_test} | — | no-store | 80/200 ms |
 | POST | `/admin/collections/trigger` | Immediate collection (S-10/S-13) | admin | {provider_id, location_id}; Idempotency-Key | collection result | 409 circuit open; 429 budget; 422 inactive | no-store | 500/2000 ms |
 | GET | `/forecast-collections` | Collection lineage/health query | admin | provider_id, location_id, status, time range, cursor | collections[] (full accounting, payload key + checksum prefix) | 422 | no-store | 50/200 ms |
+| GET | `/forecast-collections/{id}/snapshots` | Historical raw-data view: one collection's lineage row + all stored snapshots (Admin › Raw Forecasts) | admin | — | {collection, snapshots[]} | 404 | no-store | 50/200 ms |
 | POST | `/admin/collections/{id}/replay` | Payload replay (FC-14) | admin | — | new collection | 422 payload_unavailable; 404 | no-store | 500/2000 ms |
 | POST | `/admin/rankings/recompute` | Scoped recompute | admin | {provider_id?, location_id?, horizon?, period?} | {batch_id, scope} | 422 | no-store | 200/500 ms (async work follows) |
 | PATCH | `/admin/providers/{id}/status` | Enable/disable provider | admin | {status} | updated | 422 | no-store | 100/300 ms |
+| GET | `/admin/provider-configurations` | List all configurations (S-11: offset + has_credential; never echoes credential) | admin | — | configurations[] | — | no-store | 50/200 ms |
 | PUT | `/admin/provider-configurations/{id}` | Schedule/credential update | admin | {collection_schedule?, credential_ref?} | updated (never echoes credential) | 422 schedule invalid | no-store | 100/300 ms |
 | GET | `/admin/users` | User list (S-14) | admin | status, cursor/limit | users[] (no auth_subject) | — | no-store | 50/200 ms |
 | PATCH | `/admin/users/{id}/status` | Disable/enable user | admin | {status} | updated | 409 self-disable | no-store | 200/500 ms |
