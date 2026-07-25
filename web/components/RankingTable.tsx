@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import Link from "next/link";
 import { StatusBadge, type RankingStatus } from "./StatusBadge";
 import { FreshnessBadge } from "./FreshnessBadge";
 import type { FreshnessState } from "@/lib/api/types";
@@ -88,7 +89,15 @@ function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; i
             {r.rank ?? "\u2014"}
           </button>
         </td>
-        <td style={{ padding: "var(--space-sm)" }}>{r.provider_name}</td>
+        <td style={{ padding: "var(--space-sm)" }}>
+          <Link
+            href={`/providers/${r.provider_id}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ color: "var(--color-primary)", textDecoration: "none" }}
+          >
+            {r.provider_name}
+          </Link>
+        </td>
         <td style={{ padding: "var(--space-sm)", textAlign: "right", fontFamily: "var(--font-data)" }}>
           {r.composite_score !== null ? r.composite_score.toFixed(3) : "—"}
         </td>

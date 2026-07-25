@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useMemo } from "react";
+import Link from "next/link";
 import { useGlobalParams } from "@/lib/state/use-global-params";
 import { useApi } from "@/lib/api/hooks";
 import { RankingTable, type RankingEntry } from "@/components/RankingTable";
@@ -42,9 +43,8 @@ function OverviewContent() {
 
   const { data: envelope, error, isLoading } = useApi<RankingsData>(path);
 
-  const rawRankings = envelope?.data?.rankings ?? [];
   const rankings: RankingEntry[] = useMemo(() =>
-    rawRankings.map((r) => ({
+    (envelope?.data?.rankings ?? []).map((r) => ({
       rank: r.rank,
       provider_id: r.provider.id,
       provider_name: r.provider.name,
@@ -55,7 +55,7 @@ function OverviewContent() {
       components: r.component_scores ?? undefined,
       penalty_applied: r.coverage_penalty_applied,
     })),
-  [rawRankings]);
+  [envelope]);
   const freshness = envelope?.freshness as Freshness | undefined;
   const warnings = envelope?.warnings as Warning[] | undefined;
   const attribution = envelope?.attribution as Attribution[] | undefined;
@@ -122,9 +122,16 @@ function OverviewContent() {
 
   return (
     <section aria-labelledby="overview-heading">
-      <h1 id="overview-heading" style={{ fontSize: "var(--text-display)", fontWeight: 700, marginBottom: "var(--space-md)" }}>
-        Overview
-      </h1>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-md)", marginBottom: "var(--space-md)" }}>
+        <h1 id="overview-heading" style={{ fontSize: "var(--text-display)", fontWeight: 700, margin: 0 }}>
+          Overview
+        </h1>
+        {locationId && (
+          <Link href={`/locations/${locationId}`} style={{ fontSize: "var(--text-body-sm)", color: "var(--color-primary)" }}>
+            Location details →
+          </Link>
+        )}
+      </div>
 
       {/* Stale banner (persistent, non-dismissible). */}
       {freshness && (freshness.state === "stale") && freshness.last_updated && (
