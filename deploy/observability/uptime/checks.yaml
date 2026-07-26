@@ -1,0 +1,47 @@
+# ForecastIQ — Uptime Check Configuration
+# Reference: docs/operations/03-monitoring-and-alerting.md §1
+# Reference: docs/architecture/08-observability-architecture.md §4
+#
+# Configuration for Grafana Synthetic Monitoring (free tier) or equivalent
+# hosted uptime service. Checks /healthz every 1 minute from 3 regions;
+# alerts on 3 consecutive failures (alert A17).
+
+checks:
+  - name: forecastiq-healthz
+    target: https://api.forecastiq.example/healthz
+    frequency: 60000  # 1 minute in milliseconds
+    timeout: 5000     # 5 seconds
+    enabled: true
+    probes:
+      - Frankfurt
+      - NewYork
+      - Singapore
+    settings:
+      http:
+        method: GET
+        valid_status_codes:
+          - 200
+        fail_if_not_ssl: true
+        no_follow_redirects: false
+    alert_sensitivity: medium  # 3 consecutive failures before alert
+    labels:
+      service: forecastiq
+      environment: production
+
+  - name: forecastiq-readyz
+    target: https://api.forecastiq.example/readyz
+    frequency: 300000  # 5 minutes in milliseconds
+    timeout: 10000     # 10 seconds (readiness checks DB)
+    enabled: true
+    probes:
+      - Frankfurt
+    settings:
+      http:
+        method: GET
+        valid_status_codes:
+          - 200
+        fail_if_not_ssl: true
+    alert_sensitivity: high  # alert quickly on readiness failures
+    labels:
+      service: forecastiq
+      environment: production
