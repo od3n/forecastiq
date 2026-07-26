@@ -34,6 +34,14 @@ jobs:
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
       - name: Report coverage
         run: go tool cover -func=coverage.out | tail -1
+      - name: promtool check alert/recording rules
+        # Gates PromQL expression validity so dead/miswritten rules cannot land
+        # silently again (DRB-WP22 process note). Syntax + semantic checks only;
+        # threshold correctness remains a review concern.
+        run: |
+          docker run --rm -v "$PWD/deploy/observability/alerts:/rules:ro" \
+            --entrypoint /bin/promtool prom/prometheus:v3.5.0 \
+            check rules /rules/rules.yaml /rules/recording-rules.yaml
 
   backend-integration:
     runs-on: ubuntu-latest
