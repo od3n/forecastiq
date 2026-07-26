@@ -38,6 +38,7 @@ services:
       FIQ_AUTO_MIGRATE: "true"
       FIQ_AUTO_SEED: "true"
       FIQ_ENV: development
+      FIQ_CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:3001"
     ports:
       - "8080:8080"   # API
       - "9090:9090"   # metrics (dev convenience; prod binds localhost)
@@ -49,6 +50,75 @@ services:
         condition: service_healthy
     command: ["air"]
 
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./web:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080/api/v1
+      NEXT_PUBLIC_DEV_TOKEN: admin
+    command: ["sh", "-c", "npm install --prefer-offline && npm run dev"]
+    depends_on:
+      - app
+
+  # ── Observability (profile: obs) ─────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    profiles: ["obs"]
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+
+  loki:
+    image: grafana/loki:3.1.0
+    profiles: ["obs"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./deploy/observability/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    profiles: ["obs"]
+    volumes:
+      - ./deploy/observability/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["-config.file=/etc/promtail/config.yml"]
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    profiles: ["obs"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
 volumes:
   pgdata:
   payloads:
+  prometheus_data:
+  loki_data:
+  grafana_data:
+  frontend_node_modules:

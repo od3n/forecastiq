@@ -166,6 +166,40 @@ func (h *Handlers) GetCollection(c *gin.Context) {
 	respond.OK(c, collectionDTO(coll), respond.Options{RequestID: respond.RequestID(c)})
 }
 
+// CollectionSnapshots godoc
+// @Summary      Snapshots of a forecast collection (admin)
+// @Description  Returns the collection's lineage row plus all its stored
+// @Description  snapshots — the historical raw-data view behind /forecasts/latest.
+// @Tags         admin
+// @Produce      json
+// @Param        id path string true "collection id"
+// @Success      200 {object} respond.Envelope
+// @Failure      404 {object} respond.Problem
+// @Router       /forecast-collections/{id}/snapshots [get]
+func (h *Handlers) CollectionSnapshots(c *gin.Context) {
+	id, ok := pathUUID(c, "id")
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	coll, err := h.Reader.GetCollection(ctx, id)
+	if err != nil {
+		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	snapshots, err := h.Reader.SnapshotsByCollection(ctx, id)
+	if err != nil {
+		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	snaps := make([]SnapshotDTO, 0, len(snapshots))
+	for _, s := range snapshots {
+		snaps = append(snaps, snapshotDTO(s))
+	}
+	respond.OK(c, gin.H{"collection": collectionDTO(coll), "snapshots": snaps},
+		respond.Options{RequestID: respond.RequestID(c)})
+}
+
 // LatestForecast godoc
 // @Summary      Latest forecast for a provider + location
 // @Tags         data

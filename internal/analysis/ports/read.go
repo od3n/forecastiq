@@ -137,6 +137,7 @@ type ComparisonObservation struct {
 	Source          string
 	ObservationType string
 	QualityFlag     string
+	ConditionCode   *string
 }
 
 // ReadRepository serves the public dashboard reads over pre-computed analysis

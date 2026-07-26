@@ -21,7 +21,9 @@ func NewHealthRepository() *HealthRepository { return &HealthRepository{} }
 
 // Cells implements admin.HealthRepository. Each provider×location cell served
 // by a forecast schedule carries its last successful collection, most recent
-// terminal status, and next future scheduled slot.
+// terminal status, and next future scheduled slot. Slots are generated
+// just-in-time, so when none is pending the next run is derived from the
+// active configuration's hourly schedule (minute_offset).
 func (r *HealthRepository) Cells(ctx context.Context, tx dbtx.DBTX, now time.Time) ([]admin.CellHealth, error) {
 	rows, err := tx.Query(ctx,
 		`SELECT p.id, p.name, p.slug, l.id, l.name,
@@ -31,11 +33,24 @@ func (r *HealthRepository) Cells(ctx context.Context, tx dbtx.DBTX, now time.Tim
 		        (SELECT fc.collection_status FROM forecast_collections fc
 		           WHERE fc.provider_id = p.id AND fc.location_id = l.id
 		           ORDER BY fc.requested_at DESC LIMIT 1) AS last_status,
-		        (SELECT min(cs.slot_time) FROM collection_schedules cs
-		           JOIN provider_configurations pc2 ON pc2.id = cs.provider_configuration_id
-		           WHERE cs.job_type = 'forecast_collection' AND cs.location_id = l.id
-		             AND pc2.provider_id = p.id AND cs.slot_time > $1
-		             AND cs.status IN ('due','claimed')) AS next_scheduled
+		        COALESCE(
+		          (SELECT min(cs.slot_time) FROM collection_schedules cs
+		             JOIN provider_configurations pc2 ON pc2.id = cs.provider_configuration_id
+		             WHERE cs.job_type = 'forecast_collection' AND cs.location_id = l.id
+		               AND pc2.provider_id = p.id AND cs.slot_time > $1
+		               AND cs.status IN ('due','claimed')),
+		          (SELECT CASE
+		             WHEN date_trunc('hour', $1::timestamptz)
+		                  + make_interval(mins => COALESCE((pc3.collection_schedule->>'minute_offset')::int, 0)) > $1::timestamptz
+		             THEN date_trunc('hour', $1::timestamptz)
+		                  + make_interval(mins => COALESCE((pc3.collection_schedule->>'minute_offset')::int, 0))
+		             ELSE date_trunc('hour', $1::timestamptz) + interval '1 hour'
+		                  + make_interval(mins => COALESCE((pc3.collection_schedule->>'minute_offset')::int, 0))
+		           END
+		           FROM provider_configurations pc3
+		           WHERE pc3.provider_id = p.id AND pc3.status = 'active'
+		           ORDER BY pc3.created_at LIMIT 1)
+		        ) AS next_scheduled
 		 FROM (
 		   SELECT DISTINCT provider_id, location_id FROM forecast_collections
 		   UNION

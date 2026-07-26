@@ -17,6 +17,12 @@
 
 Series budget: ~300 series (metrics catalog × label cardinality: providers 2, locations ≤ 10, job types 4, routes ~35) — well within free tier.
 
+**Local development counterpart**: `make obs-up` runs Prometheus + Loki +
+Promtail + Grafana via the docker-compose `obs` profile (config under
+`deploy/observability/`; dashboard JSON `forecastiq-ops.json` is provisioned
+automatically). Same metric catalog, no cloud dependency — see development
+doc 01.
+
 ## 2. Alert Rules (complete set)
 
 | # | Alert | Expression (simplified) | Severity | For | Action ref |
