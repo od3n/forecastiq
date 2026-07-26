@@ -6,19 +6,23 @@ import (
 	"strings"
 )
 
-// sensitiveKeys lists field names that must never appear in log output with
-// real values. If any of these appear as slog attribute keys (case-insensitive),
-// the SanitizingHandler replaces their values with "[REDACTED]".
+// sensitiveKeys lists field-name patterns that must never appear in log output
+// with real values. Matching is done against the lowercased key with `_` and
+// `-` separators stripped, so snake_case, camelCase, kebab-case, and
+// concatenated variants (api_key / apiKey / api-key / apikey) all match
+// (DRB-WP22-010). If any pattern matches, the SanitizingHandler replaces the
+// value with "[REDACTED]".
 var sensitiveKeys = map[string]bool{
-	"token":         true,
+	"token":         true, // also covers refresh_token / access_token / authToken
 	"password":      true,
-	"api_key":       true,
+	"passwd":        true,
+	"apikey":        true,
 	"secret":        true,
 	"credential":    true,
 	"authorization": true,
-	"refresh_token": true,
-	"access_token":  true,
-	"service_role":  true,
+	"servicerole":   true,
+	"jwt":           true,
+	"bearer":        true,
 }
 
 const redactedValue = "[REDACTED]"
@@ -82,13 +86,14 @@ func sanitizeAttr(a slog.Attr) slog.Attr {
 	return a
 }
 
-// isSensitiveKey checks if a key matches any known sensitive pattern
-// (case-insensitive, supports partial match for compound keys like
-// "x_api_key" or "refresh_token").
+// isSensitiveKey checks if a key matches any known sensitive pattern. The key
+// is lowercased and stripped of `_`/`-` separators before the substring match,
+// so compound and camelCase keys ("x_api_key", "apiKey", "refreshToken")
+// cannot bypass redaction.
 func isSensitiveKey(key string) bool {
-	lower := strings.ToLower(key)
+	normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))
 	for sensitive := range sensitiveKeys {
-		if strings.Contains(lower, sensitive) {
+		if strings.Contains(normalized, sensitive) {
 			return true
 		}
 	}
