@@ -63,10 +63,10 @@ type Metrics struct {
 	JobDuration  *prometheus.HistogramVec
 
 	// Engine (WP-22, architecture §3.4)
-	EvaluationBacklog  prometheus.Gauge
-	EngineLag          prometheus.Gauge
-	RankingFreshness   *prometheus.GaugeVec
-	BatchDuration      *prometheus.HistogramVec
+	EvaluationBacklog prometheus.Gauge
+	EngineLag         prometheus.Gauge
+	RankingFreshness  *prometheus.GaugeVec
+	BatchDuration     *prometheus.HistogramVec
 
 	// Runtime (WP-22, architecture §3.6)
 	// Note: payload_volume_used_bytes and payload_volume_total_bytes are
