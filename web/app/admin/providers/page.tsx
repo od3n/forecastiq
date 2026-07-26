@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useApi } from "@/lib/api/hooks";
+import { useApi, devAuthHeaders as authHeaders } from "@/lib/api/hooks";
 import { apiBase } from "@/lib/api/client";
 import { ProviderAdminTable, type ProviderEntry } from "@/components/ProviderAdminTable";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
@@ -26,14 +26,6 @@ interface ApiProviderConfig {
 }
 
 interface ConfigsData { configurations: ApiProviderConfig[]; }
-
-// Authenticated fetch for admin mutations (dev token in local dev).
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = process.env.NEXT_PUBLIC_DEV_TOKEN;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
-}
 
 // S-11 Admin Providers (doc 02 §4.11). Enable/disable + config edit (minute
 // offset). Credential status shown as "Configured"/"Not set" (never exposes

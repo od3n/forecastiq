@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useApi } from "@/lib/api/hooks";
+import { useApi, devAuthHeaders } from "@/lib/api/hooks";
 import { HealthGrid, type HealthCell } from "@/components/HealthGrid";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
@@ -39,13 +39,10 @@ export default function AdminHealthPage() {
   });
 
   const handleRetry = useCallback(async (providerId: string, locationId: string) => {
-    const token = process.env.NEXT_PUBLIC_DEV_TOKEN;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
     try {
       await fetch(`${apiBase}/admin/collections/trigger`, {
         method: "POST",
-        headers,
+        headers: devAuthHeaders(),
         body: JSON.stringify({ provider_id: providerId, location_id: locationId }),
       });
       mutate(); // Refresh after trigger.

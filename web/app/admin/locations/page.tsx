@@ -1,21 +1,13 @@
 "use client";
 
 import { useCallback } from "react";
-import { useApi } from "@/lib/api/hooks";
+import { useApi, devAuthHeaders as authHeaders } from "@/lib/api/hooks";
 import { apiBase } from "@/lib/api/client";
 import { LocationAdminTable, type LocationEntry, type CreateLocationData, type CreateResult } from "@/components/LocationAdminTable";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
 
 interface LocationsData { locations: LocationEntry[]; }
-
-// Authenticated headers for admin mutations (dev token in local dev).
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = process.env.NEXT_PUBLIC_DEV_TOKEN;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
-}
 
 export default function AdminLocationsPage() {
   const { data: envelope, error, isLoading, mutate } = useApi<LocationsData>("/locations");
