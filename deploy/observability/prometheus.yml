@@ -1,6 +1,8 @@
 # Prometheus scrape configuration — local dev observability stack.
 # Scrapes the ForecastIQ app metrics endpoint every 15s.
-# Uses host.docker.internal to reach the app running natively on the host.
+# Primary target is the compose `app` service; host.docker.internal is scraped
+# as a secondary target so a natively-run app (make run) is also covered — the
+# unused one simply reports down.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -12,3 +14,7 @@ scrape_configs:
         labels:
           service: "forecastiq"
           environment: "development"
+      - targets: ["host.docker.internal:9090"]
+        labels:
+          service: "forecastiq"
+          environment: "development-native"

@@ -30,7 +30,7 @@ interface LatestForecastData {
   collection: {
     id: string;
     status: string;
-    completed_at: string;
+    completed_at: string | null;
     records_received: number;
     snapshots_stored: number;
     schema_version: string;
@@ -159,9 +159,9 @@ export default function AdminForecastsPage() {
       {/* Collection lineage summary */}
       {collection && (
         <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--text-body-sm)", marginBottom: "var(--space-md)" }}>
-          Latest collection <span style={{ fontFamily: "var(--font-data)" }}>{collection.id.slice(0, 8)}…</span>{" "}
+          {collectionId === "latest" ? "Latest collection" : "Collection"} <span style={{ fontFamily: "var(--font-data)" }}>{collection.id.slice(0, 8)}…</span>{" "}
           — status <strong>{collection.status}</strong>, {collection.records_received} received / {collection.snapshots_stored} stored,{" "}
-          completed {absoluteLocal(collection.completed_at)} ({collection.schema_version})
+          {collection.completed_at ? `completed ${absoluteLocal(collection.completed_at)}` : "not completed"} ({collection.schema_version})
         </p>
       )}
 

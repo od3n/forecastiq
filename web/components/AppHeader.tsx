@@ -103,7 +103,9 @@ function HeaderInner() {
   const allowedMinutes = isDailyComparison ? [1440] : undefined;
   useEffect(() => {
     if (isDailyComparison && horizonMinutes !== 1440) {
-      setParams({ horizon_minutes: "1440" });
+      // Forced clamp: never persisted, so the user's stored preference
+      // survives visiting the comparison page (DRB-WP23L-003).
+      setParams({ horizon_minutes: "1440" }, { persist: false });
     }
   }, [isDailyComparison, horizonMinutes, setParams]);
 
