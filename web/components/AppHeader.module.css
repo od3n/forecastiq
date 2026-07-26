@@ -10,6 +10,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-lg);
+  /* Allow the header row to wrap on narrow viewports (375px) instead of
+     forcing horizontal page overflow. */
+  flex-wrap: wrap;
+  row-gap: var(--space-sm);
 }
 
 .logo {
@@ -22,6 +26,7 @@
 .nav {
   display: flex;
   gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .navLink {
