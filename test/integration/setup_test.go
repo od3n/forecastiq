@@ -302,7 +302,7 @@ func newTestEnv(ctx context.Context, t *testing.T, connStr string, adapter *fake
 	analysisDispatcher := scheduler.NewAnalysisDispatcher(
 		analysis.NewMatchService(analysispg.NewMatchRepository(), tx, pool, m, clk, logger),
 		analysis.NewAggregateService(analysispg.NewMetricRepository(), tx, pool, m, clk, logger),
-		analysis.NewRankService(analysispg.NewRankingRepository(), tx, pool, m, clk, logger), logger)
+		analysis.NewRankService(analysispg.NewRankingRepository(), tx, pool, m, clk, logger), m, logger)
 	recompute := admin.NewRecomputeService(analysisDispatcher, tx, recorder, clk)
 
 	// Identity (WP-03/WP-19): dev verifier + services over the same DB, wired
