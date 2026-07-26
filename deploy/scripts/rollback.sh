@@ -21,7 +21,7 @@ else
   VPS_HOST="${VPS_HOST:?Set VPS_HOST for remote rollback}"
   VPS_USER="${VPS_USER:-deploy}"
   SSH_KEY="${DEPLOY_SSH_KEY_PATH:-~/.ssh/deploy_key}"
-  REMOTE="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST}"
+  REMOTE="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=accept-new ${VPS_USER}@${VPS_HOST}"
 fi
 
 run() {
@@ -40,13 +40,17 @@ echo ""
 echo "[1/5] Available releases:"
 run "ls -1dt ${RELEASES_DIR}/*/ 2>/dev/null" | head -5
 
-# Determine target version
+# Determine target version. Exact-name exclusion, not substring grep: a
+# substring filter mis-selects on version-prefix collisions (main-4 vs
+# main-42) and filters everything when current points at the releases
+# container (DRB-WP23-015). The guarded substitution keeps pipefail from
+# killing the script before the friendly error below.
 CURRENT=$(run "readlink -f /opt/forecastiq/current" | xargs basename)
 if [ -n "${1:-}" ]; then
   TARGET="$1"
 else
-  # Default: the release before current
-  TARGET=$(run "ls -1dt ${RELEASES_DIR}/*/" | grep -v "$CURRENT" | head -1 | xargs basename)
+  # Default: the newest release that is not the current one
+  TARGET=$(run "ls -1t ${RELEASES_DIR}" | awk -v cur="$CURRENT" '$0 != cur' | head -1 || true)
 fi
 
 if [ -z "$TARGET" ]; then
@@ -65,7 +69,7 @@ run "ln -sfn ${RELEASES_DIR}/${TARGET} /opt/forecastiq/current"
 
 # Step 3: Restart service
 echo "[3/5] Restarting forecastiq..."
-run "systemctl restart forecastiq"
+run "sudo /usr/bin/systemctl restart forecastiq"
 
 # Step 4: Wait for readyz
 echo "[4/5] Waiting for /readyz..."

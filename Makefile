@@ -167,7 +167,9 @@ docker-build: ## Build the production (distroless) image
 deploy-release: ## Build a release artifact (linux/amd64) with checksums
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/forecastiq $(APP_PKG)
-	sha256sum $(BIN_DIR)/forecastiq > checksums.txt
+	# Relative filename in the manifest: the VPS runs `sha256sum -c` from the
+	# release dir, so an absolute local path would never verify (DRB-WP23-008).
+	cd $(BIN_DIR) && sha256sum forecastiq > $(CURDIR)/checksums.txt
 	@echo "Release artifact: $(BIN_DIR)/forecastiq ($(VERSION))"
 	@echo "Checksums: checksums.txt"
 

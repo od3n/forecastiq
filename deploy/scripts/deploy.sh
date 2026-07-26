@@ -22,7 +22,10 @@ if [ -z "$VPS_HOST" ]; then
 fi
 
 RELEASE_DIR="/opt/forecastiq/releases/${VERSION}"
-SSH_CMD="ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST}"
+# accept-new (TOFU) rather than 'no': first contact records the key, later
+# mismatches hard-fail instead of being silently accepted (DRB-WP23-010).
+SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=accept-new"
+SSH_CMD="ssh ${SSH_OPTS} ${VPS_USER}@${VPS_HOST}"
 
 echo "=== ForecastIQ Deploy ==="
 echo "Version:  $VERSION"
@@ -30,10 +33,11 @@ echo "Target:   ${VPS_USER}@${VPS_HOST}"
 echo "Release:  $RELEASE_DIR"
 echo ""
 
-# Step 1: rsync artifact to VPS
+# Step 1: rsync artifact to VPS. No trailing slashes on migrations/deploy:
+# the release must keep its directory layout (DRB-WP23-002).
 echo "[1/7] Uploading artifact..."
-rsync -avz -e "ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no" \
-  bin/forecastiq checksums.txt migrations/ deploy/ \
+rsync -avz -e "ssh ${SSH_OPTS}" \
+  bin/forecastiq checksums.txt migrations deploy \
   "${VPS_USER}@${VPS_HOST}:${RELEASE_DIR}/"
 
 # Step 2: Verify checksums on VPS
@@ -44,21 +48,20 @@ $SSH_CMD "cd ${RELEASE_DIR} && sha256sum -c checksums.txt"
 echo "[3/7] Swapping symlink..."
 $SSH_CMD "ln -sfn ${RELEASE_DIR} /opt/forecastiq/current"
 
-# Step 4: Install configs
+# Step 4: Install configs (scoped sudo wrapper from bootstrap.sh)
 echo "[4/7] Installing configs..."
 $SSH_CMD bash <<REMOTE
-  cp ${RELEASE_DIR}/deploy/systemd/forecastiq.service /etc/systemd/system/
-  cp ${RELEASE_DIR}/deploy/caddy/Caddyfile /etc/caddy/Caddyfile
-  systemctl daemon-reload
+  set -euo pipefail
+  sudo /usr/local/bin/forecastiq-install-configs
 REMOTE
 
-# Step 5: Run migrations
+# Step 5: Run migrations (wrapper sources production secrets as root)
 echo "[5/7] Running migrations..."
-$SSH_CMD "/opt/forecastiq/current/forecastiq migrate --confirm"
+$SSH_CMD "sudo /usr/local/bin/forecastiq-migrate"
 
 # Step 6: Restart service
 echo "[6/7] Restarting forecastiq..."
-$SSH_CMD "systemctl restart forecastiq"
+$SSH_CMD "sudo /usr/bin/systemctl restart forecastiq"
 
 # Wait for readyz (max 30s)
 echo "  Waiting for /readyz..."

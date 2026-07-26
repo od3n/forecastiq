@@ -18,7 +18,11 @@ check() {
   local url="$2"
   local expected_status="${3:-200}"
 
-  status=$(curl -sf -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+  # No curl -f here: with -f curl exits non-zero on 4xx while still emitting
+  # the -w write-out, so the fallback would append "000" and corrupt the
+  # captured status (DRB-WP23-005). -w alone reports the code; only transport
+  # failures take the 000 fallback.
+  status=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
   if [ "$status" = "$expected_status" ]; then
     echo "  [PASS] $name (HTTP $status)"
     PASS=$((PASS + 1))
@@ -38,11 +42,12 @@ check "GET /healthz" "${BASE_URL}/healthz"
 # 2. Readiness probe
 check "GET /readyz" "${BASE_URL}/readyz"
 
-# 3. Public endpoint (rankings — returns 200 even with no data)
-check "GET /rankings" "${BASE_URL}/rankings?location_id=00000000-0000-0000-0000-000000000001&horizon_minutes=60"
+# 3. Public endpoint (rankings — returns 200 even with no data). Routes are
+# mounted under /api/v1 (internal/api/router.go); unversioned paths 404.
+check "GET /api/v1/rankings" "${BASE_URL}/api/v1/rankings?location_id=00000000-0000-0000-0000-000000000001&horizon_minutes=60"
 
 # 4. Admin health (requires auth in production; expect 401 without token)
-check "GET /admin/health (auth gate)" "${BASE_URL}/admin/health" "401"
+check "GET /api/v1/admin/health (auth gate)" "${BASE_URL}/api/v1/admin/health" "401"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
