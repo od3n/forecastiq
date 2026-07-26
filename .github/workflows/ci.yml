@@ -139,17 +139,21 @@ jobs:
       - name: Build production image (distroless)
         run: docker build --target prod -t forecastiq:ci .
       - name: Trivy image scan (critical blocks)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: forecastiq:ci
           severity: CRITICAL
           exit-code: 1
+          scanners: vuln,secret
 
   # ── Main branch only: build release artifact ─────────────────────────────
   build-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [backend-checks, backend-integration, migrations, api-contract, security, image]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # cosign keyless signing (GitHub OIDC)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -170,6 +174,10 @@ jobs:
             -o forecastiq ./cmd/forecastiq
       - name: Generate checksums
         run: sha256sum forecastiq > checksums.txt
+      - name: Sign release binary (cosign keyless, spec §4)
+        uses: sigstore/cosign-installer@v3
+      - name: Produce signature bundle
+        run: cosign sign-blob --yes --bundle forecastiq.cosign.bundle forecastiq
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
@@ -177,6 +185,7 @@ jobs:
           path: |
             forecastiq
             checksums.txt
+            forecastiq.cosign.bundle
             migrations/
             deploy/
           retention-days: 90
@@ -191,28 +200,43 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: forecastiq-release
+      - name: Restore exec bit (artifact transport drops permissions)
+        run: chmod +x forecastiq
       - name: Verify checksums
         run: sha256sum -c checksums.txt
+      - name: Verify release signature (cosign keyless)
+        uses: sigstore/cosign-installer@v3
+      - name: cosign verify-blob
+        run: |
+          cosign verify-blob \
+            --bundle forecastiq.cosign.bundle \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/\.github/workflows/ci\.yml@refs/heads/main$" \
+            forecastiq
       - name: Deploy to VPS
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }} # `ssh-keyscan -t ed25519 <host>` output
           VPS_USER: ${{ secrets.VPS_USER || 'deploy' }}
           VERSION: ${{ github.ref_name }}-${{ github.run_number }}
         run: |
-          # Configure SSH
+          # Configure SSH with a pinned host key (no TOFU in CI).
           mkdir -p ~/.ssh
           echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          echo "StrictHostKeyChecking no" > ~/.ssh/config
+          echo "$VPS_HOST_KEY" > ~/.ssh/known_hosts
+          echo "StrictHostKeyChecking yes" > ~/.ssh/config
 
-          # rsync artifact to VPS
+          # rsync artifact to VPS. No trailing slashes on migrations/deploy:
+          # the release must keep its directory layout (migrations/, deploy/).
           RELEASE_DIR="/opt/forecastiq/releases/${VERSION}"
           rsync -avz -e "ssh -i ~/.ssh/deploy_key" \
-            forecastiq checksums.txt migrations/ deploy/ \
+            forecastiq checksums.txt migrations deploy \
             "${VPS_USER}@${VPS_HOST}:${RELEASE_DIR}/"
 
-          # Execute deploy steps on VPS
+          # Execute deploy steps on VPS. Privileged steps go through the
+          # scoped sudo wrappers installed by deploy/bootstrap.sh.
           ssh -i ~/.ssh/deploy_key "${VPS_USER}@${VPS_HOST}" bash <<REMOTE
             set -euo pipefail
             cd /opt/forecastiq
@@ -220,16 +244,14 @@ jobs:
             # Symlink swap
             ln -sfn "${RELEASE_DIR}" /opt/forecastiq/current
 
-            # Install configs
-            cp ${RELEASE_DIR}/deploy/systemd/forecastiq.service /etc/systemd/system/
-            cp ${RELEASE_DIR}/deploy/caddy/Caddyfile /etc/caddy/Caddyfile
-            systemctl daemon-reload
+            # Install configs (systemd unit + Caddyfile) + daemon-reload
+            sudo /usr/local/bin/forecastiq-install-configs
 
-            # Run migrations
-            /opt/forecastiq/current/forecastiq migrate --confirm
+            # Run migrations (wrapper sources /etc/forecastiq/secrets.env)
+            sudo /usr/local/bin/forecastiq-migrate
 
             # Restart service
-            systemctl restart forecastiq
+            sudo /usr/bin/systemctl restart forecastiq
 
             # Wait for readyz (max 30s)
             READY=0
