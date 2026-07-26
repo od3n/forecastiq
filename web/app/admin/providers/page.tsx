@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useApi, devAuthHeaders as authHeaders } from "@/lib/api/hooks";
+import { useApi } from "@/lib/api/hooks";
 import { apiBase } from "@/lib/api/client";
 import { authHeaders } from "@/lib/auth/session";
 import { ProviderAdminTable, type ProviderEntry } from "@/components/ProviderAdminTable";
