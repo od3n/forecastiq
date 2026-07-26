@@ -49,7 +49,7 @@ export function AttributionFooter({
             {methodologyVersion && <>Methodology {methodologyVersion}</>}
           </p>
         )}
-        <p>All times UTC unless labeled.</p>
+        <p>Times shown in the location&apos;s timezone unless labeled otherwise.</p>
         <p>ForecastIQ measures forecast accuracy. We don&apos;t deliver weather forecasts.</p>
       </div>
     </footer>

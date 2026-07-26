@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AppHeader } from "@/components/AppHeader";
-import { AttributionFooter } from "@/components/AttributionFooter";
 
 // Two typefaces only (doc 02 §1.2): Inter (body/label) + JetBrains Mono (data).
 // self-hosted via next/font with font-display: swap (doc 02 §12.6).
@@ -28,7 +27,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main id="main" className="page">
           {children}
         </main>
-        <AttributionFooter />
       </body>
     </html>
   );
