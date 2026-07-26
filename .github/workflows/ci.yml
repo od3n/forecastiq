@@ -139,7 +139,7 @@ jobs:
       - name: Build production image (distroless)
         run: docker build --target prod -t forecastiq:ci .
       - name: Trivy image scan (critical blocks)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: forecastiq:ci
           severity: CRITICAL
