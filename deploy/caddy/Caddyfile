@@ -5,9 +5,12 @@
 # Reference: docs/security/04-secrets-management.md (no secrets in this file)
 #
 # Caddy auto-manages TLS certificates via Let's Encrypt (ACME).
-# Replace 'forecastiq.example' with the actual domain.
+# The served domain comes from the FIQ_DOMAIN environment variable, set via
+# the systemd drop-in written by deploy/bootstrap.sh (caddy.service.d) — the
+# repo file is deployed verbatim on every release, so it must not hardcode a
+# placeholder domain (DRB-WP23-007).
 
-api.forecastiq.example {
+{$FIQ_DOMAIN:api.forecastiq.example} {
     reverse_proxy localhost:8080
 
     encode gzip
