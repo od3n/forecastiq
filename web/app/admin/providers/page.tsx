@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { useApi } from "@/lib/api/hooks";
 import { apiBase } from "@/lib/api/client";
+import { authHeaders } from "@/lib/auth/session";
 import { ProviderAdminTable, type ProviderEntry } from "@/components/ProviderAdminTable";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
@@ -26,14 +27,6 @@ interface ApiProviderConfig {
 }
 
 interface ConfigsData { configurations: ApiProviderConfig[]; }
-
-// Authenticated fetch for admin mutations (dev token in local dev).
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = process.env.NEXT_PUBLIC_DEV_TOKEN;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
-}
 
 // S-11 Admin Providers (doc 02 §4.11). Enable/disable + config edit (minute
 // offset). Credential status shown as "Configured"/"Not set" (never exposes
@@ -66,7 +59,7 @@ export default function AdminProvidersPage() {
   const handleToggle = useCallback(async (id: string, newStatus: string) => {
     await fetch(`${apiBase}/admin/providers/${id}/status`, {
       method: "PATCH",
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: JSON.stringify({ status: newStatus }),
     });
     mutate();
@@ -79,7 +72,7 @@ export default function AdminProvidersPage() {
     if (!cfg) return;
     await fetch(`${apiBase}/admin/provider-configurations/${cfg.id}`, {
       method: "PATCH",
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: JSON.stringify({ minute_offset: minuteOffset }),
     });
     mutate();

@@ -8,6 +8,7 @@ import { ErrorPanel } from "@/components/ErrorPanel";
 import type { Freshness } from "@/lib/api/types";
 
 import { apiBase } from "@/lib/api/client";
+import { authHeaders } from "@/lib/auth/session";
 
 interface ApiCell {
   provider: { id: string; name: string; slug: string };
@@ -39,13 +40,10 @@ export default function AdminHealthPage() {
   });
 
   const handleRetry = useCallback(async (providerId: string, locationId: string) => {
-    const token = process.env.NEXT_PUBLIC_DEV_TOKEN;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
     try {
       await fetch(`${apiBase}/admin/collections/trigger`, {
         method: "POST",
-        headers,
+        headers: await authHeaders(),
         body: JSON.stringify({ provider_id: providerId, location_id: locationId }),
       });
       mutate(); // Refresh after trigger.
