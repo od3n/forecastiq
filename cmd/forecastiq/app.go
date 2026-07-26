@@ -27,6 +27,7 @@ import (
 	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/observationpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
+	"github.com/forecastiq/forecastiq/adapters/promexport"
 	"github.com/forecastiq/forecastiq/internal/admin"
 	"github.com/forecastiq/forecastiq/internal/analysis"
 	"github.com/forecastiq/forecastiq/internal/api"
@@ -147,6 +148,14 @@ func buildApp(ctx context.Context) (*App, error) {
 
 	m := metrics.New()
 	m.RegisterPoolCollector(pool)
+
+	// Engine gauges (architecture §3.4) and backup metrics (A10/A11) are
+	// DB/file-derived at scrape time so they stay truthful when the producing
+	// process stalls (DRB-WP22-004/006).
+	m.Registry.MustRegister(
+		promexport.NewEngineCollector(pool),
+		promexport.NewBackupCollector(backupstatus.New(cfg.BackupStatusFile)),
+	)
 
 	// Payload volume gauges (architecture §3.6 Runtime): report statfs bytes at
 	// each Prometheus scrape via the payloadStore.Usage() call. Errors degrade

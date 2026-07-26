@@ -90,12 +90,8 @@ func (d *AnalysisDispatcher) run(ctx context.Context) (int, error) {
 		return total, err
 	}
 
-	// Update engine lag: zero immediately after a successful batch (the next
-	// scrape will see the just-completed state; a real lag only develops when
-	// the batch hasn't run for a while, which the admin health service computes
-	// from the DB as the authoritative source). Setting 0 here signals "batch
-	// just ran" to the Prometheus-side alerting.
-	d.metrics.EngineLag.Set(0)
-
+	// Engine lag / backlog / ranking freshness are exported at scrape time by
+	// the DB-backed collector (adapters/promexport), so a stalled batch is
+	// visible to alerting without any in-process bookkeeping here.
 	return total, nil
 }

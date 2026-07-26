@@ -63,10 +63,11 @@ type Metrics struct {
 	JobDuration  *prometheus.HistogramVec
 
 	// Engine (WP-22, architecture §3.4)
-	EvaluationBacklog prometheus.Gauge
-	EngineLag         prometheus.Gauge
-	RankingFreshness  *prometheus.GaugeVec
-	BatchDuration     *prometheus.HistogramVec
+	// Note: evaluation_backlog, engine_lag_seconds, and
+	// ranking_freshness_age_seconds are exported by the scrape-time DB collector
+	// (adapters/promexport) registered in app.go — an in-process gauge would
+	// freeze at its last value when batches stop running (DRB-WP22-004).
+	BatchDuration *prometheus.HistogramVec
 
 	// Runtime (WP-22, architecture §3.6)
 	// Note: payload_volume_used_bytes and payload_volume_total_bytes are
@@ -204,22 +205,9 @@ func New() *Metrics {
 		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60},
 	}, []string{"job_type"})
 
-	// Engine metrics (architecture §3.4)
-	m.EvaluationBacklog = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "evaluation_backlog",
-		Help: "Matched pairs not yet aggregated into accuracy metrics.",
-	})
-
-	m.EngineLag = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "engine_lag_seconds",
-		Help: "Seconds since the last accuracy-metric batch completed (now − max calculated_at).",
-	})
-
-	m.RankingFreshness = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ranking_freshness_age_seconds",
-		Help: "Age of the newest ranking per location and horizon.",
-	}, []string{"location_id", "horizon_minutes"})
-
+	// Engine metrics (architecture §3.4). evaluation_backlog, engine_lag_seconds,
+	// and ranking_freshness_age_seconds live in adapters/promexport (scrape-time
+	// DB reads); only the in-process histogram is registered here.
 	m.BatchDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "batch_duration_seconds",
 		Help:    "Duration of individual analysis batch sub-steps.",
@@ -238,7 +226,7 @@ func New() *Metrics {
 		m.MatchesCreated, m.MatchingBacklog, m.MetricRowsWritten, m.RankingsPublished,
 		m.CacheHits, m.CacheMisses,
 		m.SlotsClaimed, m.MissedSlots, m.SchedulerLag, m.JobDuration,
-		m.EvaluationBacklog, m.EngineLag, m.RankingFreshness, m.BatchDuration,
+		m.BatchDuration,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
