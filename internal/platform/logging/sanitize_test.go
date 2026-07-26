@@ -107,7 +107,10 @@ func TestSanitizingHandler_Enabled(t *testing.T) {
 func TestIsSensitiveKey(t *testing.T) {
 	positives := []string{"token", "TOKEN", "api_key", "my_api_key_value",
 		"password", "secret", "credential", "authorization", "refresh_token",
-		"access_token", "service_role"}
+		"access_token", "service_role",
+		// camelCase / kebab-case / concatenated variants (DRB-WP22-010).
+		"apiKey", "api-key", "authToken", "refreshToken", "passwd", "jwt",
+		"bearer", "serviceRole"}
 	for _, k := range positives {
 		assert.True(t, isSensitiveKey(k), "expected %q to be sensitive", k)
 	}

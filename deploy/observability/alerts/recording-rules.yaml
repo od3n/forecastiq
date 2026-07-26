@@ -27,26 +27,34 @@ groups:
             sum(rate(http_request_duration_seconds_bucket{job="forecastiq"}[5m])) by (le)
           )
 
-      # Collection success: ratio of completed slots over 30 days.
+      # Collection success: ratio of completed slots over 30 days. Deduplicated
+      # counts as success — the collection ran and the provider payload was
+      # unchanged (DRB-WP22-011).
       - record: forecastiq:collection_success:ratio_rate30d
         expr: |
-          sum(rate(collection_attempts_total{job="forecastiq", status=~"success|partial"}[30d]))
+          sum(rate(collection_attempts_total{job="forecastiq", status=~"success|partial|deduplicated"}[30d]))
           / sum(rate(collection_attempts_total{job="forecastiq"}[30d]))
 
       # Error budget burn rate: 6-hour window (2× threshold → warning).
+      # Outer parentheses are load-bearing: without them PromQL evaluates
+      # `1 - ratio / budget` as `1 - (ratio / budget)` (DRB-WP22-001).
       - record: forecastiq:error_budget_burn:6h
         expr: |
-          1 - (
-            sum(rate(http_requests_total{job="forecastiq", status_class!="5xx"}[6h]))
-            / sum(rate(http_requests_total{job="forecastiq"}[6h]))
+          (
+            1 - (
+              sum(rate(http_requests_total{job="forecastiq", status_class!="5xx"}[6h]))
+              / sum(rate(http_requests_total{job="forecastiq"}[6h]))
+            )
           )
           / (1 - 0.995)
 
       # Error budget burn rate: 1-hour window (10× threshold → critical page).
       - record: forecastiq:error_budget_burn:1h
         expr: |
-          1 - (
-            sum(rate(http_requests_total{job="forecastiq", status_class!="5xx"}[1h]))
-            / sum(rate(http_requests_total{job="forecastiq"}[1h]))
+          (
+            1 - (
+              sum(rate(http_requests_total{job="forecastiq", status_class!="5xx"}[1h]))
+              / sum(rate(http_requests_total{job="forecastiq"}[1h]))
+            )
           )
           / (1 - 0.995)

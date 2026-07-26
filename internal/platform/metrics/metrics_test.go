@@ -62,12 +62,11 @@ func TestMetricCatalogPresence(t *testing.T) {
 		"observations_suspect_total",
 		"observation_freshness_age_seconds",
 	)
-	// §3.4 Engine
+	// §3.4 Engine (evaluation_backlog, engine_lag_seconds, and
+	// ranking_freshness_age_seconds are DB-derived, exported by the
+	// adapters/promexport collector registered in app.go)
 	expected = append(expected,
 		"matching_backlog",
-		"evaluation_backlog",
-		"engine_lag_seconds",
-		"ranking_freshness_age_seconds",
 		"batch_duration_seconds",
 	)
 	// §3.5 Scheduler
@@ -114,8 +113,7 @@ func TestMetricHelpStrings(t *testing.T) {
 
 	// Use the simple Gauge/Counter to gather since they always have an
 	// initial value. The Vec types require label usage for Gather.
-	m.EngineLag.Set(0)
-	m.EvaluationBacklog.Set(0)
+	m.MatchingBacklog.Set(0)
 
 	families, err := m.Registry.Gather()
 	require.NoError(t, err)

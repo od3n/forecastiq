@@ -20,13 +20,14 @@ groups:
           description: "The forecastiq target has been unreachable for 3 minutes."
           runbook: "docs/operations/05-deployment-and-rollback.md §3.1"
 
-      # A2: API 5xx rate
+      # A2: API 5xx rate. Computed from http_requests_total's status_class
+      # label with both sides aggregated (DRB-WP22-003: the previous expression
+      # divided disjoint label sets, which one-to-one matching returns empty).
       - alert: APIErrorRateHigh
         expr: |
-          (
-            rate(http_errors_total{job="forecastiq", error_type=~"internal|service_unavailable"}[15m])
-            / rate(http_requests_total{job="forecastiq"}[15m])
-          ) > 0.01
+          sum(rate(http_requests_total{job="forecastiq", status_class="5xx"}[15m]))
+          / sum(rate(http_requests_total{job="forecastiq"}[15m]))
+          > 0.01
         for: 15m
         labels:
           severity: critical
@@ -46,11 +47,13 @@ groups:
           description: "Circuit has been open for 10 minutes. Provider calls are blocked."
           runbook: "docs/operations/06-provider-failure-runbook.md"
 
-      # A6: Schema drift
+      # A6: Schema drift. Both sides aggregated to a per-provider vector
+      # (DRB-WP22-005: the rejected counter carries a reason label the stored
+      # counter lacks, so an unaggregated division matches nothing).
       - alert: SchemaDrift
         expr: |
-          increase(collection_records_rejected_total{job="forecastiq", reason="schema"}[1h])
-          / (increase(collection_snapshots_stored_total{job="forecastiq"}[1h]) + 1)
+          sum by (provider) (increase(collection_records_rejected_total{job="forecastiq", reason="schema"}[1h]))
+          / (sum by (provider) (increase(collection_snapshots_stored_total{job="forecastiq"}[1h])) + 1)
           > 0.5
         labels:
           severity: critical
@@ -81,9 +84,11 @@ groups:
           description: "The last successful backup is older than 26 hours or status is not success."
           runbook: "docs/operations/04-backup-and-restore.md"
 
-      # A15: Process restarts
+      # A15: Process restarts. changes() counts distinct start-time values
+      # (= restarts); increase() on a timestamp gauge measured the jump in the
+      # timestamp itself and paged on a single benign restart (DRB-WP22-007).
       - alert: ProcessRestarts
-        expr: increase(process_start_time_seconds{job="forecastiq"}[1h]) > 2
+        expr: changes(process_start_time_seconds{job="forecastiq"}[1h]) > 2
         for: 0m
         labels:
           severity: critical
@@ -117,12 +122,15 @@ groups:
           description: "The 95th percentile request latency has been above 200ms for 30 minutes."
           runbook: "docs/operations/03-monitoring-and-alerting.md §3.3"
 
-      # A5: Collection stale
+      # A5: Collection stale. Fires when a provider records zero successful
+      # (incl. partial/deduplicated) attempts across the 3h window
+      # (DRB-WP22-002: the previous expression subtracted a counter *value*
+      # from time(), which is always > threshold once any success exists).
       - alert: CollectionStale
         expr: |
-          time() - max by (provider) (
-            collection_attempts_total{job="forecastiq", status="success"} > 0
-          ) > 10800
+          sum by (provider) (
+            increase(collection_attempts_total{job="forecastiq", status=~"success|partial|deduplicated"}[3h])
+          ) == 0
         for: 0m
         labels:
           severity: warning
@@ -185,11 +193,12 @@ groups:
           description: "No fresh observation in 4 hours for this location."
           runbook: "docs/operations/06-provider-failure-runbook.md §observation"
 
-      # A14: Unmapped conditions
+      # A14: Unmapped conditions. Aggregated per provider (DRB-WP22-005: the
+      # unmapped counter carries a code label the stored counter lacks).
       - alert: UnmappedConditions
         expr: |
-          increase(condition_unmapped_total{job="forecastiq"}[24h])
-          / (increase(collection_snapshots_stored_total{job="forecastiq"}[24h]) + 1)
+          sum by (provider) (increase(condition_unmapped_total{job="forecastiq"}[24h]))
+          / (sum by (provider) (increase(collection_snapshots_stored_total{job="forecastiq"}[24h])) + 1)
           > 0.01
         labels:
           severity: warning
