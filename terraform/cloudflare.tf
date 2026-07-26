@@ -15,7 +15,9 @@ resource "cloudflare_record" "api" {
 resource "cloudflare_record" "app" {
   zone_id = var.cloudflare_zone_id
   name    = "app"
-  content = "${var.domain}.pages.dev"
+  # Pages hostnames are <project-name>.pages.dev — project names cannot
+  # contain dots, so the base domain is never a valid target (DRB-WP23-012).
+  content = "${var.pages_project}.pages.dev"
   type    = "CNAME"
   ttl     = 1 # Auto (Cloudflare proxied)
   proxied = true

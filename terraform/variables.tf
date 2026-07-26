@@ -27,3 +27,9 @@ variable "domain" {
   description = "Base domain (e.g. forecastiq.example)"
   type        = string
 }
+
+variable "pages_project" {
+  description = "Cloudflare Pages project name (target of the app CNAME: <name>.pages.dev)"
+  type        = string
+  default     = "forecastiq"
+}

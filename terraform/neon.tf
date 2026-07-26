@@ -16,7 +16,10 @@ resource "neon_database" "forecastiq" {
   project_id = neon_project.forecastiq.id
   branch_id  = neon_project.forecastiq.default_branch_id
   name       = "forecastiq"
-  owner_name = neon_role.app.name
+  # The migrate role owns the database (DDL); the app role stays DML-only.
+  # Making the app role the owner would grant it full DDL, defeating the
+  # separation the two roles exist for (DRB-WP23-018).
+  owner_name = neon_role.migrate.name
 }
 
 # Application role (DML only — no DDL)
