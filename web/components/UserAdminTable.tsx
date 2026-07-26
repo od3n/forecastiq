@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { absoluteLocal } from "@/lib/format";
 
 export interface UserEntry {
   id: string;
@@ -66,8 +67,8 @@ export function UserAdminTable({ users, onRoleChange, onToggleStatus, onExport }
                 <td style={{ padding: "var(--space-sm)" }}>
                   <span style={{ padding: "2px var(--space-sm)", borderRadius: "var(--radius-full)", fontSize: "var(--text-label)", fontWeight: 500, background: u.status === "active" ? "var(--color-ranked)" : "var(--color-border)", color: u.status === "active" ? "#fff" : "var(--color-text-secondary)" }}>{u.status}</span>
                 </td>
-                <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{new Date(u.created_at).toLocaleDateString()}</td>
-                <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : "—"}</td>
+                <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{absoluteLocal(u.created_at)}</td>
+                <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{u.last_login_at ? absoluteLocal(u.last_login_at) : "—"}</td>
                 <td style={{ padding: "var(--space-sm)", display: "flex", gap: "var(--space-xs)", alignItems: "center" }}>
                   <button type="button" onClick={() => setConfirm({ id: u.id, action: u.status === "active" ? "disable" : "enable", text: u.status === "active" ? "DISABLE" : "ENABLE", desc: u.status === "active" ? `Disable ${u.email}. They will not be able to log in.` : `Re-enable ${u.email}.`, label: u.status === "active" ? "Disable" : "Enable" })} style={{ padding: "var(--space-xs) var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", font: "inherit", fontSize: "var(--text-label)", cursor: "pointer" }}>
                     {u.status === "active" ? "Disable" : "Enable"}
