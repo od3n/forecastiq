@@ -53,19 +53,27 @@ export function useGlobalParams() {
 
   const locationId = searchParams.get("location_id");
   const horizonFromUrl = searchParams.get("horizon_minutes");
-  const horizonMinutes = horizonFromUrl
-    ? Number(horizonFromUrl)
-    : (storedHorizon ?? DEFAULT_HORIZON);
+  // Guard against mangled URLs (?horizon_minutes=abc → NaN in API paths).
+  const urlHorizon = horizonFromUrl ? Number(horizonFromUrl) : NaN;
+  const horizonMinutes =
+    Number.isFinite(urlHorizon) && urlHorizon > 0
+      ? urlHorizon
+      : (storedHorizon ?? DEFAULT_HORIZON);
 
   const setParams = useCallback(
-    (updates: Partial<Record<"location_id" | "horizon_minutes", string>>) => {
+    (
+      updates: Partial<Record<"location_id" | "horizon_minutes", string>>,
+      opts: { persist?: boolean } = {},
+    ) => {
       const params = new URLSearchParams(searchParams.toString());
       for (const [k, v] of Object.entries(updates)) {
         if (v) params.set(k, v);
         else params.delete(k);
       }
-      // Persist horizon selection to localStorage.
-      if (updates.horizon_minutes) {
+      // Persist horizon selection to localStorage — but only user-initiated
+      // changes. Forced clamps (e.g. the S-05 +24h restriction) pass
+      // persist: false so they never clobber the stored preference.
+      if (updates.horizon_minutes && opts.persist !== false) {
         storeHorizon(Number(updates.horizon_minutes));
       }
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
