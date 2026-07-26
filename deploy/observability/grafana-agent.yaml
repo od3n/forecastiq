@@ -75,9 +75,12 @@ logs:
                   request_id: request_id
                   provider: provider
                   error_code: error_code
+            # msg is intentionally NOT promoted to a label: ad-hoc debug
+            # messages would create one Loki stream per distinct string
+            # (unbounded cardinality; DRB-WP22-009). Query it via
+            # `| json | msg="collection.failed"` per the runbook examples.
             - labels:
                 level:
-                msg:
                 service:
             - timestamp:
                 source: ts
