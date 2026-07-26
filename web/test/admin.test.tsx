@@ -47,7 +47,7 @@ describe("a11y: S-11 ProviderAdminTable", () => {
   it("credential shows text status only (BR-08)", () => {
     const { getByText } = render(<ProviderAdminTable providers={PROVIDERS} onToggleStatus={vi.fn()} onEditConfig={vi.fn()} />);
     expect(getByText("Configured")).toBeTruthy();
-    expect(getByText("Not set")).toBeTruthy();
+    expect(getByText("Not required")).toBeTruthy();
   });
 });
 
