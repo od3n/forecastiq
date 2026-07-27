@@ -32,7 +32,7 @@ echo ""
 # ── 1. System packages + Docker Engine ──────────────────────────────
 echo "[1/7] Installing packages + Docker..."
 apt-get update -qq
-apt-get install -y -qq fail2ban ufw jq curl ca-certificates gnupg
+apt-get install -y -qq fail2ban ufw jq curl ca-certificates gnupg rclone
 
 if ! command -v docker &>/dev/null; then
   install -m 0755 -d /etc/apt/keyrings
@@ -77,11 +77,15 @@ mkdir -p /var/lib/forecastiq/backups
 mkdir -p /etc/forecastiq
 touch /var/lib/forecastiq/backup-status.json
 chown -R deploy:deploy /opt/forecastiq
+# Backups + status file are written by the deploy user's cron jobs (WP-24).
+# The app container (uid 65532) only READS the status file.
+chown -R deploy:deploy /var/lib/forecastiq/backups
+chown deploy:deploy /var/lib/forecastiq/backup-status.json
+chmod 0644 /var/lib/forecastiq/backup-status.json
 # The app container runs as distroless nonroot (uid 65532) and must write
-# payloads + read the backup status file. pgdata stays root-owned: the
-# postgres image entrypoint fixes its own permissions at init.
+# payloads. pgdata stays root-owned: the postgres image entrypoint fixes its
+# own permissions at init.
 chown -R 65532:65532 /var/lib/forecastiq/payloads
-chown 65532:65532 /var/lib/forecastiq/backup-status.json
 
 if [ ! -f /etc/forecastiq/secrets.env ]; then
   cat > /etc/forecastiq/secrets.env <<'EOF'
@@ -140,23 +144,25 @@ systemctl enable fail2ban
 systemctl restart fail2ban
 echo "  fail2ban OK (SSH jail active)"
 
-# ── 6. Cron entries (placeholders for WP-24) ────────────────────────
-echo "[6/7] Setting up cron placeholders..."
+# ── 6. Cron entries (WP-24 backup + restore test) ───────────────────
+echo "[6/7] Installing cron jobs..."
 CRON_FILE="/etc/cron.d/forecastiq"
-if [ ! -f "$CRON_FILE" ]; then
-  cat > "$CRON_FILE" <<'EOF'
-# ForecastIQ scheduled tasks (WP-24 will populate these)
+cat > "$CRON_FILE" <<'EOF'
+# ForecastIQ scheduled tasks (WP-24). Run as the deploy user; scripts live in
+# /opt/forecastiq (shipped by deploy.sh) and reach Postgres via the db
+# container, so no DB URL is needed in the environment.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Nightly backup (WP-24): 02:30 UTC — pg_dump via the db container
-# 30 2 * * * deploy /opt/forecastiq/deploy/scripts/backup.sh >> /var/log/forecastiq-backup.log 2>&1
+# Nightly backup: 02:30 UTC
+30 2 * * * deploy /opt/forecastiq/backup.sh >> /var/log/forecastiq-backup.log 2>&1
 
-# Monthly restore test (WP-24): 1st of month, 04:00 UTC
-# 0 4 1 * * deploy /opt/forecastiq/deploy/scripts/restore-test.sh >> /var/log/forecastiq-restore-test.log 2>&1
+# Monthly restore test: 1st of month, 04:00 UTC
+0 4 1 * * deploy /opt/forecastiq/restore-test.sh >> /var/log/forecastiq-restore-test.log 2>&1
 EOF
-fi
-echo "  Cron placeholders OK (backup/restore commented until WP-24)"
+touch /var/log/forecastiq-backup.log /var/log/forecastiq-restore-test.log
+chown deploy:deploy /var/log/forecastiq-backup.log /var/log/forecastiq-restore-test.log
+echo "  Cron active (nightly backup + monthly restore test as deploy user)"
 
 # ── 7. Verification ─────────────────────────────────────────────────
 echo ""
