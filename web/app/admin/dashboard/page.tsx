@@ -41,7 +41,7 @@ export default function AdminDashboardPage() {
     <section aria-labelledby="dashboard-heading">
       <h1 id="dashboard-heading" style={{ fontSize: "var(--text-display)", fontWeight: 700, marginBottom: "var(--space-sm)" }}>Dashboard</h1>
       <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--text-body-sm)", marginBottom: "var(--space-lg)" }}>
-        Per location: the last 12 observed hours (grey, ground truth) against each provider&rsquo;s latest forecast for the next 12 (white).
+        Per location: the last 12 observed hours (grey, ground truth) against each provider&rsquo;s latest forecast for the next 12 (white). Each hour shows condition, humidity, and temperature.
       </p>
 
       {locations.length === 0 && <p style={{ color: "var(--color-text-secondary)" }}>No active locations.</p>}

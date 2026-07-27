@@ -1,6 +1,7 @@
 "use client";
 
 import { FreshnessBadge } from "./FreshnessBadge";
+import { absoluteLocal } from "@/lib/format";
 import type { FreshnessState } from "@/lib/api/types";
 
 export interface HealthCell {
@@ -48,13 +49,13 @@ export function HealthGrid({ cells, onRetry }: HealthGridProps) {
                 <FreshnessBadge state={c.freshness} lastUpdated={c.last_success ?? undefined} />
               </td>
               <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>
-                {c.last_success ? new Date(c.last_success).toLocaleString() : "—"}
+                {c.last_success ? absoluteLocal(c.last_success) : "—"}
               </td>
               <td style={{ padding: "var(--space-sm)", fontWeight: c.circuit_state === "open" ? 700 : 400, color: c.circuit_state === "open" ? "var(--color-unavailable)" : undefined }}>
                 {c.circuit_state}
               </td>
               <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>
-                {c.next_scheduled_at ? new Date(c.next_scheduled_at).toLocaleTimeString() : "—"}
+                {c.next_scheduled_at ? absoluteLocal(c.next_scheduled_at) : "—"}
               </td>
               <td style={{ padding: "var(--space-sm)" }}>
                 <button

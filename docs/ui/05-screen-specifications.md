@@ -321,6 +321,7 @@ Shown once per account; dismissible (X / "Get started"); never shown to public v
 - Flows managed by Supabase: credential verification, email verification delivery, password reset email, brute-force protection, refresh rotation.
 - Handled by ForecastIQ: user-row creation on first authenticated API call (`auth_subject` mapping), role assignment (default `user`; first account seeded as `admin` at bootstrap), audit events (AUTH-07), disabled-account refusal (generic message per AC-5.3).
 - Session expiry: Supabase access token ≤1h; SDK handles silent refresh; on refresh failure → redirect to `/auth/signin` with return URL.
+- Local development (no Supabase project configured): `/auth/signin` renders a dev-token form backed by the ADR-008 dev-mode verifier; the token is validated against `GET /me` before being stored client-side. Dev-only — the dev verifier is compiled out of release builds, and no token is ever injected from build-time environment.
 
 ### Behavioural states
 

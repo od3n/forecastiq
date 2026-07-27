@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useApi, devAuthHeaders as authHeaders } from "@/lib/api/hooks";
+import { useApi } from "@/lib/api/hooks";
 import { apiBase } from "@/lib/api/client";
+import { authHeaders } from "@/lib/auth/session";
 import { ProviderAdminTable, type ProviderEntry } from "@/components/ProviderAdminTable";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
@@ -58,7 +59,7 @@ export default function AdminProvidersPage() {
   const handleToggle = useCallback(async (id: string, newStatus: string) => {
     await fetch(`${apiBase}/admin/providers/${id}/status`, {
       method: "PATCH",
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: JSON.stringify({ status: newStatus }),
     });
     mutate();
@@ -71,7 +72,7 @@ export default function AdminProvidersPage() {
     if (!cfg) return;
     await fetch(`${apiBase}/admin/provider-configurations/${cfg.id}`, {
       method: "PATCH",
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: JSON.stringify({ minute_offset: minuteOffset }),
     });
     mutate();

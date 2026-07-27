@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useApi, devAuthHeaders } from "@/lib/api/hooks";
+import { useApi } from "@/lib/api/hooks";
 import { HealthGrid, type HealthCell } from "@/components/HealthGrid";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
 import type { Freshness } from "@/lib/api/types";
 
 import { apiBase } from "@/lib/api/client";
+import { authHeaders } from "@/lib/auth/session";
 
 interface ApiCell {
   provider: { id: string; name: string; slug: string };
@@ -42,7 +43,7 @@ export default function AdminHealthPage() {
     try {
       await fetch(`${apiBase}/admin/collections/trigger`, {
         method: "POST",
-        headers: devAuthHeaders(),
+        headers: await authHeaders(),
         body: JSON.stringify({ provider_id: providerId, location_id: locationId }),
       });
       mutate(); // Refresh after trigger.

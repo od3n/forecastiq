@@ -3,6 +3,7 @@
 import { Suspense, useState, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useApi } from "@/lib/api/hooks";
+import { absoluteLocal } from "@/lib/format";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -120,7 +121,7 @@ function ProfilePanel({ user }: { user: UserProfile }) {
         <dt style={{ color: "var(--color-text-secondary)" }}>Status</dt>
         <dd style={{ margin: 0, textTransform: "capitalize" }}>{user.status}</dd>
         <dt style={{ color: "var(--color-text-secondary)" }}>Last login</dt>
-        <dd style={{ margin: 0, fontFamily: "var(--font-data)" }}>{user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "—"}</dd>
+        <dd style={{ margin: 0, fontFamily: "var(--font-data)" }}>{user.last_login_at ? absoluteLocal(user.last_login_at) : "—"}</dd>
       </dl>
     </div>
   );

@@ -13,6 +13,7 @@ interface Observation {
 interface Snapshot {
   target_time: string;
   temperature_c: number | null;
+  humidity_pct?: number | null;
   canonical_condition_code: string | null;
 }
 
@@ -30,6 +31,7 @@ interface Slot {
   hourLabel: string;
   condition: string | null;
   temperature: number | null;
+  humidity: number | null;
 }
 
 export interface ConditionsTimelineProps {
@@ -55,10 +57,12 @@ export function ConditionsTimeline({ providerId, locationId, timezone, hideHeadi
     return { todayStr: fmt.format(now), yesterdayStr: fmt.format(yesterday) };
   }, [timezone]);
 
-  const obsPath = (d: string) =>
-    `/forecast-comparison?location_id=${locationId}&date=${d}&variable=temperature&horizon_minutes=1440`;
-  const { data: todayEnv } = useApi<ComparisonData>(locationId ? obsPath(todayStr) : null);
-  const { data: yesterdayEnv } = useApi<ComparisonData>(locationId ? obsPath(yesterdayStr) : null);
+  const obsPath = (d: string, variable: string) =>
+    `/forecast-comparison?location_id=${locationId}&date=${d}&variable=${variable}&horizon_minutes=1440`;
+  const { data: todayEnv } = useApi<ComparisonData>(locationId ? obsPath(todayStr, "temperature") : null);
+  const { data: yesterdayEnv } = useApi<ComparisonData>(locationId ? obsPath(yesterdayStr, "temperature") : null);
+  const { data: todayHumEnv } = useApi<ComparisonData>(locationId ? obsPath(todayStr, "humidity") : null);
+  const { data: yesterdayHumEnv } = useApi<ComparisonData>(locationId ? obsPath(yesterdayStr, "humidity") : null);
   const { data: latestEnv } = useApi<LatestForecastData>(
     providerId && locationId ? `/forecasts/latest?provider_id=${providerId}&location_id=${locationId}` : null,
   );
@@ -70,6 +74,10 @@ export function ConditionsTimeline({ providerId, locationId, timezone, hideHeadi
     const obsByHour = new Map<number, Observation>();
     for (const o of [...(yesterdayEnv?.data?.observations ?? []), ...(todayEnv?.data?.observations ?? [])]) {
       obsByHour.set(new Date(o.observed_at).getTime(), o);
+    }
+    const humByHour = new Map<number, number>();
+    for (const o of [...(yesterdayHumEnv?.data?.observations ?? []), ...(todayHumEnv?.data?.observations ?? [])]) {
+      if (o.value !== null) humByHour.set(new Date(o.observed_at).getTime(), o.value);
     }
     const fcByHour = new Map<number, Snapshot>();
     for (const s of latestEnv?.data?.snapshots ?? []) {
@@ -90,10 +98,11 @@ export function ConditionsTimeline({ providerId, locationId, timezone, hideHeadi
         hourLabel: hourFmt.format(new Date(ts)),
         condition: useObs ? (obs.condition_code ?? "unknown") : fc ? fc.canonical_condition_code : null,
         temperature: useObs ? obs.value : fc ? fc.temperature_c : null,
+        humidity: useObs ? (humByHour.get(ts) ?? null) : fc ? (fc.humidity_pct ?? null) : null,
       });
     }
     return out;
-  }, [todayEnv, yesterdayEnv, latestEnv, timezone]);
+  }, [todayEnv, yesterdayEnv, todayHumEnv, yesterdayHumEnv, latestEnv, timezone]);
 
   const hasAny = slots.some((s) => s.condition !== null || s.temperature !== null);
   if (!hasAny) {
@@ -111,7 +120,7 @@ export function ConditionsTimeline({ providerId, locationId, timezone, hideHeadi
         {slots.map((s) => (
           <div
             key={s.offset}
-            title={`${s.hourLabel}:00 — ${s.kind === "forecast" ? "forecast" : "observed"}: ${s.condition ? conditionLabel(s.condition) : "no data"}${s.temperature !== null ? `, ${s.temperature}°C` : ""}`}
+            title={`${s.hourLabel}:00 — ${s.kind === "forecast" ? "forecast" : "observed"}: ${s.condition ? conditionLabel(s.condition) : "no data"}${s.humidity !== null ? `, ${Math.round(s.humidity)}% humidity` : ""}${s.temperature !== null ? `, ${s.temperature}°C` : ""}`}
             style={{
               display: "flex", flexDirection: "column", alignItems: "center", minWidth: 40,
               padding: "var(--space-xs) 2px", borderRadius: "var(--radius-sm)",
@@ -125,7 +134,10 @@ export function ConditionsTimeline({ providerId, locationId, timezone, hideHeadi
             <span role="img" aria-label={s.condition ? conditionLabel(s.condition) : "no data"} style={{ fontSize: 18, lineHeight: 1.3 }}>
               {s.condition ? conditionIcon(s.condition) : "–"}
             </span>
-            <span style={{ fontFamily: "var(--font-data)", fontSize: 10 }}>
+            <span style={{ fontFamily: "var(--font-data)", fontSize: 10, fontWeight: 600, color: "var(--color-primary)" }}>
+              {s.humidity !== null ? `${Math.round(s.humidity)}%` : ""}
+            </span>
+            <span style={{ fontFamily: "var(--font-data)", fontSize: 10, color: "var(--color-text-secondary)" }}>
               {s.temperature !== null ? `${Math.round(s.temperature)}°` : ""}
             </span>
           </div>

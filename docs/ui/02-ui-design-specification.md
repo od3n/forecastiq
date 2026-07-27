@@ -247,15 +247,15 @@ Per BR-FRESH-01/02, every time-sensitive view displays:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ [Logo: ForecastIQ]  Overview · Trends · Methodology · Admin* · Settings*   │
+│ [Logo: ForecastIQ]  Overview · Trends · Compare · Methodology              │
 │                                                                              │
-│ [Location Selector ▾]  [Horizon: +1h|+3h|+6h|+12h|+24h|+3d|+7d]  [Avatar] │
+│ [Location Selector ▾]  [Horizon: +1h|+3h|+6h|+12h|+24h|+3d|+7d] [Account ▾]│
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- `*` = role-gated (hidden when not authorized)
+- Settings and Admin live in the **account menu**, not the primary nav (Admin only for role=admin; hiding is UX — the server re-authorizes every request)
 - Location selector and horizon selector are **global controls** persisted in URL
-- Avatar: dropdown with Profile, Settings, Sign out (or "Sign in" link when public)
+- Account menu (labeled with the session email): dropdown with Settings, Admin (role-gated), Sign out — opens on hover, click, or keyboard; replaced by a "Sign in" link when signed out
 - Mobile: hamburger menu collapses nav items; global selectors move to a filter bar below header
 
 ### 3.2 Navigation Flow
@@ -300,8 +300,8 @@ Per BR-ATTR-01:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ Data sources: Open-Meteo (attribution text + link) · OpenWeather (text+link)│
 │ Observations: Open-Meteo Historical (reanalysis blend) · Methodology v2026.1│
-│ All times UTC unless labeled. ForecastIQ measures forecasts; we don't       │
-│ deliver weather.                                                             │
+│ Times shown in the location's timezone unless labeled otherwise.            │
+│ ForecastIQ measures forecasts; we don't deliver weather.                    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

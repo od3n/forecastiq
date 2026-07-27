@@ -42,12 +42,18 @@ reload, host port **3001**). It reads `web/.env.local`:
 
 ```bash
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
-NEXT_PUBLIC_DEV_TOKEN=admin   # dev-mode bearer for authed/admin screens (never set in production)
+# Optional — set both to sign in through a real Supabase project:
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
-The dev token rides the ADR-008 dev-mode verifier: `make seed` promotes the
+Sign-in always goes through `/auth/signin`; no bearer token is injected from
+the environment. Without Supabase config the page shows a **dev-token form**
+riding the ADR-008 dev-mode verifier: enter `admin` (the token is verified
+against `GET /me` before being stored client-side). `make seed` promotes the
 `dev|admin` subject to role=admin, so the Admin screens work locally without a
-Supabase project.
+Supabase project. With Supabase configured, the email/password form is shown
+instead and the SDK session token is attached to API calls automatically.
 
 ## Local observability (obs profile)
 
