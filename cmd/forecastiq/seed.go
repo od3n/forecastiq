@@ -89,14 +89,20 @@ func seed(ctx context.Context, pool dbtx.DBTX) error {
 	// OpenWeather ToS review (D-05, a public-launch gate) and a resolvable
 	// FIQ_PROVIDER_OPENWEATHER_API_KEY. An operator activates it once both are
 	// satisfied; while disabled the scheduler does not generate its slots.
-	owCfg := &catalogdomain.ProviderConfiguration{
-		ID: catalogdomain.OpenWeatherConfigID, WorkspaceID: catalogdomain.SystemWorkspaceID,
-		ProviderID: catalogdomain.OpenWeatherProviderID, Status: catalogdomain.StatusDisabled,
-		CredentialRef: "FIQ_PROVIDER_OPENWEATHER_API_KEY", CollectionSchedule: catalogdomain.Schedule{Interval: "hourly", MinuteOffset: 2},
-		AdapterVersion: "1.0.0", ValidationState: "unvalidated", CreatedAt: now, UpdatedAt: now,
-	}
-	if err := configRepo.Upsert(ctx, pool, owCfg); err != nil {
-		return fmt.Errorf("seed openweather configuration: %w", err)
+	// Insert-only (existence check): re-seeding must never clobber an
+	// operator's activation of the configuration.
+	if _, lookupErr := configRepo.GetByID(ctx, pool, catalogdomain.OpenWeatherConfigID); errors.Is(lookupErr, catalogdomain.ErrNotFound) {
+		owCfg := &catalogdomain.ProviderConfiguration{
+			ID: catalogdomain.OpenWeatherConfigID, WorkspaceID: catalogdomain.SystemWorkspaceID,
+			ProviderID: catalogdomain.OpenWeatherProviderID, Status: catalogdomain.StatusDisabled,
+			CredentialRef: "FIQ_PROVIDER_OPENWEATHER_API_KEY", CollectionSchedule: catalogdomain.Schedule{Interval: "hourly", MinuteOffset: 2},
+			AdapterVersion: "1.0.0", ValidationState: "unvalidated", CreatedAt: now, UpdatedAt: now,
+		}
+		if err := configRepo.Upsert(ctx, pool, owCfg); err != nil {
+			return fmt.Errorf("seed openweather configuration: %w", err)
+		}
+	} else if lookupErr != nil {
+		return fmt.Errorf("seed openweather configuration lookup: %w", lookupErr)
 	}
 
 	// Johor Bahru demo location (idempotent via existence check).

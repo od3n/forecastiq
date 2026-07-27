@@ -3,6 +3,8 @@ package eval_test
 import (
 	"math"
 	"math/rand"
+	"os"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +17,16 @@ import (
 // methodology §11 (pair-level: properties 1–8). Composite/recompute properties
 // (9–11) belong to later work packages.
 
-const fuzzIters = 2000
+// fuzzIters defaults to the PR-gate tier (1000+ per CI/CD doc §1); the nightly
+// schedule raises it to 10000 via FIQ_PROPERTY_ITERS (CI/CD doc §3).
+var fuzzIters = func() int {
+	if v := os.Getenv("FIQ_PROPERTY_ITERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 2000
+}()
 
 func newRNG() *rand.Rand { return rand.New(rand.NewSource(42)) } //nolint:gosec // deterministic test fuzz, not security
 

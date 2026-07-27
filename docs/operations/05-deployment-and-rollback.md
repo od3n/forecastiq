@@ -4,6 +4,12 @@
 **Status**: Approved — Phase 1 Architecture
 **Authority**: NFR-M05..M07; `docs/architecture/06-deployment-architecture.md` §4–6
 
+> **Amendment (2026-07-26, ADR-033)**: deploys are now image-based —
+> `bash deploy/scripts/deploy.sh <ghcr image ref>` (pull → migrate → up →
+> readyz → smoke) and rollback swaps `FIQ_IMAGE` back to the recorded
+> previous digest (`bash deploy/scripts/rollback.sh`). The release-directory
+> and systemd steps below are superseded; see ADR-033.
+
 ---
 
 ## 1. Normal Deploy (main → production)

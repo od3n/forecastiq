@@ -31,6 +31,32 @@ The app listens on `http://localhost:8080` (API) and `http://localhost:9090/metr
 | `make fmt` | gofmt + goimports |
 | `make build` | Compile the single binary into `bin/` |
 | `make docs` | Regenerate the OpenAPI spec |
+| `make obs-up` | Start the local observability stack (Grafana :3000, Prometheus :9091, Loki, Promtail) |
+| `make obs-down` | Stop the observability stack |
+| `make obs-reset` | Destroy observability volumes and restart clean |
+
+## Frontend (dashboard)
+
+The compose stack includes a `frontend` service (Next.js dev server with hot
+reload, host port **3001**). It reads `web/.env.local`:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080/api/v1
+NEXT_PUBLIC_DEV_TOKEN=admin   # dev-mode bearer for authed/admin screens (never set in production)
+```
+
+The dev token rides the ADR-008 dev-mode verifier: `make seed` promotes the
+`dev|admin` subject to role=admin, so the Admin screens work locally without a
+Supabase project.
+
+## Local observability (obs profile)
+
+`make obs-up` starts Prometheus + Loki + Promtail + Grafana under the compose
+`obs` profile (config in `deploy/observability/`). Grafana at
+http://localhost:3000 (anonymous admin in dev) is pre-provisioned with both
+datasources and the "ForecastIQ Operations" dashboard. This is the local
+counterpart of the production grafana-agent → Grafana Cloud pipeline
+(operations doc 03).
 
 ## Running without Docker
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { useApi } from "@/lib/api/hooks";
-import { LocationAdminTable, type LocationEntry } from "@/components/LocationAdminTable";
+import { useApi, devAuthHeaders as authHeaders } from "@/lib/api/hooks";
+import { apiBase } from "@/lib/api/client";
+import { LocationAdminTable, type LocationEntry, type CreateLocationData, type CreateResult } from "@/components/LocationAdminTable";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
 
@@ -12,14 +13,24 @@ export default function AdminLocationsPage() {
   const { data: envelope, error, isLoading, mutate } = useApi<LocationsData>("/locations");
 
   const handleToggle = useCallback(async (id: string, newStatus: string) => {
-    await fetch(`/api/v1/locations/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: newStatus }) });
+    await fetch(`${apiBase}/locations/${id}/status`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: newStatus }) });
     mutate();
   }, [mutate]);
 
-  const handleCreate = useCallback(async (data: { name: string; country_code: string; latitude: number; longitude: number; timezone: string }): Promise<string | null> => {
-    const resp = await fetch("/api/v1/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-    if (resp.status === 409) return "A location already exists within 50 km (BR-LOC-01).";
-    if (!resp.ok) return "Failed to create location.";
+  const handleCreate = useCallback(async (data: CreateLocationData): Promise<CreateResult | null> => {
+    const resp = await fetch(`${apiBase}/locations`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+    if (resp.status === 409) {
+      // Surface the conflicting location from the RFC 7807 problem (BR-LOC-01).
+      const problem = await resp.json().catch(() => null);
+      const existing = problem?.existing_resource?.name;
+      return {
+        error: existing
+          ? `Too close to existing location “${existing}” — locations must be at least ~5.5 km (0.05°) apart.`
+          : "A location already exists within ~5.5 km.",
+        conflict: true,
+      };
+    }
+    if (!resp.ok) return { error: "Failed to create location." };
     mutate();
     return null;
   }, [mutate]);

@@ -21,9 +21,11 @@ state, its trigger, and its required content are defined here and in
 
 ## 1. Global Navigation
 
-Header nav (single row): **Overview · Trends · Methodology · Admin (role-gated) ·
+Header nav (single row): **Overview · Trends · Compare · Methodology · Admin (role-gated) ·
 Settings · Sign in/Account**. Location and horizon selectors are global controls
-persisted in the URL. Attribution footer on every data-bearing page (BR-ATTR-01).
+persisted in the URL (horizon also persists to localStorage; on S-05 only +24h
+is selectable — the daily comparison always shows a full day). Attribution
+footer on every data-bearing page (BR-ATTR-01).
 
 ## 2. Screens
 
@@ -44,6 +46,8 @@ persisted in the URL. Attribution footer on every data-bearing page (BR-ATTR-01)
 | S-13 | Admin › Schedules & Runs | Schedule editor; recent run history with statuses; replay + recompute actions | admin |
 | S-14 | Admin › Users & Audit | User list (disable/delete), audit event log | admin |
 | S-15 | Error pages | 404, 500, 403, offline/network-loss | all |
+| S-16 | Admin › Raw Forecasts | Browse raw snapshots per provider × location; historical collection picker; day filter | admin |
+| S-17 | Admin › Dashboard | Per location × provider "Now ±12h" conditions strips (observed past vs. forecast ahead); future AI-advise action | admin |
 
 ## 3. Mandatory States per Screen (UX amendment)
 

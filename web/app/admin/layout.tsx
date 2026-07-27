@@ -12,10 +12,12 @@ interface MeData {
 }
 
 const ADMIN_NAV = [
+  { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/health", label: "Health" },
   { href: "/admin/providers", label: "Providers" },
   { href: "/admin/locations", label: "Locations" },
   { href: "/admin/schedules", label: "Schedules" },
+  { href: "/admin/forecasts", label: "Raw Forecasts" },
   { href: "/admin/users", label: "Users" },
 ] as const;
 

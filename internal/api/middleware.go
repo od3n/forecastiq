@@ -75,9 +75,26 @@ func Metrics(m *metrics.Metrics) gin.HandlerFunc {
 		if route == "" {
 			route = "unmatched"
 		}
-		statusClass := strconv.Itoa(c.Writer.Status()/100) + "xx"
+		status := c.Writer.Status()
+		statusClass := strconv.Itoa(status/100) + "xx"
 		m.HTTPRequestsTotal.WithLabelValues(c.Request.Method, route, statusClass).Inc()
 		m.HTTPRequestDuration.WithLabelValues(c.Request.Method, route).Observe(time.Since(start).Seconds())
+		if status >= 500 {
+			m.HTTPErrorsTotal.WithLabelValues(route, errorTypeForStatus(status)).Inc()
+		}
+	}
+}
+
+// errorTypeForStatus maps 5xx statuses to the envelope error class used as the
+// http_errors_total error_type label (architecture §3.1).
+func errorTypeForStatus(status int) string {
+	switch status {
+	case http.StatusServiceUnavailable:
+		return "service_unavailable"
+	case http.StatusInternalServerError:
+		return "internal"
+	default:
+		return "server_error"
 	}
 }
 
