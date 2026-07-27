@@ -22,7 +22,7 @@ export const options = {
   ],
   thresholds: {
     http_req_duration: ['p(50)<50', 'p(95)<200', 'p(99)<500'],
-    http_req_failed: ['rate<0.001'],   // < 0.1% error rate
+    http_req_failed: ['rate==0'],   // doc §2 PT-1 target: 0 errors
   },
 };
 
