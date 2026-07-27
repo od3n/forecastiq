@@ -82,7 +82,10 @@ export async function signOut(): Promise<void> {
  * anything else falls back to the Overview.
  */
 export function safeReturnPath(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  // Reject protocol-relative (`//host`) and backslash variants (`/\host`):
+  // browsers normalize `\` to `/`, so `/\evil.example` would navigate
+  // off-origin (DRB-WP19W-001 open-redirect). Only same-origin absolute paths.
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/";
   return raw;
 }
 

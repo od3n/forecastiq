@@ -33,6 +33,9 @@ describe("safeReturnPath (open-redirect guard)", () => {
     expect(safeReturnPath("https://evil.example")).toBe("/");
     expect(safeReturnPath("//evil.example")).toBe("/");
     expect(safeReturnPath("javascript:alert(1)")).toBe("/");
+    // Backslash bypass: browsers normalize \ to / (DRB-WP19W-001).
+    expect(safeReturnPath("/\\evil.example")).toBe("/");
+    expect(safeReturnPath("\\\\evil.example")).toBe("/");
   });
 });
 
