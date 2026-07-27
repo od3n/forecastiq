@@ -12,14 +12,8 @@ variable "cloudflare_zone_id" {
   type        = string
 }
 
-variable "neon_api_key" {
-  description = "Neon API key for project management"
-  type        = string
-  sensitive   = true
-}
-
 variable "vps_ip" {
-  description = "Public IPv4 address of the Hetzner VPS"
+  description = "Elastic IP of the ForecastIQ EC2 instance (provisioned by the external instances Terraform project)"
   type        = string
 }
 

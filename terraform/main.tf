@@ -1,5 +1,17 @@
 # ForecastIQ — Terraform Configuration
-# Manages Cloudflare DNS records and Neon PostgreSQL project.
+# Manages Cloudflare DNS records only (ADR-033).
+#
+# The EC2 instance (t3.small) is provisioned by a SEPARATE Terraform project;
+# this module consumes its Elastic IP via var.vps_ip. If the instances project
+# later exposes outputs, wire them here with terraform_remote_state instead of
+# the manual variable:
+#
+#   data "terraform_remote_state" "infra" { backend = "..." config = { ... } }
+#   → data.terraform_remote_state.infra.outputs.forecastiq_eip
+#
+# PostgreSQL runs as a container on the instance (ADR-033) — the previous Neon
+# provider/resources were removed with that decision.
+#
 # State: remote (Cloudflare R2 or Terraform Cloud free tier).
 #
 # Usage:
@@ -9,6 +21,7 @@
 #   terraform apply  # manual approval required
 #
 # Reference: docs/delivery/04-infrastructure-as-code.md
+# Reference: docs/adr/ADR-033-personal-use-ec2-docker-deployment.md
 
 terraform {
   required_version = ">= 1.6"
@@ -17,10 +30,6 @@ terraform {
     cloudflare = {
       source  = "cloudflare/cloudflare"
       version = "~> 4.0"
-    }
-    neon = {
-      source  = "kislerdm/neon"
-      version = "~> 0.6"
     }
   }
 
@@ -48,8 +57,4 @@ terraform {
 
 provider "cloudflare" {
   api_token = var.cloudflare_api_token
-}
-
-provider "neon" {
-  api_key = var.neon_api_key
 }

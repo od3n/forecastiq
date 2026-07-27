@@ -6,8 +6,11 @@ resource "cloudflare_record" "api" {
   name    = "api"
   content = var.vps_ip
   type    = "A"
-  ttl     = 60 # Fast failover (deployment architecture §8)
-  proxied = false # Preserve client IPs for rate limiting
+  ttl     = 1 # Auto (required when proxied)
+  # Proxied: TLS terminates at Cloudflare; the EC2 origin serves HTTP :80
+  # only (ADR-033 — no Caddy on the instance). Client IPs arrive via
+  # CF-Connecting-IP; revisit IP-keyed rate limiting if traffic grows.
+  proxied = true
 
   comment = "ForecastIQ API — managed by Terraform"
 }
