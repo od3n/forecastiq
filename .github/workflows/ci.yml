@@ -208,6 +208,13 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }} # read:packages PAT for the host pull
           IMAGE: ${{ needs.build-release.outputs.image }}
         run: |
+          # Until the EC2 deploy secrets are configured, skip cleanly rather
+          # than failing every main merge (same pattern as the monthly drill).
+          if [ -z "$VPS_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "::notice::Deploy secrets not configured (VPS_HOST/DEPLOY_SSH_KEY) — image ${IMAGE} built, signed and verified; deploy skipped."
+            exit 0
+          fi
+
           # Configure SSH with a pinned host key (no TOFU in CI).
           mkdir -p ~/.ssh
           echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
