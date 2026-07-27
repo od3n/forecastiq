@@ -19,6 +19,10 @@ var (
 		"forecastiq_restore_test_last_timestamp_seconds",
 		"Unix timestamp of the last restore test (from the backup status file).",
 		nil, nil)
+	restoreTestStatusDesc = prometheus.NewDesc(
+		"forecastiq_restore_test_status",
+		"Last restore-test status (1 = success, 0 = failure).",
+		nil, nil)
 )
 
 // BackupStatusReader yields the last backup / restore-test entries. Implemented
@@ -46,6 +50,7 @@ func (c *BackupCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- backupLastSuccessDesc
 	ch <- backupStatusDesc
 	ch <- restoreTestLastDesc
+	ch <- restoreTestStatusDesc
 }
 
 // Collect implements prometheus.Collector.
@@ -68,5 +73,15 @@ func (c *BackupCollector) Collect(ch chan<- prometheus.Metric) {
 	if lastRestore != nil && lastRestore.CompletedAt != nil {
 		ch <- prometheus.MustNewConstMetric(restoreTestLastDesc, prometheus.GaugeValue,
 			float64(lastRestore.CompletedAt.Unix()))
+	}
+	if lastRestore != nil {
+		// A failed restore test must page directly (A11b): staleness alone
+		// (A11) would not fire, because a failed run still refreshes the
+		// timestamp (DRB-WP24-004).
+		status := 0.0
+		if lastRestore.Status == "success" {
+			status = 1.0
+		}
+		ch <- prometheus.MustNewConstMetric(restoreTestStatusDesc, prometheus.GaugeValue, status)
 	}
 }
