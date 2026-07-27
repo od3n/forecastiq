@@ -1,0 +1,78 @@
+name: Scheduled
+
+# Scheduled quality gates (docs/delivery/02-ci-cd.md §3):
+#   nightly — extended property tests (10K cases) + full govulncheck
+#   weekly  — gitleaks full-history secret scan
+#   monthly — rollback drill against the production VPS (skips cleanly when
+#             deploy secrets are not configured; also runnable on demand)
+# The weekly performance (k6 PT-1/PT-2/PT-6) and reliability suites are a
+# scaffold in test/perf; wiring them here is tracked in WP-26b (needs the
+# functional seeder + baseline runs first). See
+# docs/reviews/work-packages/WP-26-delivery-review.md.
+
+on:
+  schedule:
+    - cron: "30 1 * * *" # nightly 01:30 UTC
+    - cron: "0 3 * * 1" # weekly Monday 03:00 UTC
+    - cron: "0 5 1 * *" # monthly 1st 05:00 UTC
+  workflow_dispatch: {} # runs all three jobs on demand
+
+jobs:
+  nightly-extended:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 1 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.12"
+          cache: true
+      - name: Extended property tests (10K cases per invariant)
+        env:
+          FIQ_PROPERTY_ITERS: "10000"
+        run: go test -race -run "TestPropert" -count=1 ./internal/...
+      - name: govulncheck (full)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          govulncheck ./...
+
+  weekly-gitleaks-history:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history — the point of the weekly tier
+      - name: gitleaks full-history scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  monthly-rollback-drill:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 1 * *'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rollback drill (< 5 min, NFR-M07)
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+          VPS_USER: ${{ secrets.VPS_USER || 'deploy' }}
+        run: |
+          if [ -z "$VPS_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "Deploy secrets not configured — skipping drill (nothing to rehearse yet)."
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "$VPS_HOST_KEY" > ~/.ssh/known_hosts
+          echo "StrictHostKeyChecking yes" > ~/.ssh/config
+          export DEPLOY_SSH_KEY_PATH=~/.ssh/deploy_key
+          # Roll back to previous, verify, then roll forward again.
+          bash deploy/scripts/rollback.sh
+          bash deploy/scripts/rollback.sh

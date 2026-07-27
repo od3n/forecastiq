@@ -69,6 +69,25 @@ func (r *ConfigurationRepository) ListActive(ctx context.Context, tx dbtx.DBTX) 
 	return out, rows.Err()
 }
 
+// List implements ports.ConfigurationRepository: all configurations regardless
+// of status (admin surface — disabled configs must remain operable).
+func (r *ConfigurationRepository) List(ctx context.Context, tx dbtx.DBTX) ([]*domain.ProviderConfiguration, error) {
+	rows, err := tx.Query(ctx, `SELECT `+configColumns+` FROM provider_configurations ORDER BY created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("list configurations: %w", err)
+	}
+	defer rows.Close()
+	var out []*domain.ProviderConfiguration
+	for rows.Next() {
+		c, err := scanConfiguration(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // Update implements ports.ConfigurationRepository: updates the operator-mutable
 // fields (status, collection schedule, adapter version, validation state). The
 // credential_ref is never mutated here (secret rotation is env-side; WP-18).

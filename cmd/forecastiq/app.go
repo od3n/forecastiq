@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/forecastiq/forecastiq/adapters/auth/devauth"
 	"github.com/forecastiq/forecastiq/adapters/auth/jwks"
@@ -26,6 +27,7 @@ import (
 	"github.com/forecastiq/forecastiq/adapters/persistence/identitypg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/observationpg"
 	"github.com/forecastiq/forecastiq/adapters/persistence/schedulerpg"
+	"github.com/forecastiq/forecastiq/adapters/promexport"
 	"github.com/forecastiq/forecastiq/internal/admin"
 	"github.com/forecastiq/forecastiq/internal/analysis"
 	"github.com/forecastiq/forecastiq/internal/api"
@@ -145,6 +147,41 @@ func buildApp(ctx context.Context) (*App, error) {
 	})
 
 	m := metrics.New()
+	m.RegisterPoolCollector(pool)
+
+	// Engine gauges (architecture §3.4) and backup metrics (A10/A11) are
+	// DB/file-derived at scrape time so they stay truthful when the producing
+	// process stalls (DRB-WP22-004/006).
+	m.Registry.MustRegister(
+		promexport.NewEngineCollector(pool),
+		promexport.NewBackupCollector(backupstatus.New(cfg.BackupStatusFile)),
+	)
+
+	// Payload volume gauges (architecture §3.6 Runtime): report statfs bytes at
+	// each Prometheus scrape via the payloadStore.Usage() call. Errors degrade
+	// to reporting zero rather than failing the scrape.
+	m.Registry.MustRegister(
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "payload_volume_used_bytes",
+			Help: "Payload storage volume used bytes.",
+		}, func() float64 {
+			u, err := payloadStore.Usage()
+			if err != nil {
+				return 0
+			}
+			return float64(u.UsedBytes)
+		}),
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "payload_volume_total_bytes",
+			Help: "Payload storage volume total capacity bytes.",
+		}, func() float64 {
+			u, err := payloadStore.Usage()
+			if err != nil {
+				return 0
+			}
+			return float64(u.TotalBytes)
+		}),
+	)
 
 	// Provider adapter (Open-Meteo; keyless at MVP).
 	providerLimiter := ratelimit.NewLimiter(6, 6.0/60.0, clk) // 6 req/min effective
@@ -263,6 +300,7 @@ func buildApp(ctx context.Context) (*App, error) {
 		Auth:             api.Auth{Users: identityUsers, Keys: identityKeys},
 		CORSAllowOrigins: cfg.CORSAllowOrigins,
 		RateLimiter:      ipLimiter,
+		BodyLimit:        cfg.RequestBodyLimit,
 		Clock:            clk,
 	})
 
@@ -292,7 +330,7 @@ func buildApp(ctx context.Context) (*App, error) {
 	// Analysis ranking (WP-14): the batch then ranks providers per cell into
 	// ProviderRanking rows (cohort normalization, weights, penalty, statuses).
 	ranker := analysis.NewRankService(analysispg.NewRankingRepository(), tx, pool, m, clk, logger)
-	analysisDispatcher := scheduler.NewAnalysisDispatcher(matcher, aggregator, ranker, logger)
+	analysisDispatcher := scheduler.NewAnalysisDispatcher(matcher, aggregator, ranker, m, logger)
 	jobRouter := scheduler.NewRouter(map[string]scheduler.Dispatcher{
 		scheduler.JobForecastCollection:    dispatcher,
 		scheduler.JobObservationCollection: obsDispatcher,

@@ -4,6 +4,14 @@
 **Status**: Approved — Phase 1 Architecture
 **Authority**: ADR-007 (single VPS + Caddy); constraints §5 (hosting model, $50–150/mo target); NFR-M05..M07
 
+> **Amendment (2026-07-26, ADR-033)**: production now runs on an AWS EC2
+> t3.small with Docker Compose (app + PostgreSQL containers), TLS terminated
+> at Cloudflare (proxied DNS, no origin Caddy), releases shipped as
+> cosign-signed GHCR images referenced by digest. §3–§4 and §8 below describe
+> the superseded Hetzner/native model; see
+> `docs/adr/ADR-033-personal-use-ec2-docker-deployment.md` for the current
+> topology. Full doc rewrite is deferred to the WP-27 docs pass.
+
 ---
 
 ## 1. Platform Decision

@@ -4,6 +4,18 @@
 **Status**: Approved — Phase 1 Architecture
 **Authority**: NFR-A04/A05, NFR-D06/D07; `docs/architecture/09-reliability-architecture.md` §7
 
+> **Amendment (2026-07-27, ADR-033)**: production Postgres is now a container
+> on the EC2 host (no managed vendor), so **vendor PITR does not exist** —
+> disregard PITR / "restore to new managed instance" / RPO < 1 h references
+> below. Actual recovery profile: **RPO 24 h** (nightly `pg_dump` via the `db`
+> container, `deploy/scripts/backup.sh`), and up to **7 d for full instance/EBS
+> loss** (weekly Sunday rclone→B2 offsite copy, which is mandatory — a missing
+> remote fails the backup). Restore/verify runs in a throwaway
+> `postgres:16-alpine` container, never the production cluster. Backup/restore
+> status drives A10 (`forecastiq_backup_status`), A11 (staleness), and A11b
+> (`forecastiq_restore_test_status`). Backups are the **only** durability net.
+> Full doc rewrite deferred to the WP-27 docs pass.
+
 ---
 
 ## 1. Backup Layers

@@ -88,6 +88,22 @@ dev-logs: ## Tail application logs
 .PHONY: start
 start: dev-up ## Alias: start the stack
 
+# ── Observability stack ───────────────────────────────────────────────
+.PHONY: obs-up
+obs-up: ## Start the observability stack (Grafana + Prometheus + Loki)
+	$(COMPOSE) --profile obs up -d prometheus loki promtail grafana
+	@echo "Grafana: http://localhost:3000  Prometheus: http://localhost:9091"
+
+.PHONY: obs-down
+obs-down: ## Stop the observability stack (obs services only)
+	$(COMPOSE) --profile obs rm -sf prometheus loki promtail grafana
+
+.PHONY: obs-reset
+obs-reset: ## Destroy observability volumes and restart clean
+	$(COMPOSE) --profile obs rm -sf prometheus loki promtail grafana
+	-docker volume rm -f forecastiq_prometheus_data forecastiq_loki_data forecastiq_grafana_data
+	$(COMPOSE) --profile obs up -d prometheus loki promtail grafana
+
 .PHONY: stop
 stop: dev-down ## Alias: stop the stack
 
@@ -162,7 +178,19 @@ docs-check: ## CI gate: committed OpenAPI spec must be valid
 docker-build: ## Build the production (distroless) image
 	$(DOCKER) build -t forecastiq:$(VERSION) .
 
+# ── Deploy ────────────────────────────────────────────────────────────
+.PHONY: deploy-release
+deploy-release: ## Build + push a release image to GHCR (ADR-033: image-based deploy)
+	$(DOCKER) build --target prod -t ghcr.io/od3n/forecastiq:$(VERSION) .
+	$(DOCKER) push ghcr.io/od3n/forecastiq:$(VERSION)
+	@echo "Release image: ghcr.io/od3n/forecastiq:$(VERSION)"
+	@echo "Deploy: bash deploy/scripts/deploy.sh ghcr.io/od3n/forecastiq:$(VERSION)"
+
+.PHONY: deploy-smoke
+deploy-smoke: ## Run smoke tests against a running instance (default: localhost:8080)
+	@bash deploy/scripts/smoke-test.sh $(SMOKE_URL)
+
 # ── Housekeeping ──────────────────────────────────────────────────────
 .PHONY: clean
 clean: ## Remove build/test artifacts
-	rm -rf $(BIN_DIR) coverage /tmp/fiq-openapi
+	rm -rf $(BIN_DIR) coverage /tmp/fiq-openapi checksums.txt
