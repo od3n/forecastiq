@@ -23,6 +23,7 @@ function AccountArea({ isAdmin }: { isAdmin: boolean }) {
   const session = useSession();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   if (session.status === "loading") return <span className={styles.account} />;
 
@@ -41,7 +42,12 @@ function AccountArea({ isAdmin }: { isAdmin: boolean }) {
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onKeyDown={(e) => {
-        if (e.key === "Escape") setOpen(false);
+        // Escape closes and restores focus to the trigger (DRB-WP19W-002);
+        // otherwise focus falls to <body> when the popup unmounts.
+        if (e.key === "Escape") {
+          setOpen(false);
+          triggerRef.current?.focus();
+        }
       }}
       onBlur={(e) => {
         if (!wrapRef.current?.contains(e.relatedTarget as Node | null)) setOpen(false);
@@ -49,9 +55,9 @@ function AccountArea({ isAdmin }: { isAdmin: boolean }) {
     >
       <button
         type="button"
+        ref={triggerRef}
         className={styles.menuTrigger}
         aria-expanded={open}
-        aria-haspopup="true"
         onClick={() => setOpen((v) => !v)}
       >
         <span className={styles.accountEmail}>{session.email ?? "Account"}</span>
