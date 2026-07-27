@@ -28,6 +28,7 @@ type RouterConfig struct {
 	Auth             Auth
 	CORSAllowOrigins []string
 	RateLimiter      *ratelimit.KeyedLimiter
+	BodyLimit        int64
 	Clock            clock.Clock
 }
 
@@ -38,7 +39,13 @@ type RouterConfig struct {
 func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cfg RouterConfig) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(Recovery(logger), RequestID(), RequestLogger(logger), Metrics(m), CORS(cfg.CORSAllowOrigins))
+	bodyLimit := cfg.BodyLimit
+	if bodyLimit <= 0 {
+		bodyLimit = 1 << 20 // 1 MB default (security architecture §4)
+	}
+	// RequestBodyLimit runs after logger/metrics/CORS so 413 responses are
+	// logged, counted, and carry CORS headers (DRB-WP25 ordering finding).
+	r.Use(Recovery(logger), RequestID(), SecurityHeaders(), RequestLogger(logger), Metrics(m), CORS(cfg.CORSAllowOrigins), RequestBodyLimit(bodyLimit))
 
 	clk := cfg.Clock
 	if clk == nil {

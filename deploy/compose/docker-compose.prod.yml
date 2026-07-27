@@ -42,6 +42,10 @@ services:
       # Bind inside the container; host exposure stays loopback-only via the
       # 127.0.0.1 port mapping above.
       FIQ_METRICS_ADDR: 0.0.0.0:9090
+      # CORS final allowlist (WP-25 / threat model §15): the production
+      # dashboard origin. Not a secret — config lives in repo per §15.
+      # Override FIQ_DASHBOARD_ORIGIN in /opt/forecastiq/.env if the domain differs.
+      FIQ_CORS_ALLOW_ORIGINS: ${FIQ_DASHBOARD_ORIGIN:-https://app.forecastiq.example}
       FIQ_PAYLOAD_STORE_DIR: /data/payloads
       FIQ_BACKUP_STATUS_FILE: /data/backup-status.json
     env_file:
