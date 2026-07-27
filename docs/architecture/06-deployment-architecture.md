@@ -16,23 +16,28 @@
 
 ## 1. Platform Decision
 
-**Primary: Hetzner Cloud VPS + managed PostgreSQL (Neon or Supabase) + Cloudflare (CDN/DNS).**
+**Primary (ADR-033, personal-use): AWS EC2 t3.small + Docker Compose
+(containerized PostgreSQL 16) + Cloudflare (TLS/CDN/DNS).**
 
-| Criterion | Hetzner VPS (selected) | Fly.io | Render | AWS App Runner |
-|-----------|------------------------|--------|--------|----------------|
-| Go binary support | Native (systemd) | Containers | Containers | Containers |
-| Next.js static | CDN (Cloudflare Pages) | Static hosting | Static | + S3/CloudFront |
-| Managed PostgreSQL | Neon/Supabase (external) | Postgres (paid) | Postgres (paid) | RDS (paid) |
-| Scheduled jobs | In-process (ADR-005) | Machines cron | Cron jobs (paid) | EventBridge |
-| Secrets | Env via systemd + encrypted file | Native | Native | SSM |
-| Rollback | Redeploy previous artifact (< 5 min) | Releases | Deploys | Versions |
-| Monthly cost (expected) | **~$45–55** | ~$60–90 | ~$70–100 | ~$80–150 |
-| Operational burden | Low (one machine, documented) | Low–Med | Low | Medium (IAM, VPC) |
-| Portfolio visibility | Full control, demonstrable | Good | Good | Enterprise-flavored |
+The original Phase-1 plan (Hetzner VPS + native systemd Go binary + Neon
+managed PostgreSQL + origin Caddy) was superseded by ADR-033 for a
+single-operator personal deployment. The instance is provisioned by a separate
+Terraform project; this repo's Terraform manages Cloudflare DNS only.
 
-Decision rationale: constraints §5 already fixes the model (VPS + managed DB + CDN at $50–150); Hetzner CX32-class gives 4 vCPU/8 GB at ~$12, maximizing headroom per dollar. No Kubernetes (ADR-007 binding).
+| Criterion | EC2 t3.small + Docker (selected) | Native systemd (superseded) |
+|-----------|----------------------------------|-----------------------------|
+| App runtime | Container (distroless image, GHCR, cosign-signed) | Native Go binary via systemd |
+| Database | postgres:16 container, pgdata on EBS | Neon/Supabase managed |
+| TLS | Cloudflare (proxied); origin plain HTTP :80 | Origin Caddy 2 (ACME) |
+| Scheduled jobs | In-process (ADR-005) | In-process (ADR-005) |
+| Secrets | `/etc/forecastiq/secrets.env` via compose `env_file` (read by `deploy` user) | systemd EnvironmentFile |
+| Rollback | Swap `FIQ_IMAGE` to recorded previous digest (< 5 min) | Redeploy previous artifact |
+| Durability | Nightly pg_dump + weekly B2 offsite (WP-24) — only net (no vendor PITR) | Managed-DB PITR |
 
-**Alternative (documented, not selected):** Fly.io — acceptable if Hetzner availability/region is an issue; cost +25%, slightly more opaque debugging.
+Decision rationale: ADR-033 — an EC2 instance already exists, the repo already
+ships a production distroless image, and containerizing removes the entire
+host-config surface (systemd unit, Caddy packaging, sudo wrappers, binary
+transport). No Kubernetes (ADR-007 binding).
 
 ## 2. Environment Topology
 
@@ -40,56 +45,60 @@ Decision rationale: constraints §5 already fixes the model (VPS + managed DB + 
 |-------------|---------|----------------|
 | **local** | Development | Docker Compose: app (Go, hot-reload via air) + PostgreSQL 16 + payload volume mount. `.env.local` for secrets. |
 | **ci** | Test execution | GitHub Actions: ephemeral PostgreSQL 16 service container; no persistent state. |
-| **production** | Public deployment | VPS + managed DB + volume + Caddy + Cloudflare. |
-| staging | **Not justified for MVP** | Single operator; production-like validation via preview deploys of the dashboard (Cloudflare Pages PR previews) + migration dry-run in CI against a DB copy. Staging promotion trigger: second engineer or customer-facing SLAs. |
+| **production** | Public deployment | EC2 t3.small: `docker compose` (app + postgres:16) + EBS volume + Cloudflare (proxied TLS/DNS). |
+| staging | **Not justified for MVP** | Single operator; production-like validation via Cloudflare Pages PR previews of the dashboard + the deploy rehearsal documented in the WP-23 re-review. |
 
 ## 3. Production Topology
 
 ```mermaid
 graph TB
-    DNS["Cloudflare DNS<br/>(api.forecastiq.example → VPS IP)"]
-    CF["Cloudflare CDN<br/>(dashboard static, Pages)"]
-    subgraph "Hetzner VPS (CX32-class)"
-        CADDY["Caddy 2<br/>(TLS 1.3 auto, reverse proxy)"]
-        SVC["systemd: forecastiq.service<br/>(Go binary, Restart=always)"]
-        VOL["Block volume 50 GB<br/>(mounted /var/lib/forecastiq/payloads)"]
-        BACKUP["Nightly pg_dump → volume<br/>+ weekly rsync → B2"]
+    DNS["Cloudflare DNS + TLS<br/>(api.<domain> → EC2 Elastic IP, proxied)"]
+    CF["Cloudflare Pages<br/>(dashboard static export)"]
+    subgraph "AWS EC2 t3.small (Docker Compose)"
+        APP["app container<br/>(distroless, :8080 → host :80)"]
+        DB[("postgres:16 container<br/>(pgdata on EBS)")]
+        VOL["EBS volume<br/>(payloads, backups)"]
+        BACKUP["Nightly pg_dump (cron)<br/>+ weekly rclone → B2"]
     end
-    NEON[("Neon/Supabase PostgreSQL 16<br/>(PITR, daily backups, 3 GB+)")]
+    GHCR["GHCR<br/>(cosign-signed image by digest)"]
     SB["Supabase Auth"]
-    GC["Grafana Cloud free tier<br/>(logs, metrics, alerts, uptime)"]
+    GC["Grafana Cloud free tier<br/>(logs, metrics, alerts)"]
 
-    DNS --> CADDY
-    CF --> CADDY
-    CADDY --> SVC
-    SVC --> VOL
-    SVC --> NEON
-    SVC --> SB
-    SVC --> GC
-    BACKUP --> NEON
+    DNS --> APP
+    CF -.dashboard.-> DNS
+    APP --> DB
+    APP --> VOL
+    APP --> SB
+    APP --> GC
+    GHCR -.pulled by deploy.sh.-> APP
+    BACKUP --> DB
     BACKUP --> VOL
 ```
+
+TLS terminates at Cloudflare; the origin serves plain HTTP :80 (the EC2
+security group should restrict :80 to Cloudflare IP ranges — ADR-033 §4
+follow-up). Metrics bind loopback-only on the host (`127.0.0.1:9090`).
 
 ## 4. Deployment Flow
 
 ```text
 merge to main
   → GitHub Actions:
-      1. lint + test + build (Go binary, linux/amd64)
-      2. OpenAPI generation + breaking-change diff
-      3. container image build (distroless) + Trivy scan
-      4. migration dry-run against DB snapshot copy
-      5. dashboard build (next export) → Cloudflare Pages deploy
-      6. artifact upload (binary + migrations + checksums)
-  → deploy job (manual approval on main; auto on tag):
-      7. rsync artifact to VPS
-      8. run migrations (flag-gated: `forecastiq migrate --confirm`)
-      9. systemd restart (rolling: stop intake → drain 30s → swap binary → start)
-     10. smoke tests (healthz, readyz, one public endpoint, one admin login)
-     11. notify (log + Slack/email webhook)
+      1. lint + test + OpenAPI diff + image build (distroless) + Trivy (vuln+secret)
+      2. build-release: push ghcr.io/od3n/forecastiq:<version>, record digest,
+         cosign sign (keyless, OIDC)
+  → deploy-api job (production environment manual approval):
+      3. cosign verify the image against this repo's main workflow identity
+      4. deploy/scripts/deploy.sh <digest> over SSH (pinned host key):
+         pull → up -d db → `compose run --rm app migrate up` → up -d app →
+         readyz → smoke → image prune
+      (deploy-api skips cleanly when EC2 secrets are unset — image still built + signed)
+  → dashboard: Cloudflare Pages builds the static export independently
 ```
 
-**Zero-downtime expectation:** MVP accepts < 30 s unavailability during binary swap (single process; Caddy returns 502 during drain). Honest target documented; true zero-downtime requires a second instance (promotion).
+**Zero-downtime expectation:** MVP accepts a few seconds' unavailability during
+compose recreation (single instance). True zero-downtime requires a second
+instance (promotion).
 
 ## 5. Database Migrations
 
@@ -100,49 +109,66 @@ merge to main
 
 ## 6. Rollback Procedure (NFR-M07: < 5 min)
 
-1. `deploy rollback` → rsync previous artifact (retained: last 5 versions on VPS + GitHub artifacts 90 d).
-2. systemd restart with previous binary.
-3. Smoke test. Total: < 5 min (measured in CI deploy drills monthly).
+1. `bash deploy/scripts/rollback.sh` → swap `FIQ_IMAGE` to the recorded previous
+   digest (`/opt/forecastiq/.previous-image`); the image is still present
+   locally (no registry pull).
+2. `docker compose up -d app` recreates the container on the previous image.
+3. Smoke test. Total: < 5 min (rehearsed monthly via scheduled.yml).
 
-Schema rollback: only via a new forward migration (contract pattern); PITR for data corruption (separate runbook).
+Schema rollback: only via a new forward migration (contract pattern); restore
+from the nightly pg_dump for data corruption (no vendor PITR under ADR-033;
+separate backup runbook).
 
 ## 7. Secrets Management (summary; detail in `docs/security/04-secrets-management.md`)
 
 | Secret | Storage | Rotation |
 |--------|---------|----------|
-| DATABASE_URL | systemd EnvironmentFile (0600, root-only) | 90 d (managed DB credential rotation) |
-| OpenWeather API key | Same file; referenced by `credential_ref` name | On suspicion; runbook |
+| POSTGRES_PASSWORD | `/opt/forecastiq/.env` (compose interpolation, `deploy`-owned 0600) | On suspicion; recreate db + app |
+| OpenWeather API key | `/etc/forecastiq/secrets.env` (compose `env_file`); referenced by `credential_ref` | On suspicion; runbook |
 | SUPABASE_SERVICE_ROLE_KEY | Same file; backend-only | Vendor dashboard |
 | JWT signing | Not stored (JWKS fetch) | Vendor-managed rotation tolerated |
-| Deploy SSH key | GitHub Actions secret; deploy-key on VPS (command-restricted) | 180 d |
+| Deploy SSH key | GitHub Actions secret; `deploy` user key on the EC2 host | 180 d |
 
-No secrets in repository, images, or CI logs (secret scanning in CI; `.env*` gitignored).
+Secrets are read client-side by the `deploy` user via the compose `env_file`
+(not a root systemd EnvironmentFile). Rotation is exercised monthly by
+`deploy/scripts/rotation-drill.sh --live` (recreates the app container). No
+secrets in repository, images, or CI logs (gitleaks in CI; `.env*` gitignored).
 
 ## 8. Domain and TLS
 
-- `api.forecastiq.example` → VPS IP (Cloudflare DNS, proxied off for API to preserve client IPs for rate limiting; dashboard on Pages gets edge TLS).
-- Caddy: automatic Let's Encrypt certificates, TLS 1.3 minimum, HSTS, security headers (NFR-SEC09).
-- Dashboard: `app.forecastiq.example` on Cloudflare Pages (edge TLS included).
+- `api.<domain>` → EC2 Elastic IP (Cloudflare DNS, **proxied**; TLS terminates
+  at Cloudflare, origin serves plain HTTP :80 per ADR-033). Client IPs arrive
+  via `CF-Connecting-IP`; the EC2 security group should restrict :80 to
+  Cloudflare IP ranges (ADR-033 §4 follow-up).
+- HSTS + Always-Use-HTTPS: Cloudflare zone settings (`terraform/cloudflare.tf`).
+  API response security headers: app `SecurityHeaders` middleware (WP-25).
+- Dashboard: `app.<domain>` on Cloudflare Pages (edge TLS; CSP via
+  `web/public/_headers`).
 
 ## 9. Infrastructure as Code Scope
 
-Detail: `docs/delivery/04-infrastructure-as-code.md`. Summary: Terraform for Cloudflare DNS records + Neon project (if Neon provider fits); VPS provisioning via scripted bootstrap (cloud-init) committed to repo; Caddyfile + systemd units in repo. Platform-managed: Pages, Grafana Cloud, Supabase project (manual bootstrap, documented).
+Detail: `docs/delivery/04-infrastructure-as-code.md`. Summary: this repo's
+Terraform manages **Cloudflare DNS + zone settings only**; the EC2 instance is
+provisioned by a separate Terraform project (consumed here via `var.vps_ip`).
+Host preparation is `deploy/bootstrap.sh` (Docker Engine, `deploy` user,
+ufw/fail2ban, data dirs). Platform-managed: Pages, Grafana Cloud, Supabase
+project (manual bootstrap, documented).
 
-## 10. Cost Summary (constraints §5, verified)
+## 10. Cost Summary (constraints §5)
 
 | Component | Est. $/mo |
 |-----------|-----------|
-| Hetzner CX32 (4 vCPU, 8 GB) | 12 |
-| 50 GB volume | 5 |
-| Neon/Supabase paid tier | 20–25 |
+| AWS EC2 t3.small (on-demand; less if reserved/existing) | ~15 |
+| EBS volume (gp3, ~30 GB) | 3 |
 | Cloudflare (Pages free + DNS free) | 0 |
-| Supabase Auth (included) | 0 |
+| Supabase Auth (free tier) | 0 |
 | Grafana Cloud free tier | 0 |
 | Domain | 1.5 |
 | Backup storage (B2 ~50 GB) | 3 |
-| **Total** | **~$42–47** |
+| **Total** | **~$22–25** |
 
-Within the $50–150 target with > 50% headroom. Growth estimate: +$20/mo at 10× traffic (DB tier + volume). Cost alerts: Grafana Cloud billing + Hetzner budget notification at 80%.
+Well within the $50–150 target. PostgreSQL is self-hosted on the instance
+(no managed-DB line), which is why WP-24 backups are the only durability net.
 
 ## 11. Cross-Reference
 
