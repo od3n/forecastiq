@@ -19,10 +19,10 @@ check() {
   local expected_status="${3:-200}"
 
   # No curl -f here: with -f curl exits non-zero on 4xx while still emitting
-  # the -w write-out, so the fallback would append "000" and corrupt the
-  # captured status (DRB-WP23-005). -w alone reports the code; only transport
-  # failures take the 000 fallback.
-  status=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+  # the -w write-out, so a fallback echo would corrupt the captured status
+  # (DRB-WP23-005). -w alone reports the code — including "000" on transport
+  # failure — so no fallback is needed; `|| true` only absorbs the exit code.
+  status=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || true)
   if [ "$status" = "$expected_status" ]; then
     echo "  [PASS] $name (HTTP $status)"
     PASS=$((PASS + 1))

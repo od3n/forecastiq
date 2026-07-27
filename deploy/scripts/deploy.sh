@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# deploy/scripts/deploy.sh — Deploy a release to the ForecastIQ VPS.
-# Can be run manually or called by CI. Requires SSH access to the VPS.
+# deploy/scripts/deploy.sh — Deploy a ForecastIQ image to the EC2 host.
+# Can be run manually or called by CI. Requires SSH access as the deploy user.
 #
-# Reference: docs/operations/05-deployment-and-rollback.md §1
-# Reference: docs/architecture/06-deployment-architecture.md §4
+# Reference: docs/adr/ADR-033-personal-use-ec2-docker-deployment.md
+# Reference: docs/operations/05-deployment-and-rollback.md §1 (amended)
 #
-# Usage: bash deploy/scripts/deploy.sh <version> [vps_host] [vps_user]
-#   version:  release identifier (e.g. main-42, v2026.07.25-1)
-#   vps_host: VPS IP or hostname (default: $VPS_HOST env)
-#   vps_user: SSH user (default: deploy)
+# Usage: bash deploy/scripts/deploy.sh <image-ref> [vps_host] [vps_user]
+#   image-ref: full image reference — prefer the immutable digest form
+#              (ghcr.io/od3n/forecastiq@sha256:...); tags work for manual runs
+#   vps_host:  EC2 IP or hostname (default: $VPS_HOST env)
+#   vps_user:  SSH user (default: deploy)
+#
+# Optional env:
+#   GHCR_TOKEN — read:packages token; when set, the host logs in to ghcr.io
+#                before pulling (required while the package is private)
 set -euo pipefail
 
-VERSION="${1:?Usage: deploy.sh <version> [vps_host] [vps_user]}"
+IMAGE="${1:?Usage: deploy.sh <image-ref> [vps_host] [vps_user]}"
 VPS_HOST="${2:-${VPS_HOST:-}}"
 VPS_USER="${3:-${VPS_USER:-deploy}}"
 SSH_KEY="${DEPLOY_SSH_KEY_PATH:-~/.ssh/deploy_key}"
@@ -21,52 +26,61 @@ if [ -z "$VPS_HOST" ]; then
   exit 1
 fi
 
-RELEASE_DIR="/opt/forecastiq/releases/${VERSION}"
 # accept-new (TOFU) rather than 'no': first contact records the key, later
 # mismatches hard-fail instead of being silently accepted (DRB-WP23-010).
 SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=accept-new"
 SSH_CMD="ssh ${SSH_OPTS} ${VPS_USER}@${VPS_HOST}"
 
-echo "=== ForecastIQ Deploy ==="
-echo "Version:  $VERSION"
-echo "Target:   ${VPS_USER}@${VPS_HOST}"
-echo "Release:  $RELEASE_DIR"
+echo "=== ForecastIQ Deploy (Docker) ==="
+echo "Image:   $IMAGE"
+echo "Target:  ${VPS_USER}@${VPS_HOST}"
 echo ""
 
-# Step 1: rsync artifact to VPS. No trailing slashes on migrations/deploy:
-# the release must keep its directory layout (DRB-WP23-002).
-echo "[1/7] Uploading artifact..."
-rsync -avz -e "ssh ${SSH_OPTS}" \
-  bin/forecastiq checksums.txt migrations deploy \
-  "${VPS_USER}@${VPS_HOST}:${RELEASE_DIR}/"
+# Step 1: ship the compose file + smoke test (versioned with the repo)
+echo "[1/6] Uploading compose file + smoke test..."
+scp $SSH_OPTS deploy/compose/docker-compose.prod.yml \
+  "${VPS_USER}@${VPS_HOST}:/opt/forecastiq/docker-compose.yml"
+scp $SSH_OPTS deploy/scripts/smoke-test.sh \
+  "${VPS_USER}@${VPS_HOST}:/opt/forecastiq/smoke-test.sh"
 
-# Step 2: Verify checksums on VPS
-echo "[2/7] Verifying checksums..."
-$SSH_CMD "cd ${RELEASE_DIR} && sha256sum -c checksums.txt"
-
-# Step 3: Symlink swap
-echo "[3/7] Swapping symlink..."
-$SSH_CMD "ln -sfn ${RELEASE_DIR} /opt/forecastiq/current"
-
-# Step 4: Install configs (scoped sudo wrapper from bootstrap.sh)
-echo "[4/7] Installing configs..."
+# Step 2: record rollback target + select the new image
+echo "[2/6] Selecting image..."
 $SSH_CMD bash <<REMOTE
   set -euo pipefail
-  sudo /usr/local/bin/forecastiq-install-configs
+  cd /opt/forecastiq
+  # Remember the currently-running image for rollback (only when one exists).
+  CURRENT=\$(grep -E '^FIQ_IMAGE=' .env | cut -d= -f2- || true)
+  if [ -n "\$CURRENT" ] && [ "\$CURRENT" != "${IMAGE}" ]; then
+    echo "\$CURRENT" > .previous-image
+  fi
+  # Upsert FIQ_IMAGE in the compose interpolation env.
+  grep -vE '^FIQ_IMAGE=' .env > .env.tmp || true
+  echo "FIQ_IMAGE=${IMAGE}" >> .env.tmp
+  mv .env.tmp .env
 REMOTE
 
-# Step 5: Run migrations (wrapper sources production secrets as root)
-echo "[5/7] Running migrations..."
-$SSH_CMD "sudo /usr/local/bin/forecastiq-migrate"
+# Step 3: pull + start
+echo "[3/6] Pulling and starting containers..."
+$SSH_CMD bash <<REMOTE
+  set -euo pipefail
+  cd /opt/forecastiq
+  if [ -n "${GHCR_TOKEN:-}" ]; then
+    echo "${GHCR_TOKEN:-}" | docker login ghcr.io -u token --password-stdin
+  fi
+  docker compose pull app db
+  docker compose up -d db
+REMOTE
 
-# Step 6: Restart service
-echo "[6/7] Restarting forecastiq..."
-$SSH_CMD "sudo /usr/bin/systemctl restart forecastiq"
+# Step 4: run migrations (embedded in the binary; one-shot container)
+echo "[4/6] Running migrations..."
+$SSH_CMD "cd /opt/forecastiq && docker compose run --rm app migrate up"
 
-# Wait for readyz (max 30s)
+# Step 5: start the app + wait for readyz
+echo "[5/6] Starting app..."
+$SSH_CMD "cd /opt/forecastiq && docker compose up -d app"
 echo "  Waiting for /readyz..."
 for i in $(seq 1 30); do
-  if $SSH_CMD "curl -sf http://127.0.0.1:8080/readyz" >/dev/null 2>&1; then
+  if $SSH_CMD "curl -sf http://127.0.0.1/readyz" >/dev/null 2>&1; then
     echo "  readyz OK after ${i}s"
     break
   fi
@@ -77,16 +91,12 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# Step 7: Smoke tests
-echo "[7/7] Running smoke tests..."
-$SSH_CMD "bash ${RELEASE_DIR}/deploy/scripts/smoke-test.sh"
-
-# Cleanup: keep only last 5 releases
-echo ""
-echo "Cleaning old releases (keeping last 5)..."
-$SSH_CMD 'ls -1dt /opt/forecastiq/releases/*/ 2>/dev/null | tail -n +6 | xargs rm -rf' || true
+# Step 6: smoke tests + prune old images
+echo "[6/6] Running smoke tests..."
+$SSH_CMD "bash /opt/forecastiq/smoke-test.sh http://127.0.0.1"
+$SSH_CMD "docker image prune -f --filter 'until=720h'" || true
 
 echo ""
-echo "=== Deploy Complete: ${VERSION} ==="
-echo "Post-deploy: monitor Grafana dashboards for 10 minutes."
+echo "=== Deploy Complete: ${IMAGE} ==="
+echo "Post-deploy: monitor dashboards for 10 minutes."
 echo "Rollback:    bash deploy/scripts/rollback.sh"
