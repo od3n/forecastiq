@@ -164,14 +164,11 @@ docker-build: ## Build the production (distroless) image
 
 # ── Deploy ────────────────────────────────────────────────────────────
 .PHONY: deploy-release
-deploy-release: ## Build a release artifact (linux/amd64) with checksums
-	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/forecastiq $(APP_PKG)
-	# Relative filename in the manifest: the VPS runs `sha256sum -c` from the
-	# release dir, so an absolute local path would never verify (DRB-WP23-008).
-	cd $(BIN_DIR) && sha256sum forecastiq > $(CURDIR)/checksums.txt
-	@echo "Release artifact: $(BIN_DIR)/forecastiq ($(VERSION))"
-	@echo "Checksums: checksums.txt"
+deploy-release: ## Build + push a release image to GHCR (ADR-033: image-based deploy)
+	$(DOCKER) build --target prod -t ghcr.io/od3n/forecastiq:$(VERSION) .
+	$(DOCKER) push ghcr.io/od3n/forecastiq:$(VERSION)
+	@echo "Release image: ghcr.io/od3n/forecastiq:$(VERSION)"
+	@echo "Deploy: bash deploy/scripts/deploy.sh ghcr.io/od3n/forecastiq:$(VERSION)"
 
 .PHONY: deploy-smoke
 deploy-smoke: ## Run smoke tests against a running instance (default: localhost:8080)
