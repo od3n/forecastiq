@@ -96,7 +96,7 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/admin/health" 2>/dev
 echo "  Status: ${STATUS} (expected: 401)"
 echo ""
 echo "  Security headers on public endpoint:"
-curl -s -D - -o /dev/null "${API_URL}/locations" 2>/dev/null | grep -iE "(X-Content-Type|X-Frame|Referrer-Policy)" || echo "  (headers present via Caddy in production)"
+curl -s -D - -o /dev/null "${API_URL}/locations" 2>/dev/null | grep -iE "(X-Content-Type|X-Frame|Referrer-Policy)" || echo "  (headers set by the app in all environments; WP-25 SecurityHeaders)"
 pause
 
 # ── 8. Attribution Verification ──────────────────────────────────────────────
