@@ -15,17 +15,28 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"time"
 )
 
 var (
-	preset    = flag.String("preset", "base", "data preset: base|extended|analysis")
-	locations = flag.Int("locations", 10, "number of locations")
-	providers = flag.Int("providers", 2, "number of providers")
-	days      = flag.Int("days", 30, "days of historical data")
-	seed      = flag.Int64("seed", 42, "random seed for deterministic generation")
-	dbURL     = flag.String("db", "", "database URL (default: FIQ_DATABASE_URL env)")
+	preset       = flag.String("preset", "base", "data preset: base|extended|analysis")
+	locations    = flag.Int("locations", 10, "number of locations")
+	providers    = flag.Int("providers", 2, "number of providers")
+	days         = flag.Int("days", 30, "days of historical data")
+	seed         = flag.Int64("seed", 42, "random seed for deterministic generation")
+	dbURL        = flag.String("db", "", "database URL (default: FIQ_DATABASE_URL env)")
+	estimateOnly = flag.Bool("estimate-only", false, "print volume estimates and exit 0 without writing (row generation is tracked in WP-26b)")
+)
+
+// Fan-out constants per docs/testing/04-performance-testing.md §3:
+// base (10 loc × 2 prov × 30 d) ≈ 1.5M snapshots ⇒ ~2500 snapshot rows per
+// provider-location-day = hourly collections × forecast-horizon rows.
+const (
+	collectionsPerDay      = 24  // hourly collection runs
+	forecastRowsPerRun     = 104 // hourly forecast rows across the horizon
+	matchesPerSnapshotX100 = 200 // doc §3: ~2× snapshots (incl. rematch/sub-hourly)
 )
 
 func main() {
@@ -44,12 +55,20 @@ func main() {
 	case "base":
 		*locations, *providers, *days = 10, 2, 30
 	case "extended":
-		*locations, *providers, *days = 10, 2, 365
+		// 2× MVP annual rate (doc §3, PT-7 NFR-S01) ≈ 35M snapshots.
+		*locations, *providers, *days = 20, 2, 365
 	case "analysis":
 		*locations, *providers, *days = 5, 2, 60
 	}
 
 	rng := rand.New(rand.NewSource(*seed))
+
+	// Redact credentials before printing (DRB-WP26-003): the raw URL contains
+	// the DB password, which would land in CI logs.
+	redacted := *dbURL
+	if u, err := url.Parse(*dbURL); err == nil {
+		redacted = u.Redacted()
+	}
 
 	fmt.Printf("=== ForecastIQ Performance Seeder ===\n")
 	fmt.Printf("Preset:    %s\n", *preset)
@@ -57,16 +76,17 @@ func main() {
 	fmt.Printf("Providers: %d\n", *providers)
 	fmt.Printf("Days:      %d\n", *days)
 	fmt.Printf("Seed:      %d\n", *seed)
-	fmt.Printf("DB:        %s...\n", (*dbURL)[:min(40, len(*dbURL))])
+	fmt.Printf("DB:        %s\n", redacted)
 	fmt.Println()
 
 	start := time.Now()
 
-	// Generate data volumes
-	snapshots := *locations * *providers * *days * 24 // hourly snapshots
-	observations := *locations * *days * 24           // hourly observations
-	matches := snapshots                              // 1:1 at best
-	metrics := *locations * *providers * *days / 7    // weekly metrics
+	// Volume estimates per doc §3 fan-out (collections/day × horizon rows).
+	collectionDays := *locations * *providers * *days
+	snapshots := collectionDays * collectionsPerDay * forecastRowsPerRun
+	observations := *locations * *days * collectionsPerDay
+	matches := snapshots * matchesPerSnapshotX100 / 100
+	metrics := *locations * *providers * *days / 7 // weekly metrics
 
 	fmt.Printf("Estimated volumes:\n")
 	fmt.Printf("  Snapshots:    %d\n", snapshots)
@@ -75,18 +95,17 @@ func main() {
 	fmt.Printf("  Metrics:      %d\n", metrics)
 	fmt.Println()
 
-	// TODO: Connect to DB and generate actual rows.
-	// For now, this is the scaffold that documents the seeder interface
-	// and volume calculations. The actual INSERT logic requires importing
-	// the repository layer which is in internal/ (use pgx directly here).
+	// Row generation is not yet implemented — tracked in WP-26b (see
+	// docs/reviews/work-packages/WP-26-delivery-review.md). Exit non-zero by
+	// default so a `seeder && k6 run` chain does NOT proceed against an empty
+	// DB believing it was seeded (DRB-WP26-004). --estimate-only opts into the
+	// scaffold's estimate output for planning.
 	_ = rng
-	fmt.Printf("Seeder scaffold complete (actual generation requires DB connection).\n")
-	fmt.Printf("Duration: %s\n", time.Since(start))
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
+	if *estimateOnly {
+		fmt.Printf("Estimate-only mode: no rows written. Duration: %s\n", time.Since(start))
+		return
 	}
-	return b
+	fmt.Fprintln(os.Stderr, "ERROR: row generation not implemented (tracked in WP-26b).")
+	fmt.Fprintln(os.Stderr, "Pass --estimate-only to print volumes without writing.")
+	os.Exit(1)
 }
