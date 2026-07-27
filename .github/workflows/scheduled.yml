@@ -5,7 +5,10 @@ name: Scheduled
 #   weekly  — gitleaks full-history secret scan
 #   monthly — rollback drill against the production VPS (skips cleanly when
 #             deploy secrets are not configured; also runnable on demand)
-# The weekly reliability/performance suites join this file when WP-26 merges.
+# The weekly performance (k6 PT-1/PT-2/PT-6) and reliability suites are a
+# scaffold in test/perf; wiring them here is tracked in WP-26b (needs the
+# functional seeder + baseline runs first). See
+# docs/reviews/work-packages/WP-26-delivery-review.md.
 
 on:
   schedule:
