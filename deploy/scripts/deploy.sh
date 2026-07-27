@@ -37,11 +37,12 @@ echo "Target:  ${VPS_USER}@${VPS_HOST}"
 echo ""
 
 # Step 1: ship the compose file + smoke test (versioned with the repo)
-echo "[1/6] Uploading compose file + smoke test..."
+echo "[1/6] Uploading compose file + operational scripts..."
 scp $SSH_OPTS deploy/compose/docker-compose.prod.yml \
   "${VPS_USER}@${VPS_HOST}:/opt/forecastiq/docker-compose.yml"
-scp $SSH_OPTS deploy/scripts/smoke-test.sh \
-  "${VPS_USER}@${VPS_HOST}:/opt/forecastiq/smoke-test.sh"
+scp $SSH_OPTS deploy/scripts/smoke-test.sh deploy/scripts/backup.sh deploy/scripts/restore-test.sh \
+  "${VPS_USER}@${VPS_HOST}:/opt/forecastiq/"
+$SSH_CMD "chmod +x /opt/forecastiq/smoke-test.sh /opt/forecastiq/backup.sh /opt/forecastiq/restore-test.sh"
 
 # Step 2: record rollback target + select the new image
 echo "[2/6] Selecting image..."
