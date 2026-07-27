@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/forecastiq/forecastiq/internal/api"
+	"github.com/forecastiq/forecastiq/internal/api/respond"
 	"github.com/forecastiq/forecastiq/internal/platform/clock"
 	"github.com/forecastiq/forecastiq/internal/platform/ratelimit"
 )
@@ -29,6 +30,7 @@ func TestSecurityHeaders_Present(t *testing.T) {
 	assert.Equal(t, "strict-origin-when-cross-origin", w.Header().Get("Referrer-Policy"))
 	assert.Equal(t, "0", w.Header().Get("X-XSS-Protection"))
 	assert.Contains(t, w.Header().Get("Permissions-Policy"), "camera=()")
+	assert.Contains(t, w.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'")
 }
 
 // TestSecurityHeaders_MutationCacheControl verifies that mutation responses
@@ -72,27 +74,45 @@ func TestRequestBodyLimit_AllowsExactLimit(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code, "a body of exactly maxBytes must be accepted")
 }
 
-// TestRequestBodyLimit_StreamedOverflow verifies that a body exceeding the
-// limit WITHOUT a declared Content-Length (chunked) fails the read with a
-// MaxBytesError (mapped to 413 by callers via IsBodyTooLarge).
+// TestRequestBodyLimit_StreamedOverflow verifies that a chunked body exceeding
+// the limit (no declared Content-Length) is mapped to 413 through the shared
+// respond.Error path — the same path handler ShouldBindJSON errors take in
+// production (DRB-WP25-004), not a test-only branch.
 func TestRequestBodyLimit_StreamedOverflow(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	_, r := gin.CreateTestContext(w)
 	r.Use(api.RequestBodyLimit(50))
 	r.POST("/test", func(c *gin.Context) {
-		_, err := io.ReadAll(c.Request.Body)
-		if api.IsBodyTooLarge(err) {
-			c.Status(http.StatusRequestEntityTooLarge)
+		// Mirror a handler binding path: on read error, defer to respond.Error,
+		// which errors.As-matches *http.MaxBytesError → 413.
+		if _, err := io.ReadAll(c.Request.Body); err != nil {
+			respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
 			return
 		}
-		require.NoError(t, err)
 		c.Status(200)
 	})
 	req := httptest.NewRequest("POST", "/test", strings.NewReader(strings.Repeat("y", 200)))
 	req.ContentLength = -1 // simulate chunked (no declared length)
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "application/problem+json")
+}
+
+// TestRequestBodyLimit_DeclaredOversizeEnvelope verifies the declared-oversize
+// (Content-Length) path returns the problem+json envelope, not an empty body
+// (DRB-WP25-008).
+func TestRequestBodyLimit_DeclaredOversizeEnvelope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	_, r := gin.CreateTestContext(w)
+	r.Use(api.RequestID(), api.RequestBodyLimit(100))
+	r.POST("/test", func(c *gin.Context) { c.Status(200) })
+	req := httptest.NewRequest("POST", "/test", strings.NewReader(strings.Repeat("x", 200)))
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "application/problem+json")
+	assert.Contains(t, w.Body.String(), "request_id")
 }
 
 // TestCORS_RejectsUnknownOrigin verifies that non-allowlisted origins get no
