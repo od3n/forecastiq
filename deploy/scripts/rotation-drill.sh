@@ -2,22 +2,28 @@
 # deploy/scripts/rotation-drill.sh — Secret rotation drill for ForecastIQ.
 # Run monthly to validate rotation procedures per docs/security/04-secrets-management.md.
 #
-# This script simulates a rotation (dry-run by default) and validates that:
-# 1. The secrets file exists and has correct permissions
-# 2. All required env vars are set
-# 3. The service can restart cleanly (simulated via /readyz check)
-# 4. Critical endpoints respond after rotation
+# Topology: ADR-033 (EC2 + Docker Compose). Secrets live in
+# /etc/forecastiq/secrets.env, read client-side by the `deploy` user via the
+# compose `env_file`; POSTGRES_PASSWORD lives in /opt/forecastiq/.env. env_file
+# changes require CONTAINER RECREATION (not just restart) to take effect.
 #
-# Usage:
-#   bash deploy/scripts/rotation-drill.sh              # dry-run (checks only)
-#   bash deploy/scripts/rotation-drill.sh --live       # live rotation (operator confirms)
+# Modes:
+#   (default) dry-run — non-destructive checks: file perms, required vars,
+#             health, OWASP subset, security headers.
+#   --live    performs a real no-op rotation cycle: recreate the app container
+#             and verify it comes back healthy with a working collection. This
+#             exercises the exact restart path a real rotation uses WITHOUT
+#             changing any secret value, so it is safe to run monthly.
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
-SECRETS_FILE="/etc/forecastiq/secrets.env"
+COMPOSE_DIR="${FIQ_COMPOSE_DIR:-/opt/forecastiq}"
+BASE_URL="${BASE_URL:-http://127.0.0.1}"
+SECRETS_FILE="${FIQ_SECRETS_FILE:-/etc/forecastiq/secrets.env}"
 MODE="${1:-dry-run}"
 PASS=0
 FAIL=0
+
+compose() { docker compose --project-directory "$COMPOSE_DIR" "$@"; }
 
 echo "=== ForecastIQ Secret Rotation Drill ==="
 echo "Mode: ${MODE}"
@@ -36,23 +42,33 @@ check() {
   fi
 }
 
-# 1. Secrets file permissions
+wait_ready() {
+  for _ in $(seq 1 30); do
+    if curl -sf "${BASE_URL}/readyz" >/dev/null 2>&1; then return 0; fi
+    sleep 1
+  done
+  return 1
+}
+
+# 1. Secrets file permissions. Under ADR-033 the file is read by the `deploy`
+#    user running docker compose (not root via systemd EnvironmentFile), so the
+#    expected owner is `deploy` with mode 600 (DRB-WP25-002).
 echo "[1/5] Checking secrets file permissions..."
 if [ -f "$SECRETS_FILE" ]; then
   PERMS=$(stat -c "%a" "$SECRETS_FILE" 2>/dev/null || stat -f "%Lp" "$SECRETS_FILE")
   OWNER=$(stat -c "%U" "$SECRETS_FILE" 2>/dev/null || stat -f "%Su" "$SECRETS_FILE")
   check "secrets file exists" "true"
   check "permissions = 600" "$([ "$PERMS" = "600" ] && echo true || echo false)"
-  check "owner = root" "$([ "$OWNER" = "root" ] && echo true || echo false)"
+  check "owner = deploy" "$([ "$OWNER" = "deploy" ] && echo true || echo false)"
 else
   check "secrets file exists" "false"
   echo "  WARNING: Secrets file not found at ${SECRETS_FILE}"
 fi
 
-# 2. Required environment variables (check from loaded env)
+# 2. Required environment variables present in the secrets file.
 echo ""
 echo "[2/5] Checking required variables are set..."
-REQUIRED_VARS="FIQ_DATABASE_URL FIQ_AUTH_JWKS_URL FIQ_AUTH_ISSUER FIQ_AUTH_AUDIENCE"
+REQUIRED_VARS="FIQ_AUTH_JWKS_URL FIQ_AUTH_ISSUER FIQ_AUTH_AUDIENCE"
 for var in $REQUIRED_VARS; do
   if grep -q "^${var}=" "$SECRETS_FILE" 2>/dev/null || [ -n "${!var:-}" ]; then
     check "$var set" "true"
@@ -61,56 +77,53 @@ for var in $REQUIRED_VARS; do
   fi
 done
 
-# 3. Service health (pre-rotation baseline)
+# 3. Pre-rotation health baseline.
 echo ""
 echo "[3/5] Pre-rotation health check..."
-if curl -sf "${BASE_URL}/healthz" >/dev/null 2>&1; then
-  check "healthz responsive" "true"
-else
-  check "healthz responsive" "false"
-fi
-if curl -sf "${BASE_URL}/readyz" >/dev/null 2>&1; then
-  check "readyz responsive" "true"
-else
-  check "readyz responsive" "false"
-fi
+check "healthz responsive" "$(curl -sf "${BASE_URL}/healthz" >/dev/null 2>&1 && echo true || echo false)"
+check "readyz responsive" "$(curl -sf "${BASE_URL}/readyz" >/dev/null 2>&1 && echo true || echo false)"
 
-# 4. OWASP checklist verification (automated subset)
+# 4. OWASP checklist verification (automated subset).
 echo ""
 echo "[4/5] OWASP checklist (automated checks)..."
-
-# Check no secrets in repo (grep -E for BSD/GNU portability; \| is GNU-only BRE)
 if command -v git &>/dev/null; then
-  SECRET_FILES=$(git -C "$(dirname "$0")/../.." ls-files | grep -iE "(secret|password|token|api.key)" | grep -vE "example|test|fixture|\.md|\.go" || true)
+  SECRET_FILES=$(git -C "$(dirname "$0")/../.." ls-files 2>/dev/null | grep -iE "(secret|password|token|api.key)" | grep -vE "example|test|fixture|\.md|\.go" || true)
   check "no secret files in repo" "$([ -z "$SECRET_FILES" ] && echo true || echo false)"
 fi
-
-# Check .env files are gitignored
 if [ -f "$(dirname "$0")/../../.gitignore" ]; then
   check ".env in gitignore" "$(grep -q '\.env' "$(dirname "$0")/../../.gitignore" && echo true || echo false)"
 fi
-
-# Check security headers present (GET with header dump — curl -I sends HEAD,
-# which Gin routes as 404, silently voiding the check; DRB-WP25 finding)
+# Security headers (GET with header dump — curl -I sends HEAD, which Gin routes
+# as 404, silently voiding the check; DRB-WP25 finding).
 HEADERS=$(curl -s -D - -o /dev/null "${BASE_URL}/healthz" 2>/dev/null || echo "")
 if [ -n "$HEADERS" ]; then
   check "X-Content-Type-Options header" "$(echo "$HEADERS" | grep -qi 'X-Content-Type-Options' && echo true || echo false)"
   check "X-Frame-Options header" "$(echo "$HEADERS" | grep -qi 'X-Frame-Options' && echo true || echo false)"
+  check "Content-Security-Policy header" "$(echo "$HEADERS" | grep -qi 'Content-Security-Policy' && echo true || echo false)"
 else
   check "security headers reachable" "false"
 fi
 
-# 5. Post-drill summary
+# 5. Rotation cycle.
 echo ""
-echo "[5/5] Drill summary..."
 if [ "$MODE" = "--live" ]; then
-  echo ""
-  echo "  LIVE MODE: After updating credentials in ${SECRETS_FILE}:"
-  echo "    1. systemctl restart forecastiq"
-  echo "    2. Wait for /readyz green (max 30s)"
-  echo "    3. POST /admin/collections/trigger → verify collection succeeds"
-  echo "    4. Revoke old credentials at provider/vendor dashboard"
-  echo "    5. Record in ops log"
+  echo "[5/5] Live rotation cycle (no-op recreation)..."
+  echo "  Operator: update credentials in ${SECRETS_FILE} + /opt/forecastiq/.env now,"
+  echo "  then this drill recreates the app container to load them."
+  # env_file changes are only picked up by a fresh container, not `restart`.
+  compose up -d --force-recreate app
+  if wait_ready; then
+    check "app healthy after recreation" "true"
+  else
+    check "app healthy after recreation" "false"
+    echo "  ERROR: /readyz not green after 30s — rotation would have failed."
+    exit 1
+  fi
+  # Verify a gated write path works with the (re)loaded credentials.
+  check "smoke checks pass post-rotation" "$(bash "$(dirname "$0")/smoke-test.sh" "$BASE_URL" >/dev/null 2>&1 && echo true || echo false)"
+  echo "  Reminder: revoke old credentials at the provider/vendor and record in the ops log."
+else
+  echo "[5/5] Dry-run: skipping container recreation (use --live to exercise it)."
 fi
 
 echo ""
