@@ -2,30 +2,11 @@
 
 import useSWR, { type SWRConfiguration } from "swr";
 import { apiGet, ApiError, type ApiGetOptions } from "./client";
+import { getAccessToken } from "@/lib/auth/session";
 import type { Envelope } from "./types";
 
-/**
- * In local dev (Supabase not configured), automatically inject the dev bearer
- * token so authenticated endpoints (e.g. /me, admin routes) work without a real
- * session. The token value comes from NEXT_PUBLIC_DEV_TOKEN (.env.local).
- * Gated in code to development builds (DRB-WP23L-004): a production bundle
- * never carries the token even if the env var is set in CI by mistake.
- */
-const DEV_TOKEN: string | undefined =
-  process.env.NODE_ENV === "development" ? process.env.NEXT_PUBLIC_DEV_TOKEN : undefined;
-
-/**
- * devAuthHeaders returns JSON + dev-auth headers for hand-rolled admin
- * mutations (single source for the dev-token injection rule above).
- */
-export function devAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (DEV_TOKEN) headers["Authorization"] = `Bearer ${DEV_TOKEN}`;
-  return headers;
-}
-
 export interface UseApiOptions extends SWRConfiguration {
-  /** Bearer JWT for gated endpoints (public reads omit it). */
+  /** Explicit bearer token override; when omitted the session token is used. */
   token?: string;
   /** Pass `null` as path to conditionally skip the request. */
   skip?: boolean;
@@ -44,16 +25,20 @@ export function useApi<T>(path: string | null, opts: UseApiOptions = {}) {
   const { token, skip, ...swrOpts } = opts;
   const key = skip || path === null ? null : path;
 
-  const fetcherOpts: ApiGetOptions = {};
-  if (token) {
-    fetcherOpts.token = token;
-  } else if (DEV_TOKEN) {
-    fetcherOpts.token = DEV_TOKEN;
-  }
+  // The bearer is resolved per request inside the fetcher: the explicit token
+  // override wins, otherwise the current session token (Supabase session or
+  // dev-mode token; see lib/auth/session). Signed-out requests go bare —
+  // public reads succeed, gated endpoints 401 and the guards redirect.
+  const fetcher = async (p: string) => {
+    const fetcherOpts: ApiGetOptions = {};
+    const bearer = token ?? (await getAccessToken());
+    if (bearer) fetcherOpts.token = bearer;
+    return apiGet<T>(p, fetcherOpts);
+  };
 
   const { data, error, isLoading, isValidating, mutate } = useSWR<Envelope<T>, ApiError>(
     key,
-    (p: string) => apiGet<T>(p, fetcherOpts),
+    fetcher,
     { revalidateOnFocus: false, ...swrOpts },
   );
 

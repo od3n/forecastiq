@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
-import { useApi, devAuthHeaders as authHeaders } from "@/lib/api/hooks";
+import { useApi } from "@/lib/api/hooks";
 import { apiBase } from "@/lib/api/client";
+import { authHeaders } from "@/lib/auth/session";
 import { LocationAdminTable, type LocationEntry, type CreateLocationData, type CreateResult } from "@/components/LocationAdminTable";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
@@ -13,12 +14,12 @@ export default function AdminLocationsPage() {
   const { data: envelope, error, isLoading, mutate } = useApi<LocationsData>("/locations");
 
   const handleToggle = useCallback(async (id: string, newStatus: string) => {
-    await fetch(`${apiBase}/locations/${id}/status`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify({ status: newStatus }) });
+    await fetch(`${apiBase}/locations/${id}/status`, { method: "PATCH", headers: await authHeaders(), body: JSON.stringify({ status: newStatus }) });
     mutate();
   }, [mutate]);
 
   const handleCreate = useCallback(async (data: CreateLocationData): Promise<CreateResult | null> => {
-    const resp = await fetch(`${apiBase}/locations`, { method: "POST", headers: authHeaders(), body: JSON.stringify(data) });
+    const resp = await fetch(`${apiBase}/locations`, { method: "POST", headers: await authHeaders(), body: JSON.stringify(data) });
     if (resp.status === 409) {
       // Surface the conflicting location from the RFC 7807 problem (BR-LOC-01).
       const problem = await resp.json().catch(() => null);

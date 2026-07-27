@@ -62,8 +62,28 @@ forecastiq_backup_status 1
 # HELP forecastiq_restore_test_last_timestamp_seconds Unix timestamp of the last restore test (from the backup status file).
 # TYPE forecastiq_restore_test_last_timestamp_seconds gauge
 forecastiq_restore_test_last_timestamp_seconds 1.7828784e+09
+# HELP forecastiq_restore_test_status Last restore-test status (1 = success, 0 = failure).
+# TYPE forecastiq_restore_test_status gauge
+forecastiq_restore_test_status 1
 `)
 	require.NoError(t, testutil.CollectAndCompare(c, expected))
+}
+
+func TestBackupCollector_FailedRestoreTestExportsStatusZero(t *testing.T) {
+	completed := time.Date(2026, 7, 26, 3, 0, 0, 0, time.UTC)
+	restored := time.Date(2026, 8, 1, 4, 0, 0, 0, time.UTC)
+	c := NewBackupCollector(&fakeReader{
+		backup:  &admin.BackupStatus{CompletedAt: &completed, Status: "success"},
+		restore: &admin.BackupStatus{CompletedAt: &restored, Status: "failed"},
+	})
+	// A failed restore test still refreshes the timestamp, so A11b must key on
+	// forecastiq_restore_test_status == 0 (DRB-WP24-004).
+	expected := strings.NewReader(`
+# HELP forecastiq_restore_test_status Last restore-test status (1 = success, 0 = failure).
+# TYPE forecastiq_restore_test_status gauge
+forecastiq_restore_test_status 0
+`)
+	require.NoError(t, testutil.CollectAndCompare(c, expected, "forecastiq_restore_test_status"))
 }
 
 func TestBackupCollector_FailedBackupExportsStatusZeroWithoutTimestamp(t *testing.T) {

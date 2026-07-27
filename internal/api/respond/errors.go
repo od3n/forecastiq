@@ -17,9 +17,10 @@ const errorBase = "https://forecastiq.example/errors/"
 
 // API-layer sentinel errors mapped to their taxonomy class.
 var (
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrForbidden    = errors.New("forbidden")
-	ErrRateLimited  = errors.New("rate_limited")
+	ErrUnauthorized    = errors.New("unauthorized")
+	ErrForbidden       = errors.New("forbidden")
+	ErrRateLimited     = errors.New("rate_limited")
+	ErrPayloadTooLarge = errors.New("payload_too_large")
 )
 
 // Problem is the RFC 7807 error envelope with ForecastIQ extensions.
@@ -230,6 +231,19 @@ func Classify(err error, requestID, instance string) (int, Problem) {
 		p.Status = http.StatusTooManyRequests
 		p.Detail = "Too many requests; please retry later."
 		p.Retryable = true
+		return p.Status, p
+	}
+
+	// Request body exceeded the limit. errors.As also catches *http.MaxBytesError
+	// wrapped inside a binding error (ShouldBindJSON), so a chunked/undeclared
+	// oversize maps to 413 through the shared path, not a generic 400
+	// (DRB-WP25-004).
+	var mbe *http.MaxBytesError
+	if errors.Is(err, ErrPayloadTooLarge) || errors.As(err, &mbe) {
+		p.Type = errorBase + "payload_too_large"
+		p.Title = "Payload Too Large"
+		p.Status = http.StatusRequestEntityTooLarge
+		p.Detail = "The request body exceeds the maximum allowed size."
 		return p.Status, p
 	}
 

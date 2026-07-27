@@ -1,5 +1,7 @@
 "use client";
 
+import { absoluteLocal } from "@/lib/format";
+
 export interface ScheduleEntry {
   id: string;
   slot_type: string;
@@ -42,8 +44,8 @@ export function ScheduleTable({ schedules, onToggle }: ScheduleTableProps) {
               <td style={{ padding: "var(--space-sm)" }}>
                 <span style={{ padding: "2px var(--space-sm)", borderRadius: "var(--radius-full)", fontSize: "var(--text-label)", fontWeight: 500, background: s.status === "active" ? "var(--color-ranked)" : "var(--color-delayed)", color: "#fff" }}>{s.status}</span>
               </td>
-              <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{s.last_run ? new Date(s.last_run).toLocaleString() : "—"}</td>
-              <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{s.next_run ? new Date(s.next_run).toLocaleString() : "—"}</td>
+              <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{s.last_run ? absoluteLocal(s.last_run) : "—"}</td>
+              <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>{s.next_run ? absoluteLocal(s.next_run) : "—"}</td>
               <td style={{ padding: "var(--space-sm)", textAlign: "center" }}>
                 <button type="button" onClick={() => onToggle(s.id, s.status === "active" ? "pause" : "resume")} style={{ padding: "var(--space-xs) var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", font: "inherit", fontSize: "var(--text-label)", cursor: "pointer" }}>
                   {s.status === "active" ? "Pause" : "Resume"}

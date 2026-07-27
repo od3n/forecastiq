@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useApi } from "@/lib/api/hooks";
+import { absoluteLocal } from "@/lib/format";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
 
@@ -141,7 +142,7 @@ export default function AdminForecastsPage() {
             <option value="latest">Latest successful</option>
             {recentCollections.map((cl) => (
               <option key={cl.id} value={cl.id}>
-                {new Date(cl.requested_at).toLocaleString()} — {cl.status} ({cl.snapshots_stored})
+                {absoluteLocal(cl.requested_at)} — {cl.status} ({cl.snapshots_stored})
               </option>
             ))}
           </select>
@@ -160,7 +161,7 @@ export default function AdminForecastsPage() {
         <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--text-body-sm)", marginBottom: "var(--space-md)" }}>
           {collectionId === "latest" ? "Latest collection" : "Collection"} <span style={{ fontFamily: "var(--font-data)" }}>{collection.id.slice(0, 8)}…</span>{" "}
           — status <strong>{collection.status}</strong>, {collection.records_received} received / {collection.snapshots_stored} stored,{" "}
-          {collection.completed_at ? `completed ${new Date(collection.completed_at).toLocaleString()}` : "not completed"} ({collection.schema_version})
+          {collection.completed_at ? `completed ${absoluteLocal(collection.completed_at)}` : "not completed"} ({collection.schema_version})
         </p>
       )}
 
@@ -193,7 +194,7 @@ export default function AdminForecastsPage() {
             <tbody>
               {filtered.map((s) => (
                 <tr key={s.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  <td style={cell}>{new Date(s.target_time).toLocaleString()}</td>
+                  <td style={cell}>{absoluteLocal(s.target_time)}</td>
                   <td style={cell}>+{s.forecast_horizon_minutes / 60}h</td>
                   <td style={cell}>{s.temperature_c ?? "—"}</td>
                   <td style={cell}>{s.feels_like_temperature_c ?? "—"}</td>

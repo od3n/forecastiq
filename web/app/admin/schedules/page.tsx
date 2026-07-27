@@ -1,6 +1,7 @@
 "use client";
 
 import { useApi } from "@/lib/api/hooks";
+import { absoluteLocal } from "@/lib/format";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { ErrorPanel } from "@/components/ErrorPanel";
 
@@ -54,7 +55,7 @@ export default function AdminSchedulesPage() {
                   <td style={{ padding: "var(--space-sm)" }}>{c.location_name}</td>
                   <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)" }}>Hourly</td>
                   <td style={{ padding: "var(--space-sm)", fontFamily: "var(--font-data)", fontSize: "var(--text-body-sm)" }}>
-                    {c.last_success_at ? new Date(c.last_success_at).toLocaleString() : "Never"}
+                    {c.last_success_at ? absoluteLocal(c.last_success_at) : "Never"}
                   </td>
                   <td style={{ padding: "var(--space-sm)" }}>
                     <span style={{
