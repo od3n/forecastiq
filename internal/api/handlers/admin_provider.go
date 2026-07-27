@@ -87,6 +87,29 @@ func (h *Handlers) SetProviderStatus(c *gin.Context) {
 	respond.OK(c, providerDTO(p), respond.Options{RequestID: respond.RequestID(c)})
 }
 
+// ListProviderConfigurations godoc
+// @Summary      List provider configurations (S-11, admin)
+// @Description  All configurations (active + disabled) with has_credential and
+// @Description  the collection schedule. The credential reference is never
+// @Description  echoed (BR-08).
+// @Tags         admin
+// @Produce      json
+// @Success      200 {object} respond.Envelope
+// @Failure      401 {object} respond.Problem
+// @Router       /admin/provider-configurations [get]
+func (h *Handlers) ListProviderConfigurations(c *gin.Context) {
+	configs, err := h.ConfigAdmin.ListConfigurations(c.Request.Context())
+	if err != nil {
+		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	dtos := make([]providerConfigDTO, 0, len(configs))
+	for _, cfg := range configs {
+		dtos = append(dtos, providerConfigDTOOf(cfg))
+	}
+	respond.OK(c, gin.H{"configurations": dtos}, respond.Options{RequestID: respond.RequestID(c)})
+}
+
 // UpdateProviderConfiguration godoc
 // @Summary      Update a provider configuration (S-11, admin)
 // @Description  Updates operator-mutable fields (status, collection minute

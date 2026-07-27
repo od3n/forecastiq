@@ -1,0 +1,53 @@
+# ForecastIQ — production Docker Compose (personal-use EC2 deployment).
+# Deployed to /opt/forecastiq/docker-compose.yml by deploy/scripts/deploy.sh.
+#
+# Reference: docs/adr/ADR-033-personal-use-ec2-docker-deployment.md
+#
+# Topology (ADR-033): single t3.small instance, TLS terminated at Cloudflare
+# (proxied DNS), origin serves plain HTTP on :80. PostgreSQL runs as a sibling
+# container with its data on the host EBS volume — WP-24 backups are the only
+# durability net, treat them as critical.
+#
+# Image selection: FIQ_IMAGE carries the full pinned reference
+# (ghcr.io/<owner>/forecastiq@sha256:... from CI, or a tag for manual runs).
+# The deploy script records current/previous refs for rollback.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forecastiq
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in /opt/forecastiq/.env}
+      POSTGRES_DB: forecastiq
+    volumes:
+      - /var/lib/forecastiq/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forecastiq -d forecastiq"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    image: ${FIQ_IMAGE:-ghcr.io/od3n/forecastiq:latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "80:8080" # Cloudflare (proxied) → origin HTTP
+      - "127.0.0.1:9090:9090" # metrics: host-local scrape only
+    environment:
+      FIQ_DATABASE_URL: postgres://forecastiq:${POSTGRES_PASSWORD}@db:5432/forecastiq?sslmode=disable
+      # Bind inside the container; host exposure stays loopback-only via the
+      # 127.0.0.1 port mapping above.
+      FIQ_METRICS_ADDR: 0.0.0.0:9090
+      FIQ_PAYLOAD_STORE_DIR: /data/payloads
+      FIQ_BACKUP_STATUS_FILE: /data/backup-status.json
+    env_file:
+      - /etc/forecastiq/secrets.env # auth/provider secrets (operator-managed)
+    volumes:
+      - /var/lib/forecastiq/payloads:/data/payloads
+      # WP-24 backup scripts write the status file on the host; the app only
+      # reads it (adapters/backupstatus). Missing file = section omitted.
+      - /var/lib/forecastiq/backup-status.json:/data/backup-status.json

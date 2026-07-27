@@ -47,6 +47,7 @@ type fvaObservationDTO struct {
 	Source          string    `json:"source"`
 	ObservationType string    `json:"observation_type"`
 	QualityFlag     string    `json:"quality_flag"`
+	ConditionCode   *string   `json:"condition_code,omitempty"`
 }
 
 type fvaDayMetricDTO struct {
@@ -184,6 +185,7 @@ func (h *Handlers) ForecastComparison(c *gin.Context) {
 		dto.Observations = append(dto.Observations, fvaObservationDTO{
 			ObservedAt: o.ObservedAt.UTC(), Value: roundValue(variable, &v),
 			Source: o.Source, ObservationType: o.ObservationType, QualityFlag: o.QualityFlag,
+			ConditionCode: o.ConditionCode,
 		})
 	}
 	for _, m := range res.DayMetrics {

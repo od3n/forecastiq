@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import Link from "next/link";
 import { StatusBadge, type RankingStatus } from "./StatusBadge";
 import { FreshnessBadge } from "./FreshnessBadge";
 import type { FreshnessState } from "@/lib/api/types";
@@ -71,7 +72,7 @@ export function RankingTable({ rankings, freshness, methodologyVersion }: Rankin
 function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; isExpanded: boolean; onToggle: () => void }) {
   const sampleBelowThreshold = r.sample_count < 30;
   return (
-    <>
+    <Fragment>
       <tr
         style={{ borderBottom: "1px solid var(--color-border)", cursor: "pointer", height: 44 }}
         onClick={onToggle}
@@ -83,12 +84,20 @@ function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; i
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
             aria-expanded={isExpanded}
             aria-label={`${isExpanded ? "Collapse" : "Expand"} ${r.provider_name}`}
-            style={{ background: "none", border: "none", cursor: "pointer", font: "inherit", fontFamily: "var(--font-data)", fontWeight: 500, padding: 0 }}
+            style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-data)", fontWeight: 500, padding: 0 }}
           >
             {r.rank ?? "\u2014"}
           </button>
         </td>
-        <td style={{ padding: "var(--space-sm)" }}>{r.provider_name}</td>
+        <td style={{ padding: "var(--space-sm)" }}>
+          <Link
+            href={`/providers/${r.provider_id}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ color: "var(--color-primary)", textDecoration: "none" }}
+          >
+            {r.provider_name}
+          </Link>
+        </td>
         <td style={{ padding: "var(--space-sm)", textAlign: "right", fontFamily: "var(--font-data)" }}>
           {r.composite_score !== null ? r.composite_score.toFixed(3) : "—"}
         </td>
@@ -121,6 +130,6 @@ function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; i
           </td>
         </tr>
       )}
-    </>
+    </Fragment>
   );
 }

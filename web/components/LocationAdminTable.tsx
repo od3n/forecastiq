@@ -1,7 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
+
+/** ISO 3166-1 alpha-2 codes with display names, derived from Intl (no static
+ * country list dependency): every AA–ZZ pair whose DisplayNames resolution
+ * differs from the code itself is a real region. */
+function buildCountryOptions(): { code: string; name: string }[] {
+  try {
+    const display = new Intl.DisplayNames(["en"], { type: "region" });
+    const out: { code: string; name: string }[] = [];
+    for (let a = 65; a <= 90; a++) {
+      for (let b = 65; b <= 90; b++) {
+        const code = String.fromCharCode(a) + String.fromCharCode(b);
+        const name = display.of(code);
+        if (name && name !== code) out.push({ code, name });
+      }
+    }
+    return out.sort((x, y) => x.name.localeCompare(y.name));
+  } catch {
+    return [];
+  }
+}
+
+function buildTimezoneOptions(): string[] {
+  try {
+    return Intl.supportedValuesOf("timeZone");
+  } catch {
+    return [];
+  }
+}
 
 export interface LocationEntry {
   id: string;
@@ -13,10 +41,26 @@ export interface LocationEntry {
   status: string;
 }
 
+export interface CreateLocationData {
+  name: string;
+  country_code: string;
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  allow_near_duplicate?: boolean;
+  override_reason?: string;
+}
+
+export interface CreateResult {
+  error: string;
+  /** True when the failure is a BR-LOC-01 proximity conflict (override possible). */
+  conflict?: boolean;
+}
+
 export interface LocationAdminTableProps {
   locations: LocationEntry[];
   onToggleStatus: (id: string, newStatus: string) => void;
-  onCreate: (data: { name: string; country_code: string; latitude: number; longitude: number; timezone: string }) => Promise<string | null>;
+  onCreate: (data: CreateLocationData) => Promise<CreateResult | null>;
 }
 
 // S-12 Admin Locations table (doc 02 §4.12). CRUD with status lifecycle
@@ -27,19 +71,40 @@ export function LocationAdminTable({ locations, onToggleStatus, onCreate }: Loca
   const [form, setForm] = useState({ name: "", country_code: "", latitude: "", longitude: "", timezone: "" });
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // BR-LOC-01 override: revealed after a proximity conflict; requires a reason.
+  const [showOverride, setShowOverride] = useState(false);
+  const [allowNearDuplicate, setAllowNearDuplicate] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
+
+  const countryOptions = useMemo(buildCountryOptions, []);
+  const timezoneOptions = useMemo(buildTimezoneOptions, []);
+
+  const resetForm = () => {
+    setForm({ name: "", country_code: "", latitude: "", longitude: "", timezone: "" });
+    setShowOverride(false);
+    setAllowNearDuplicate(false);
+    setOverrideReason("");
+    setCreateError(null);
+  };
 
   const handleCreate = async () => {
     setCreating(true);
     setCreateError(null);
-    const err = await onCreate({
+    const result = await onCreate({
       name: form.name,
       country_code: form.country_code,
       latitude: Number(form.latitude),
       longitude: Number(form.longitude),
       timezone: form.timezone,
+      ...(allowNearDuplicate ? { allow_near_duplicate: true, override_reason: overrideReason } : {}),
     });
-    if (err) setCreateError(err);
-    else { setShowCreate(false); setForm({ name: "", country_code: "", latitude: "", longitude: "", timezone: "" }); }
+    if (result) {
+      setCreateError(result.error);
+      if (result.conflict) setShowOverride(true);
+    } else {
+      setShowCreate(false);
+      resetForm();
+    }
     setCreating(false);
   };
 
@@ -57,12 +122,52 @@ export function LocationAdminTable({ locations, onToggleStatus, onCreate }: Loca
             <input placeholder="Lon" type="number" step="any" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} style={{ flex: 1, padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", font: "inherit" }} />
           </div>
           <div style={{ display: "flex", gap: "var(--space-sm)" }}>
-            <input placeholder="Country (e.g. US)" value={form.country_code} onChange={(e) => setForm({ ...form, country_code: e.target.value })} style={{ flex: 1, padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", font: "inherit" }} />
-            <input placeholder="Timezone (e.g. America/New_York)" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} style={{ flex: 1, padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", font: "inherit" }} />
+            <input
+              placeholder="Country (e.g. MY)"
+              list="country-codes"
+              autoComplete="off"
+              value={form.country_code}
+              onChange={(e) => setForm({ ...form, country_code: e.target.value.toUpperCase() })}
+              style={{ flex: 1, padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", font: "inherit" }}
+            />
+            <datalist id="country-codes">
+              {countryOptions.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
+              ))}
+            </datalist>
+            <input
+              placeholder="Timezone (e.g. Asia/Kuala_Lumpur)"
+              list="iana-timezones"
+              autoComplete="off"
+              value={form.timezone}
+              onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+              style={{ flex: 1, padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", font: "inherit" }}
+            />
+            <datalist id="iana-timezones">
+              {timezoneOptions.map((tz) => (
+                <option key={tz} value={tz} />
+              ))}
+            </datalist>
           </div>
           {createError && <p role="alert" style={{ color: "var(--color-unavailable)", fontSize: "var(--text-body-sm)" }}>{createError}</p>}
-          <button type="button" onClick={handleCreate} disabled={creating || !form.name} style={{ alignSelf: "flex-start", padding: "var(--space-sm) var(--space-md)", background: "var(--color-primary)", color: "#fff", border: "none", borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 500, cursor: "pointer", opacity: creating || !form.name ? 0.5 : 1 }}>
-            {creating ? "Creating..." : "Create"}
+          {showOverride && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xs)", padding: "var(--space-sm)", background: "var(--color-surface-secondary)", borderRadius: "var(--radius-sm)" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", fontSize: "var(--text-body-sm)" }}>
+                <input type="checkbox" checked={allowNearDuplicate} onChange={(e) => setAllowNearDuplicate(e.target.checked)} />
+                Create anyway (near-duplicate override — audited)
+              </label>
+              {allowNearDuplicate && (
+                <input
+                  placeholder="Reason for override (required)"
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  style={{ padding: "var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", font: "inherit" }}
+                />
+              )}
+            </div>
+          )}
+          <button type="button" onClick={handleCreate} disabled={creating || !form.name || (allowNearDuplicate && !overrideReason.trim())} style={{ alignSelf: "flex-start", padding: "var(--space-sm) var(--space-md)", background: "var(--color-primary)", color: "#fff", border: "none", borderRadius: "var(--radius-md)", font: "inherit", fontWeight: 500, cursor: "pointer", opacity: creating || !form.name || (allowNearDuplicate && !overrideReason.trim()) ? 0.5 : 1 }}>
+            {creating ? "Creating..." : allowNearDuplicate ? "Create with override" : "Create"}
           </button>
         </div>
       )}

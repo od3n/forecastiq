@@ -61,7 +61,7 @@ export function HealthGrid({ cells, onRetry }: HealthGridProps) {
                   type="button"
                   onClick={() => onRetry(c.provider_id, c.location_id)}
                   aria-label={`Re-collect now for ${c.provider_name} at ${c.location_name}`}
-                  style={{ padding: "var(--space-xs) var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", font: "inherit", fontSize: "var(--text-label)", cursor: "pointer" }}
+                  style={{ padding: "var(--space-xs) var(--space-sm)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", fontFamily: "inherit", fontSize: "var(--text-label)", cursor: "pointer" }}
                 >
                   Retry
                 </button>

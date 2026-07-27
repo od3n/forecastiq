@@ -43,6 +43,11 @@ func New(level, format string, w io.Writer) *slog.Logger {
 		handler = slog.NewJSONHandler(w, opts)
 	}
 
+	// Defense-in-depth: wrap with the sanitizing handler so sensitive field
+	// names are always redacted even if a call site accidentally logs them
+	// (observability architecture §2: "Never logged").
+	handler = NewSanitizingHandler(handler)
+
 	return slog.New(handler).With(slog.String("service", buildinfo.ServiceName))
 }
 

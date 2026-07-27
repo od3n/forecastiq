@@ -111,6 +111,12 @@ func (s *ConfigurationService) ListActiveConfigurations(ctx context.Context) ([]
 	return s.repo.ListActive(ctx, s.pool)
 }
 
+// ListConfigurations returns all configurations (active + disabled) for the
+// admin surface (S-11).
+func (s *ConfigurationService) ListConfigurations(ctx context.Context) ([]*domain.ProviderConfiguration, error) {
+	return s.repo.List(ctx, s.pool)
+}
+
 // UpdateConfigInput carries the operator-mutable configuration fields; nil
 // fields are left unchanged. The credential reference is never mutated via the
 // API (secret rotation is env-side, BR-08).

@@ -341,7 +341,7 @@ func (r *ReadRepository) ComparisonObservations(ctx context.Context, tx dbtx.DBT
 	if !ok {
 		return nil, fmt.Errorf("comparison observations: unsupported variable %q", variable)
 	}
-	q := `SELECT observed_at, ` + col + `, source, observation_type, quality_flag
+	q := `SELECT observed_at, ` + col + `, source, observation_type, quality_flag, canonical_condition_code
 	      FROM observations
 	      WHERE location_id = $1 AND observed_at >= $2 AND observed_at < $3
 	        AND superseded_observation_id IS NULL AND quality_flag <> 'suspect'
@@ -355,7 +355,7 @@ func (r *ReadRepository) ComparisonObservations(ctx context.Context, tx dbtx.DBT
 	var out []*ports.ComparisonObservation
 	for rows.Next() {
 		var o ports.ComparisonObservation
-		if err := rows.Scan(&o.ObservedAt, &o.Value, &o.Source, &o.ObservationType, &o.QualityFlag); err != nil {
+		if err := rows.Scan(&o.ObservedAt, &o.Value, &o.Source, &o.ObservationType, &o.QualityFlag, &o.ConditionCode); err != nil {
 			return nil, fmt.Errorf("scan comparison observation: %w", err)
 		}
 		out = append(out, &o)
