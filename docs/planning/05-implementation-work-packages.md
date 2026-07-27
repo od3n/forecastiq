@@ -339,6 +339,21 @@
 | Estimate | 3–4 d |
 | Commit slices | (1) seeder + k6 scripts; (2) reliability suite; (3) baseline runs + report |
 
+> **DRB note (2026-07-27)**: WP-26 was accepted at **slice 1 (scaffold)** only —
+> k6 PT-1/PT-2/PT-6 (enforcing thresholds), a request-path reliability slice,
+> and a deterministic seeder that estimates volumes but does not yet write
+> rows. The remainder is tracked as **WP-26b** below.
+
+## WP-26b: Performance Validation — Completion
+
+| Attribute | Specification |
+|-----------|---------------|
+| Objective | Complete WP-26: all PT scenarios green + NFR-S01 evidence |
+| Scope | PT-3 (ingestion burst), PT-4 (analysis batch, NFR-P06), PT-7 (2× volume, NFR-S01 Level-1 exit gate), PT-8 (Lighthouse); the 5 fault-injection reliability scenarios (provider timeout, duplicate job, late observation, worker restart via `docker compose restart app`, DB reconnect via `stop/start db`); functional seeder DB writes (`--estimate-only` currently gates the scaffold); populate the baseline register (§6); run the 2× volume load test; wire the weekly k6+reliability job into `.github/workflows/scheduled.yml` |
+| Dependencies | WP-26 (scaffold, accepted) |
+| Tests | Threshold gates per performance doc §5; baseline numbers recorded |
+| Commit slices | (1) seeder DB generation; (2) PT-3/4/7/8 + reliability fault injection; (3) baseline runs + scheduled wiring |
+
 ## WP-27: Documentation and Demo Preparation
 
 | Attribute | Specification |

@@ -300,6 +300,7 @@ func buildApp(ctx context.Context) (*App, error) {
 		Auth:             api.Auth{Users: identityUsers, Keys: identityKeys},
 		CORSAllowOrigins: cfg.CORSAllowOrigins,
 		RateLimiter:      ipLimiter,
+		BodyLimit:        cfg.RequestBodyLimit,
 		Clock:            clk,
 	})
 

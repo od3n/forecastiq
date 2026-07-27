@@ -57,6 +57,10 @@ Seeder: deterministic (fixed seed) Go program generating physically plausible tr
 |------|--------|----------|-----------|-----------|-----------|----------|-------|
 | (first run at Level 1 exit) | | | | | | | baseline |
 
+> **Status (2026-07-27)**: register unpopulated — baseline runs require the
+> functional seeder + 2× volume load test, tracked in **WP-26b** (planning doc).
+> WP-26 shipped PT-1/PT-2/PT-6 scripts + a reliability slice as a scaffold.
+
 ## 7. Cross-Reference
 
 - Growth model assumptions: `docs/data/06-data-growth-and-cost-model.md`
