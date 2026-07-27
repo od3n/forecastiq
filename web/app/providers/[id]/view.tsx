@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { useApi } from "@/lib/api/hooks";
 import { ProviderGrid, type GridCell } from "@/components/ProviderGrid";
 import { SkeletonBlock } from "@/components/SkeletonBlock";
@@ -11,14 +11,35 @@ import { PartialWarnings } from "@/components/PartialWarnings";
 import { AttributionFooter } from "@/components/AttributionFooter";
 import type { Freshness, Warning, Attribution } from "@/lib/api/types";
 
+interface ApiSummaryCell {
+  location_id: string;
+  location_name: string;
+  horizon_minutes: number;
+  composite_score: number | null;
+  ranking_status: string;
+  sample_count: number;
+}
+
 interface ProviderSummaryData {
-  provider_name: string;
-  cells: GridCell[];
+  provider: { id: string; name: string; slug: string };
+  cells: ApiSummaryCell[];
 }
 
 function ProviderDetailContent({ providerId }: { providerId: string }) {
   const path = `/accuracy/summary?provider_id=${providerId}`;
   const { data: envelope, error, isLoading } = useApi<ProviderSummaryData>(path);
+
+  // Group flat location×horizon rows into per-location score maps for the grid.
+  const cells: GridCell[] = useMemo(() => {
+    const byLocation = new Map<string, GridCell>();
+    for (const c of envelope?.data?.cells ?? []) {
+      if (!byLocation.has(c.location_id)) {
+        byLocation.set(c.location_id, { location_id: c.location_id, location_name: c.location_name, scores: {} });
+      }
+      byLocation.get(c.location_id)!.scores[c.horizon_minutes] = c.composite_score;
+    }
+    return Array.from(byLocation.values());
+  }, [envelope]);
 
   if (isLoading) {
     return (
@@ -39,8 +60,7 @@ function ProviderDetailContent({ providerId }: { providerId: string }) {
     );
   }
 
-  const providerName = envelope?.data?.provider_name ?? "Provider";
-  const cells = envelope?.data?.cells ?? [];
+  const providerName = envelope?.data?.provider?.name ?? "Provider";
   const freshness = envelope?.freshness as Freshness | undefined;
   const warnings = envelope?.warnings as Warning[] | undefined;
   const attribution = envelope?.attribution as Attribution[] | undefined;

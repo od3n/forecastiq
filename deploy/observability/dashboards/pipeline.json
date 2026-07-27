@@ -1,0 +1,128 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Collections / Hour by Provider + Status",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(collection_attempts_total{job=\"forecastiq\"}[1h])) by (provider, status)",
+          "legendFormat": "{{provider}} — {{status}}"
+        }
+      ]
+    },
+    {
+      "title": "Provider Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(provider_latency_seconds_bucket{job=\"forecastiq\"}[5m])) by (le, provider))",
+          "legendFormat": "{{provider}} p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Circuit States",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "circuit_state{job=\"forecastiq\"}",
+          "legendFormat": "{{provider}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CLOSED" } } },
+            { "type": "value", "options": { "1": { "text": "HALF_OPEN" } } },
+            { "type": "value", "options": { "2": { "text": "OPEN" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Observation Freshness per Location",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "observation_freshness_age_seconds{job=\"forecastiq\"}",
+          "legendFormat": "{{location_id}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Engine Lag",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 15, "y": 8 },
+      "targets": [
+        {
+          "expr": "engine_lag_seconds{job=\"forecastiq\"}",
+          "legendFormat": "lag"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 3600, "color": "yellow" }, { "value": 7200, "color": "red" }] } }
+      }
+    },
+    {
+      "title": "Matching + Evaluation Backlog",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 5, "x": 19, "y": 8 },
+      "targets": [
+        {
+          "expr": "matching_backlog{job=\"forecastiq\"}",
+          "legendFormat": "matching"
+        },
+        {
+          "expr": "evaluation_backlog{job=\"forecastiq\"}",
+          "legendFormat": "evaluation"
+        }
+      ]
+    },
+    {
+      "title": "Scheduler Lag",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(scheduler_lag_seconds_bucket{job=\"forecastiq\"}[5m])) by (le, job_type))",
+          "legendFormat": "{{job_type}} p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Missed Slots",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "increase(scheduler_missed_slots_total{job=\"forecastiq\"}[1h])",
+          "legendFormat": "{{job_type}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["forecastiq", "pipeline"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "ForecastIQ — Pipeline",
+  "uid": "forecastiq-pipeline"
+}

@@ -1,0 +1,148 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{job=\"forecastiq\"}[5m])",
+          "legendFormat": "CPU seconds/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit" }
+      }
+    },
+    {
+      "title": "Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=\"forecastiq\"}",
+          "legendFormat": "RSS"
+        },
+        {
+          "expr": "go_memstats_heap_inuse_bytes{job=\"forecastiq\"}",
+          "legendFormat": "Heap in-use"
+        },
+        {
+          "expr": "go_memstats_stack_inuse_bytes{job=\"forecastiq\"}",
+          "legendFormat": "Stack"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "title": "Payload Volume Usage",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "payload_volume_used_bytes{job=\"forecastiq\"} / payload_volume_total_bytes{job=\"forecastiq\"}",
+          "legendFormat": "used %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "value": 0, "color": "green" },
+              { "value": 0.7, "color": "yellow" },
+              { "value": 0.8, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "DB Connections",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "db_pool_in_use{job=\"forecastiq\"}",
+          "legendFormat": "in_use"
+        },
+        {
+          "expr": "db_pool_idle{job=\"forecastiq\"}",
+          "legendFormat": "idle"
+        },
+        {
+          "expr": "rate(db_pool_wait_total{job=\"forecastiq\"}[5m])",
+          "legendFormat": "waits/s"
+        }
+      ]
+    },
+    {
+      "title": "Process Uptime",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "time() - process_start_time_seconds{job=\"forecastiq\"}",
+          "legendFormat": "uptime"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Goroutines",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "go_goroutines{job=\"forecastiq\"}",
+          "legendFormat": "goroutines"
+        }
+      ]
+    },
+    {
+      "title": "Batch Durations (Analysis Pipeline)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(batch_duration_seconds_bucket{job=\"forecastiq\"}[15m])) by (le, batch_type))",
+          "legendFormat": "{{batch_type}} p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "GC Pause Duration",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(go_gc_duration_seconds_sum{job=\"forecastiq\"}[5m])",
+          "legendFormat": "GC time/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["forecastiq", "system"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "ForecastIQ — System",
+  "uid": "forecastiq-system"
+}

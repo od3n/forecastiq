@@ -1,0 +1,232 @@
+# ForecastIQ — Alert Rules (A1–A17)
+# Reference: docs/operations/03-monitoring-and-alerting.md §2
+# Format: Grafana Cloud Alerting (Prometheus-compatible rule groups)
+#
+# These rules are committed to the repo and synced to Grafana Cloud via the
+# provisioning API or grafana-agent mimirtool.
+
+groups:
+  - name: forecastiq.critical
+    interval: 1m
+    rules:
+      # A1: API down
+      - alert: APIDown
+        expr: up{job="forecastiq"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ForecastIQ API is down"
+          description: "The forecastiq target has been unreachable for 3 minutes."
+          runbook: "docs/operations/05-deployment-and-rollback.md §3.1"
+
+      # A2: API 5xx rate. Computed from http_requests_total's status_class
+      # label with both sides aggregated (DRB-WP22-003: the previous expression
+      # divided disjoint label sets, which one-to-one matching returns empty).
+      - alert: APIErrorRateHigh
+        expr: |
+          sum(rate(http_requests_total{job="forecastiq", status_class="5xx"}[15m]))
+          / sum(rate(http_requests_total{job="forecastiq"}[15m]))
+          > 0.01
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx error rate exceeds 1%"
+          description: "5xx responses have been above 1% of total traffic for 15 minutes."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.2"
+
+      # A4: Circuit open
+      - alert: ProviderCircuitOpen
+        expr: circuit_state{job="forecastiq"} == 2
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Provider circuit breaker is OPEN for {{ $labels.provider }}"
+          description: "Circuit has been open for 10 minutes. Provider calls are blocked."
+          runbook: "docs/operations/06-provider-failure-runbook.md"
+
+      # A6: Schema drift. Both sides aggregated to a per-provider vector
+      # (DRB-WP22-005: the rejected counter carries a reason label the stored
+      # counter lacks, so an unaggregated division matches nothing).
+      - alert: SchemaDrift
+        expr: |
+          sum by (provider) (increase(collection_records_rejected_total{job="forecastiq", reason="schema"}[1h]))
+          / (sum by (provider) (increase(collection_snapshots_stored_total{job="forecastiq"}[1h])) + 1)
+          > 0.5
+        labels:
+          severity: critical
+        annotations:
+          summary: "Schema drift detected for provider {{ $labels.provider }}"
+          description: "More than 50% of records rejected due to schema mismatch."
+          runbook: "docs/operations/06-provider-failure-runbook.md §schema"
+
+      # A8: Scheduler missed slots
+      - alert: SchedulerMissedSlots
+        expr: increase(scheduler_missed_slots_total{job="forecastiq"}[2h]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Scheduler missed slots detected"
+          description: "One or more scheduler slots were missed in the past 2 hours."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.5"
+
+      # A10: Backup failure
+      - alert: BackupFailure
+        expr: |
+          (time() - forecastiq_backup_last_success_timestamp_seconds > 93600)
+          or (forecastiq_backup_status != 1)
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup failure or overdue (> 26 hours)"
+          description: "The last successful backup is older than 26 hours or status is not success."
+          runbook: "docs/operations/04-backup-and-restore.md"
+
+      # A15: Process restarts. changes() counts distinct start-time values
+      # (= restarts); increase() on a timestamp gauge measured the jump in the
+      # timestamp itself and paged on a single benign restart (DRB-WP22-007).
+      - alert: ProcessRestarts
+        expr: changes(process_start_time_seconds{job="forecastiq"}[1h]) > 2
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ForecastIQ process restarted more than twice in 1 hour"
+          description: "Possible crash loop detected."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.5"
+
+      # A17: Uptime failure
+      - alert: UptimeCheckFailed
+        expr: probe_success{job="forecastiq-uptime"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ForecastIQ uptime check failing"
+          description: "External /healthz probe has failed 3 consecutive checks."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.1"
+
+  - name: forecastiq.warning
+    interval: 1m
+    rules:
+      # A3: Latency p95
+      - alert: LatencyP95High
+        expr: forecastiq:latency_p95:5m > 0.2
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency exceeds 200ms"
+          description: "The 95th percentile request latency has been above 200ms for 30 minutes."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.3"
+
+      # A5: Collection stale. Fires when a provider records zero successful
+      # (incl. partial/deduplicated) attempts across the 3h window
+      # (DRB-WP22-002: the previous expression subtracted a counter *value*
+      # from time(), which is always > threshold once any success exists).
+      - alert: CollectionStale
+        expr: |
+          sum by (provider) (
+            increase(collection_attempts_total{job="forecastiq", status=~"success|partial|deduplicated"}[3h])
+          ) == 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No successful collection for {{ $labels.provider }} in 180 min"
+          description: "Provider collection is stale. Check provider status and circuits."
+          runbook: "docs/operations/06-provider-failure-runbook.md"
+
+      # A7: Engine lag
+      - alert: EngineLagHigh
+        expr: engine_lag_seconds{job="forecastiq"} > 7200
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Analysis engine lag exceeds 2 hours"
+          description: "The analysis batch has not completed within the expected window."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.4"
+
+      # A9: Disk > 80%
+      - alert: PayloadDiskHigh
+        expr: |
+          payload_volume_used_bytes{job="forecastiq"}
+          / payload_volume_total_bytes{job="forecastiq"}
+          > 0.8
+        labels:
+          severity: warning
+        annotations:
+          summary: "Payload volume usage exceeds 80%"
+          description: "Disk space for raw payloads is running low."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.6"
+
+      # A11: Restore test overdue
+      - alert: RestoreTestOverdue
+        expr: time() - forecastiq_restore_test_last_timestamp_seconds > 3024000
+        labels:
+          severity: warning
+        annotations:
+          summary: "Restore test overdue (> 35 days)"
+          description: "The monthly restore test has not been run recently."
+          runbook: "docs/operations/04-backup-and-restore.md"
+
+      # A11b: Restore test failed. Staleness (A11) cannot catch this — a failed
+      # run still refreshes the timestamp — so we alert on the status metric
+      # directly (DRB-WP24-004).
+      - alert: RestoreTestFailed
+        expr: forecastiq_restore_test_status == 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latest restore test failed"
+          description: "The monthly restore test did not verify a usable backup. The backups may be unrestorable."
+          runbook: "docs/operations/04-backup-and-restore.md"
+
+      # A12: Cert expiry
+      - alert: CertExpirySoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 1209600
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate expires in less than 14 days"
+          description: "Caddy auto-renewal may have failed. Check Let's Encrypt status."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.7"
+
+      # A13: Observation stale
+      - alert: ObservationStale
+        expr: observation_freshness_age_seconds{job="forecastiq"} > 14400
+        labels:
+          severity: warning
+        annotations:
+          summary: "Observation stale for location {{ $labels.location_id }}"
+          description: "No fresh observation in 4 hours for this location."
+          runbook: "docs/operations/06-provider-failure-runbook.md §observation"
+
+      # A14: Unmapped conditions. Aggregated per provider (DRB-WP22-005: the
+      # unmapped counter carries a code label the stored counter lacks).
+      - alert: UnmappedConditions
+        expr: |
+          sum by (provider) (increase(condition_unmapped_total{job="forecastiq"}[24h]))
+          / (sum by (provider) (increase(collection_snapshots_stored_total{job="forecastiq"}[24h])) + 1)
+          > 0.01
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unmapped condition codes > 1% for {{ $labels.provider }}"
+          description: "Provider is sending condition codes with no canonical mapping."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.8"
+
+      # A16: DB pool saturation
+      - alert: DBPoolSaturated
+        expr: db_pool_in_use{job="forecastiq"} / 20 > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool > 90% utilized"
+          description: "Pool saturation for 10 minutes. Queries may queue."
+          runbook: "docs/operations/03-monitoring-and-alerting.md §3.3"

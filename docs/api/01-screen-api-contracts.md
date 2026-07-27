@@ -117,7 +117,8 @@ Rationale (C-01/C-04/DR-09/DR-11): serves the S-01 observation context line with
     ],
     "observations": [
       {"observed_at": "…Z", "value": 31.4, "source": "openmeteo_historical",
-       "observation_type": "reanalysis", "quality_flag": "valid"}
+       "observation_type": "reanalysis", "quality_flag": "valid",
+       "condition_code": "rain"}
     ],
     "day_metrics": [
       {"provider_id": "…", "mae": 1.24, "bias": 0.31, "rmse": 1.62, "sample_count": 24,
@@ -136,6 +137,8 @@ Rationale (C-01/C-04/DR-09/DR-11): serves the S-01 observation context line with
 Issuance selection (DR-02 binding): for each provider, the snapshot set whose `forecast_horizon_minutes` equals the requested horizon; if a provider has no issuance at exactly that horizon for a target hour, the nearest shorter horizon is used and `issued_at` reflects the actual issuance (subtitle honesty). Gaps render as line breaks.
 
 Observation gaps: hours with no observation are **absent** from `observations[]` (never interpolated) — the UI renders breaks (PC-10, methodology integrity).
+
+Each observation carries its canonical `condition_code` (taxonomy v1; omitted when unmapped) — the S-05 observed-conditions strip renders it as an icon per hour, aligned with the chart's fixed 24-hour axis in the location timezone.
 
 ## 6. `GET /rankings/methodology` — S-06
 
