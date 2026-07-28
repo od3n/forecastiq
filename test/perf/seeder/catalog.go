@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	catalogdomain "github.com/forecastiq/forecastiq/internal/catalog/domain"
+	"github.com/forecastiq/forecastiq/test/perf/perfids"
 )
 
 // providerRef is one seeded provider + its operational configuration.
@@ -25,21 +26,14 @@ type providerRef struct {
 	Slug       string
 }
 
-// perfLocationID returns the deterministic id of perf location i
-// (00000000-0000-0000-0001-…). Distinct from the canonical seed range
-// (…-0000-00000000003x) so perf rows never collide with operator data.
-func perfLocationID(i int) uuid.UUID {
-	return uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0001-%012x", i))
-}
+// perfLocationID returns the deterministic id of perf location i (shared with
+// the PT harnesses via perfids).
+func perfLocationID(i int) uuid.UUID { return perfids.LocationID(i) }
 
 // perfProviderID / perfConfigID cover providers beyond the two canonical ones.
-func perfProviderID(i int) uuid.UUID {
-	return uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0002-%012x", i))
-}
+func perfProviderID(i int) uuid.UUID { return perfids.ProviderID(i) }
 
-func perfConfigID(i int) uuid.UUID {
-	return uuid.MustParse(fmt.Sprintf("00000000-0000-0000-0003-%012x", i))
-}
+func perfConfigID(i int) uuid.UUID { return perfids.ConfigID(i) }
 
 // buildProviders maps provider index → catalog ids. The first two reuse the
 // canonical Open-Meteo / OpenWeather seed ids so perf data flows through the
@@ -114,7 +108,7 @@ func ensureCatalog(ctx context.Context, conn *pgx.Conn, provs []providerRef, nLo
 		`INSERT INTO users (id, workspace_id, auth_subject, email, role, status, preferences, created_at, updated_at)
 		 VALUES ($1, $2, 'dev|perf-admin-token', 'perf-admin@dev.local', 'admin', 'active', '{}', $3, $3)
 		 ON CONFLICT (auth_subject) DO NOTHING`,
-		uuid.MustParse("00000000-0000-0000-0004-000000000001"), catalogdomain.SystemWorkspaceID, now); err != nil {
+		perfids.AdminUserID, catalogdomain.SystemWorkspaceID, now); err != nil {
 		return fmt.Errorf("perf admin: %w", err)
 	}
 	return nil

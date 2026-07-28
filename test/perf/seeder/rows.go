@@ -19,6 +19,7 @@ import (
 
 	analysisdomain "github.com/forecastiq/forecastiq/internal/analysis/domain"
 	collectiondomain "github.com/forecastiq/forecastiq/internal/collection/domain"
+	"github.com/forecastiq/forecastiq/test/perf/perfids"
 )
 
 // targetOffsets returns the 104 forecast target offsets (hours): hourly to
@@ -34,9 +35,9 @@ func targetOffsets() []int {
 	return out
 }
 
-// canonicalHorizons are the UI horizon options (doc 02 §3.1) used for the
-// pre-aggregated metric/ranking backfill.
-var canonicalHorizons = []int{60, 180, 360, 720, 1440, 4320, 10080}
+// canonicalHorizons are the UI horizon options used for the pre-aggregated
+// metric/ranking backfill (single-sourced in perfids).
+var canonicalHorizons = perfids.CanonicalHorizons
 
 // dataset is the fully-resolved generation plan.
 type dataset struct {
