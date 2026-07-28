@@ -36,9 +36,12 @@ func cmdSeed(_ []string) error {
 	return nil
 }
 
-// seed inserts the system workspace, seeded providers, the Open-Meteo
-// configuration, and the Johor Bahru demo location. Every statement is
-// idempotent (ON CONFLICT / existence check) so it is safe on every boot.
+// seed inserts the system workspace, seeded providers, the provider
+// configurations, and the Johor Bahru demo location. Every statement is safe
+// on every boot: workspace and provider rows are idempotent upserts (catalog
+// metadata the seed owns), while configurations and locations are insert-only
+// (ON CONFLICT DO NOTHING / existence check) — operator state is never
+// overwritten by a re-seed.
 func seed(ctx context.Context, pool dbtx.DBTX) error {
 	now := time.Now().UTC()
 
@@ -72,7 +75,9 @@ func seed(ctx context.Context, pool dbtx.DBTX) error {
 		}
 	}
 
-	// Open-Meteo operational configuration (keyless at MVP).
+	// Open-Meteo operational configuration (keyless at MVP). Insert-only: the
+	// first boot seeds it active; afterwards the row belongs to the operator
+	// (S-11), so a re-seed never re-activates a deliberately disabled config.
 	configRepo := catalogpg.NewConfigurationRepository()
 	cfg := &catalogdomain.ProviderConfiguration{
 		ID: catalogdomain.OpenMeteoConfigID, WorkspaceID: catalogdomain.SystemWorkspaceID,
@@ -80,7 +85,7 @@ func seed(ctx context.Context, pool dbtx.DBTX) error {
 		CredentialRef: "", CollectionSchedule: catalogdomain.DefaultSchedule(),
 		AdapterVersion: "1.0.0", ValidationState: "unvalidated", CreatedAt: now, UpdatedAt: now,
 	}
-	if err := configRepo.Upsert(ctx, pool, cfg); err != nil {
+	if err := configRepo.Insert(ctx, pool, cfg); err != nil {
 		return fmt.Errorf("seed configuration: %w", err)
 	}
 
@@ -89,20 +94,16 @@ func seed(ctx context.Context, pool dbtx.DBTX) error {
 	// OpenWeather ToS review (D-05, a public-launch gate) and a resolvable
 	// FIQ_PROVIDER_OPENWEATHER_API_KEY. An operator activates it once both are
 	// satisfied; while disabled the scheduler does not generate its slots.
-	// Insert-only (existence check): re-seeding must never clobber an
-	// operator's activation of the configuration.
-	if _, lookupErr := configRepo.GetByID(ctx, pool, catalogdomain.OpenWeatherConfigID); errors.Is(lookupErr, catalogdomain.ErrNotFound) {
-		owCfg := &catalogdomain.ProviderConfiguration{
-			ID: catalogdomain.OpenWeatherConfigID, WorkspaceID: catalogdomain.SystemWorkspaceID,
-			ProviderID: catalogdomain.OpenWeatherProviderID, Status: catalogdomain.StatusDisabled,
-			CredentialRef: "FIQ_PROVIDER_OPENWEATHER_API_KEY", CollectionSchedule: catalogdomain.Schedule{Interval: "hourly", MinuteOffset: 2},
-			AdapterVersion: "1.0.0", ValidationState: "unvalidated", CreatedAt: now, UpdatedAt: now,
-		}
-		if err := configRepo.Upsert(ctx, pool, owCfg); err != nil {
-			return fmt.Errorf("seed openweather configuration: %w", err)
-		}
-	} else if lookupErr != nil {
-		return fmt.Errorf("seed openweather configuration lookup: %w", lookupErr)
+	// Insert-only (ON CONFLICT DO NOTHING): atomic, so a re-seed — even racing
+	// a concurrent boot — never clobbers an operator's activation.
+	owCfg := &catalogdomain.ProviderConfiguration{
+		ID: catalogdomain.OpenWeatherConfigID, WorkspaceID: catalogdomain.SystemWorkspaceID,
+		ProviderID: catalogdomain.OpenWeatherProviderID, Status: catalogdomain.StatusDisabled,
+		CredentialRef: "FIQ_PROVIDER_OPENWEATHER_API_KEY", CollectionSchedule: catalogdomain.Schedule{Interval: "hourly", MinuteOffset: 2},
+		AdapterVersion: "1.0.0", ValidationState: "unvalidated", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := configRepo.Insert(ctx, pool, owCfg); err != nil {
+		return fmt.Errorf("seed openweather configuration: %w", err)
 	}
 
 	// Johor Bahru demo location (idempotent via existence check).

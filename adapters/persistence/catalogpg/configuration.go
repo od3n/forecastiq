@@ -130,3 +130,23 @@ func (r *ConfigurationRepository) Upsert(ctx context.Context, tx dbtx.DBTX, c *d
 	}
 	return nil
 }
+
+// Insert implements ports.ConfigurationRepository: atomic insert-only write
+// (ON CONFLICT DO NOTHING) for boot-time seeding — an existing row, including
+// any operator changes to it, is never touched.
+func (r *ConfigurationRepository) Insert(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error {
+	credentialRef := any(nil)
+	if c.CredentialRef != "" {
+		credentialRef = c.CredentialRef
+	}
+	_, err := tx.Exec(ctx,
+		`INSERT INTO provider_configurations (`+configColumns+`)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		 ON CONFLICT (id) DO NOTHING`,
+		c.ID, c.WorkspaceID, c.ProviderID, string(c.Status), credentialRef,
+		c.CollectionSchedule, c.AdapterVersion, c.ValidationState, c.CreatedAt, c.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("insert configuration: %w", err)
+	}
+	return nil
+}
