@@ -44,6 +44,8 @@ State model: Not Started → Prototype Exists → Partially Implemented → Impl
 | 27 | Docs + demo | **Accepted** (DRB re-review 2026-07-27) | 2026-07-28 | Branch `feature/wp27-docs-demo-prep`, PR #33. **Full review 2026-07-27: REJECTED** on `4b1f355` — the documentation half absent (deployment-architecture + rollback runbook still described the pre-ADR-033 Hetzner/systemd/Caddy topology); scripts sound (DRB-WP27-001…004). **Re-review 2026-07-27: ACCEPTED** on `a683231` — runbooks rewritten for the ADR-033 EC2+Docker topology, `launch-checklist.sh` now *enforces* runbook accuracy (greps for `docker compose`, rejects `systemctl`) + attribution validation across public surfaces, demo header string corrected; six jobs green; checklist rehearsed end-to-end against a live stack. Closed the WP-22…WP-27 DRB queue (except the WP-26b remainder). Reports: `WP-27-delivery-review.md`, `WP-27-delivery-re-review.md`. |
 
 > Post-WP-27 fixes on `main` (2026-07-27/28): WP-19 web-session auth slice (PR #38; `WP-19-web-delivery-re-review.md` ACCEPTED), insert-only config seeding (PRs #39/#40), S-14 admin-users API wiring + role endpoint (PRs #41/#42).
+>
+> **M4 launch-ready reached 2026-07-28**: launch checklist executed against the live stack — **22 PASS / 0 FAIL** (6 manual-by-design skips); BR-ATTR-01 live-verified on the public read surfaces; manual gates **D-05 (OpenWeather ToS) CLOSED — APPROVED** and **D-06 (observation quality) CLOSED — QUALITY ADEQUATE / A-4 confirmed** by the operator. Full record: `docs/reviews/06-phase-1-decision-log.md` §6. OpenWeather activation remains a deliberate operator action (config seeded disabled; needs `FIQ_PROVIDER_OPENWEATHER_API_KEY`).
 
 ---
 

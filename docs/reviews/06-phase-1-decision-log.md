@@ -89,3 +89,19 @@ All material Phase 1 decisions, their status, and where the full rationale lives
 - ADRs immutable once Accepted; changes via new ADR (supersede reference).
 - Design decisions (D-*) change via PR to the owning document with review.
 - This log updated at each milestone (M1–M4) with any decisions made during implementation.
+
+## 6. Launch gate closures (M4, 2026-07-28)
+
+Both pre-launch gates from A-5 were closed by the operator on 2026-07-28,
+following the automated launch-checklist run (22 PASS / 0 FAIL / 6 manual
+skips against the live stack) and live verification of BR-ATTR-01 on the
+public read surfaces.
+
+| Gate | Decision | Evidence | Decider |
+|------|----------|----------|---------|
+| **D-05** — OpenWeather ToS | **CLOSED — APPROVED.** OpenWeather may be active at launch. Basis: free/self-service data licensed CC BY-SA 4.0 / ODbL — commercial use allowed with visible attribution; ForecastIQ renders per-provider attribution (`text` + `url`) on every data surface (BR-ATTR-01, live-verified); the One Call 3.0 daily budget guard (1,000/day default = free allotment) and 429→pause behavior are DRB-proven (WP-07 / TC-07-01). The CC BY-SA/ODbL **share-alike** scope over derived works (published accuracy metrics/rankings) was surfaced and accepted by the operator. Activation itself remains a separate operator action (config seeded disabled; requires `FIQ_PROVIDER_OPENWEATHER_API_KEY`). | Launch checklist §8/§9; WP-07 implementation report §§5–10 | Operator |
+| **D-06** — Observation quality spike | **CLOSED — QUALITY ADEQUATE.** Reanalysis-based ground truth accepted for launch; assumption **A-4 confirmed**. Live-stack evidence: 246 live observations, 0% suspect rate, 0% null temperature, freshness 0.9 h, 76 correction rows proving the supersession flow, 13,202 matched pairs feeding metrics; OC-04 range checks + provenance-weighted evaluation kernel DRB-proven (WP-09/WP-10/WP-12). | Launch checklist run 2026-07-28; WP-09/WP-10 delivery reviews | Operator |
+
+With D-05 and D-06 closed and the release gate satisfied (WP-01…WP-27 + WP-26b
+all Accepted; NFR-S01 satisfied at Level-1 exit per TC-26b-01), **milestone M4
+(launch-ready) is reached**.
