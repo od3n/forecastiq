@@ -55,6 +55,11 @@ jobs:
           if [ "$SIZE" -gt 4194304 ]; then
             echo "Static export exceeds 4 MB budget" && exit 1
           fi
+      - name: Lighthouse CI (PT-8 — paint < 2 s NFR-P04, CLS < 0.1)
+        # Gates the four key screens pinned in web/lighthouserc.json (dashboard,
+        # trends, forecast-comparison, methodology — perf doc §2 PT-8: every
+        # frontend PR). Desktop preset, filesystem report only.
+        run: npx --yes @lhci/cli@0.15.1 autorun
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
       - name: E2E critical flows (Playwright)

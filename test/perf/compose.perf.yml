@@ -1,0 +1,32 @@
+# test/perf/compose.perf.yml — isolated performance/reliability environment
+# (WP-26b). Overlays the base docker-compose.yml under a DEDICATED project so
+# perf seeding/TRUNCATE and fault injection can never touch a developer stack:
+#
+#   docker compose -p fiqperf -f docker-compose.yml -f test/perf/compose.perf.yml up -d postgres app
+#
+# Ports are shifted (28080 API / 29090 metrics / 25432 PG) and volumes are
+# project-scoped (fiqperf_*), so it runs alongside `make dev-up`.
+#
+# Rate limiter (DRB-WP26-005): k6 runs need PERF_RATE_LIMIT=100000; the
+# reliability suites need the DEFAULT limiter (unset). The two are mutually
+# exclusive — re-up the app service when switching:
+#   PERF_RATE_LIMIT=100000 docker compose -p fiqperf ... up -d app
+services:
+  postgres:
+    ports: !override
+      - "25432:5432"
+
+  app:
+    ports: !override
+      - "28080:8080"
+      - "29090:9090"
+    environment:
+      FIQ_RATE_LIMIT_PER_IP_PER_MIN: "${PERF_RATE_LIMIT:-120}"
+      # The perf/reliability suites authenticate via the dev verifier
+      # (ADMIN_TOKEN=perf-admin-token -> seeded perf admin), regardless of the
+      # operator's .env.local auth provider settings. Never a production env.
+      FIQ_AUTH_DEV_MODE: "true"
+
+  # The dashboard is not under test here (PT-8 gates it in frontend CI).
+  frontend:
+    profiles: ["frontend"]

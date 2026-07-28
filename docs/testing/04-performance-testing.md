@@ -55,11 +55,13 @@ Seeder: deterministic (fixed seed) Go program generating physically plausible tr
 
 | Date | Commit | PT-1 p95 | PT-2 req/s | PT-3 cycle | PT-4 batch | PT-7 p95 | Notes |
 |------|--------|----------|-----------|-----------|-----------|----------|-------|
-| (first run at Level 1 exit) | | | | | | | baseline |
+| 2026-07-28 | `feature/wp26b-performance-validation` | 1.56 ms (0 err / 71,752 req) | 105.0 sustained (p95 2.77 ms) | 6.77 s (240/240; per-coll p95 79 ms) | 30 s @ ~147 K pairs | base volume: Q-01 4.5 / Q-04 1.7 / Q-05 5.3 / Q-09 36.6 ms | first populated baseline — local Docker `fiqperf` stack (postgres:16-alpine, Apple-silicon host), base preset (1,497,600 snapshots / 2.71 M pairs). PT-6 p95 123.5 ms; PT-8 FCP 273–353 ms, CLS ≈ 0.025. Baseline runs surfaced + fixed the missing `metrics_calculated` index (migration `20260801000013`). |
 
-> **Status (2026-07-27)**: register unpopulated — baseline runs require the
-> functional seeder + 2× volume load test, tracked in **WP-26b** (planning doc).
-> WP-26 shipped PT-1/PT-2/PT-6 scripts + a reliability slice as a scaffold.
+> **NFR-S01 (2× volume) status**: the `extended` preset and the PT-7 gate are
+> implemented; the Level-1-exit run itself requires the scratch-VPS
+> environment (§4 — CI-runner/laptop storage and multi-hour seeding budget)
+> and is the remaining execution step. Weekly CI re-runs PT-1/PT-3/PT-6/PT-7
+> (base volume) + both reliability suites (`.github/workflows/scheduled.yml`).
 
 ## 7. Cross-Reference
 

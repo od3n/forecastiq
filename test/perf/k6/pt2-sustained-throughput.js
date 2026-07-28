@@ -8,13 +8,19 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080/api/v1';
-const LOCATION_ID = __ENV.LOCATION_ID || '00000000-0000-0000-0000-000000000001';
+// Default: first seeded perf location (test/perf/seeder; perfids.LocationID(0)).
+const LOCATION_ID = __ENV.LOCATION_ID || '00000000-0000-0000-0001-000000000000';
 
 export const options = {
   scenarios: {
     sustained: {
       executor: 'constant-arrival-rate',
-      rate: 100,
+      // 105/s target: a constant-arrival-rate of exactly 100/s aggregates
+      // fractionally UNDER 100/s over the run (startup settling), so the
+      // NFR-P05 'iterations rate>=100' gate could never pass at rate=100 —
+      // even with every request served instantly (WP-26b baseline finding).
+      // Driving 105/s proves ≥ 100 req/s sustained without relaxing the gate.
+      rate: 105,
       timeUnit: '1s',
       duration: '5m',
       preAllocatedVUs: 150,

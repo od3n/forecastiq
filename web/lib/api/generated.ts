@@ -497,6 +497,26 @@ export interface paths {
         patch: operations["setUserStatus"];
         trace?: never;
     };
+    "/admin/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a user's role (S-14, admin)
+         * @description Sets a user's application role (user|admin). Refuses self-target (409 self-lockout). The database is the authoritative role source, so the change takes effect on the target's next request. Audited. Admin only.
+         */
+        patch: operations["setUserRole"];
+        trace?: never;
+    };
     "/admin/users/{id}": {
         parameters: {
             query?: never;
@@ -1506,6 +1526,39 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     status: "active" | "disabled";
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    setUserRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    role: "user" | "admin";
                 };
             };
         };
