@@ -56,12 +56,13 @@ Seeder: deterministic (fixed seed) Go program generating physically plausible tr
 | Date | Commit | PT-1 p95 | PT-2 req/s | PT-3 cycle | PT-4 batch | PT-7 p95 | Notes |
 |------|--------|----------|-----------|-----------|-----------|----------|-------|
 | 2026-07-28 | `feature/wp26b-performance-validation` | 1.56 ms (0 err / 71,752 req) | 105.0 sustained (p95 2.77 ms) | 6.77 s (240/240; per-coll p95 79 ms) | 30 s @ ~147 K pairs | base volume: Q-01 4.5 / Q-04 1.7 / Q-05 5.3 / Q-09 36.6 ms | first populated baseline — local Docker `fiqperf` stack (postgres:16-alpine, Apple-silicon host), base preset (1,497,600 snapshots / 2.71 M pairs). PT-6 p95 123.5 ms; PT-8 FCP 273–353 ms, CLS ≈ 0.025. Baseline runs surfaced + fixed the missing `metrics_calculated` index (migration `20260801000013`). |
+| 2026-07-28 | `328e960` (main, WP-26b accepted) | — | — | — | — | **2× volume (NFR-S01 Level-1 exit): Q-01 2.0 / Q-04 0.7 / Q-05 20.5 / Q-09 79.8 ms — ALL < 100 ms** | **TC-26b-01 executed**: scratch EC2 per §4 — seeded on r6i.large (extended preset, 111,560,766 rows / ~65 GB in 2 h 42 m: 36,441,600 snapshots = 2× MVP annual, 71,658,646 pairs), then **measured on t3.small** (production class, ADR-033; 2 vCPU / 2 GB, swap off, postgres:16-alpine `shared_buffers=512MB`), 200 iterations/pattern. No index/TimescaleDB promotion triggered (§5). Instance, SG, and key pair torn down after the run. |
 
-> **NFR-S01 (2× volume) status**: the `extended` preset and the PT-7 gate are
-> implemented; the Level-1-exit run itself requires the scratch-VPS
-> environment (§4 — CI-runner/laptop storage and multi-hour seeding budget)
-> and is the remaining execution step. Weekly CI re-runs PT-1/PT-3/PT-6/PT-7
-> (base volume) + both reliability suites (`.github/workflows/scheduled.yml`).
+> **NFR-S01 status: SATISFIED at Level-1 exit** — the 2×-volume PT-7 run above
+> passed all four patterns under the p95 < 100 ms gate on production-class
+> hardware. Quarterly re-runs per §2 (scratch VPS, `--preset=extended`).
+> Weekly CI re-runs PT-1/PT-3/PT-6/PT-7 (base volume) + both reliability
+> suites (`.github/workflows/scheduled.yml`).
 
 ## 7. Cross-Reference
 

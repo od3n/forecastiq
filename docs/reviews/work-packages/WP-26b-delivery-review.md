@@ -88,3 +88,37 @@ volume. Owner: operations; revisit at the Level-1 exit review.
 
 **WP-26b → Accepted. Accepted Implementation SHA `752e8d4`.** PR #43 ready to
 merge to `main`.
+
+---
+
+## 6. TC-26b-01 closure (2026-07-28, post-merge)
+
+**Status: Closed — Satisfied.** The NFR-S01 2×-volume PT-7 run was executed on
+a scratch EC2 instance per perf doc §4, after PR #43 merged to `main`
+(`328e960`):
+
+- **Environment**: throwaway EC2 (ap-southeast-1, 150 GB gp3, ephemeral
+  key pair + SSH-only security group scoped to the operator IP). Seeding ran
+  on **r6i.large** (the 2 GB t3.small thrash-locked under the 36 M-row COPY —
+  seed hardware does not affect evidence); the instance was then resized to
+  **t3.small** (production class per ADR-033; 2 vCPU / 2 GB, swap off,
+  postgres:16-alpine `shared_buffers=512MB`) for the measurement.
+- **Dataset**: `--preset=extended` — **111,560,766 rows in 2 h 42 m**
+  (36,441,600 snapshots = 2× MVP annual rate, 71,658,646 pairs, 2,759,400
+  metric rows; ~65 GB). Row counts verified in-database before the run.
+- **Result (200 iterations/pattern, warm-up excluded) — ALL PASS at
+  p95 < 100 ms (NFR-P08)**:
+
+  | Pattern | p50 | p95 | p99 | max |
+  |---------|-----|-----|-----|-----|
+  | Q-01 | 807 µs | **2.006 ms** | 3.583 ms | 4.499 ms |
+  | Q-04 | 538 µs | **723 µs** | 822 µs | 895 µs |
+  | Q-05 | 17.044 ms | **20.498 ms** | 21.512 ms | 92.209 ms |
+  | Q-09 | 33.271 ms | **79.783 ms** | 107.118 ms | 268.29 ms |
+
+- **Consequence**: **NFR-S01 satisfied at Level-1 exit**; no TimescaleDB/index
+  promotion trigger fired (perf doc §5 / ADR-004). Register row appended
+  (perf doc §6). Instance terminated, EBS volume auto-deleted, security group
+  and key pair removed — teardown verified.
+
+No open conditions remain on WP-26b.
