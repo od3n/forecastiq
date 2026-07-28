@@ -15,7 +15,12 @@ export const options = {
   scenarios: {
     sustained: {
       executor: 'constant-arrival-rate',
-      rate: 100,
+      // 105/s target: a constant-arrival-rate of exactly 100/s aggregates
+      // fractionally UNDER 100/s over the run (startup settling), so the
+      // NFR-P05 'iterations rate>=100' gate could never pass at rate=100 —
+      // even with every request served instantly (WP-26b baseline finding).
+      // Driving 105/s proves ≥ 100 req/s sustained without relaxing the gate.
+      rate: 105,
       timeUnit: '1s',
       duration: '5m',
       preAllocatedVUs: 150,

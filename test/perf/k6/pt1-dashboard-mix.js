@@ -49,15 +49,15 @@ export default function () {
     errorRate.add(res.status !== 200);
     summaryDuration.add(res.timings.duration);
   } else if (rand < 0.90) {
-    // 15% — Trends
-    const res = http.get(`${BASE_URL}/accuracy?location_id=${LOCATION_ID}&granularity=daily&range=30d`);
+    // 15% — Trends (S-04 contract: variable + metric_type are required)
+    const res = http.get(`${BASE_URL}/accuracy?location_id=${LOCATION_ID}&variable=temperature&metric_type=mae&granularity=daily&range=30d`);
     check(res, { 'trends 200': (r) => r.status === 200 });
     errorRate.add(res.status !== 200);
     trendsDuration.add(res.timings.duration);
   } else {
-    // 10% — Forecast vs Actual
+    // 10% — Forecast vs Actual (canonical variable names, not provider params)
     const today = new Date().toISOString().split('T')[0];
-    const res = http.get(`${BASE_URL}/forecast-comparison?location_id=${LOCATION_ID}&date=${today}&variable=temperature_2m&horizon_minutes=60`);
+    const res = http.get(`${BASE_URL}/forecast-comparison?location_id=${LOCATION_ID}&date=${today}&variable=temperature&horizon_minutes=60`);
     check(res, { 'fva 2xx': (r) => r.status >= 200 && r.status < 300 });
     errorRate.add(res.status >= 400);
     fvaDuration.add(res.timings.duration);
