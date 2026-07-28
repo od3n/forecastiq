@@ -51,7 +51,11 @@ type dataset struct {
 }
 
 func newDataset(seed int64, provs []providerRef, nLoc, days int, now time.Time) dataset {
-	end := now.UTC().Truncate(time.Hour)
+	// Anchor 3 h behind the current hour: a live stack collects forecasts for
+	// the current hour and observations over a trailing ~2 h window as soon as
+	// the perf locations exist, and those rows would collide with seeded rows
+	// on the snapshot/observation dedup boundaries at the window edge.
+	end := now.UTC().Truncate(time.Hour).Add(-3 * time.Hour)
 	return dataset{
 		seed: seed, provs: provs, nLoc: nLoc, days: days,
 		start: end.Add(-time.Duration(days) * 24 * time.Hour), end: end,
