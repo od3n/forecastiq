@@ -58,6 +58,9 @@ type ConfigurationRepository interface {
 	// Update writes the operator-mutable fields (never the credential ref).
 	Update(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error
 	Upsert(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error
+	// Insert writes the configuration only when the id does not exist yet
+	// (atomic insert-only seeding: a re-run never overwrites operator state).
+	Insert(ctx context.Context, tx dbtx.DBTX, c *domain.ProviderConfiguration) error
 }
 
 // CircuitRepository persists provider circuit-breaker state.
