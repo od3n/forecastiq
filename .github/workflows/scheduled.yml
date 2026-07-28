@@ -2,13 +2,14 @@ name: Scheduled
 
 # Scheduled quality gates (docs/delivery/02-ci-cd.md §3):
 #   nightly — extended property tests (10K cases) + full govulncheck
-#   weekly  — gitleaks full-history secret scan
+#   weekly  — gitleaks full-history secret scan; k6 performance (PT-1/PT-3/
+#             PT-6/PT-7) + reliability suites (request-path + fault injection)
+#             against an isolated compose stack (WP-26b)
 #   monthly — rollback drill against the production VPS (skips cleanly when
 #             deploy secrets are not configured; also runnable on demand)
-# The weekly performance (k6 PT-1/PT-2/PT-6) and reliability suites are a
-# scaffold in test/perf; wiring them here is tracked in WP-26b (needs the
-# functional seeder + baseline runs first). See
-# docs/reviews/work-packages/WP-26-delivery-review.md.
+# PT-2/PT-4 are pre-release scenarios and PT-8 gates every frontend PR
+# (frontend.yml); the 2×-volume PT-7 run (NFR-S01) uses the extended preset on
+# a scratch VPS quarterly (performance doc §4).
 
 on:
   schedule:
@@ -49,6 +50,68 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Weekly performance + reliability (WP-26b; perf doc §2 weekly tier:
+  # PT-1/PT-3/PT-6 + reliability layer; PT-7 at base volume as an early-warning
+  # trend for the quarterly 2× gate). Compose up → seed → harnesses → k6 →
+  # reliability, per DRB-WP26-006. The k6 phase raises the per-IP rate limit;
+  # the reliability phase restores the DEFAULT limiter first — the two envs are
+  # mutually exclusive (DRB-WP26-005).
+  weekly-perf-reliability:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PERF_DB: postgres://forecastiq:forecastiq@localhost:25432/forecastiq?sslmode=disable
+      PERF_URL: http://localhost:28080
+      PERF_COMPOSE: docker compose -p fiqperf -f docker-compose.yml -f test/perf/compose.perf.yml
+      ADMIN_TOKEN: perf-admin-token
+      LOCATION_ID: 00000000-0000-0000-0001-000000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.12"
+          cache: true
+      - name: Start isolated perf stack
+        run: |
+          cp .env.example .env.local
+          $PERF_COMPOSE up -d --build postgres app
+          timeout 180 bash -c 'until curl -sf $PERF_URL/readyz >/dev/null; do sleep 3; done'
+      - name: Seed base preset (functional writes)
+        run: go run ./test/perf/seeder --preset=base --reset --db "$PERF_DB"
+      - name: PT-3 ingestion burst (NFR-P07)
+        run: go run ./test/perf/pt3 --db "$PERF_DB"
+      - name: PT-7 query baselines at base volume (NFR-P08 trend)
+        run: go run ./test/perf/pt7 --db "$PERF_DB"
+      - name: Switch to the k6 env (raised rate limit)
+        run: |
+          PERF_RATE_LIMIT=100000 $PERF_COMPOSE up -d app
+          timeout 120 bash -c 'until curl -sf $PERF_URL/readyz >/dev/null; do sleep 3; done'
+      - name: k6 PT-1 dashboard read mix
+        run: |
+          docker run --rm --network fiqperf_default \
+            -e BASE_URL=http://app:8080/api/v1 -e LOCATION_ID=$LOCATION_ID \
+            -v "$PWD/test/perf/k6:/scripts:ro" grafana/k6:0.57.0 run /scripts/pt1-dashboard-mix.js
+      - name: k6 PT-6 health polling
+        run: |
+          docker run --rm --network fiqperf_default \
+            -e BASE_URL=http://app:8080/api/v1 -e ADMIN_TOKEN=$ADMIN_TOKEN \
+            -v "$PWD/test/perf/k6:/scripts:ro" grafana/k6:0.57.0 run /scripts/pt6-health-polling.js
+      - name: Restore the DEFAULT limiter (reliability env)
+        run: |
+          $PERF_COMPOSE up -d app
+          timeout 120 bash -c 'until curl -sf $PERF_URL/readyz >/dev/null; do sleep 3; done'
+      - name: Reliability — request path (slice 1)
+        run: bash test/perf/reliability.sh "$PERF_URL"
+      - name: Reliability — fault injection (slice 2)
+        env:
+          COMPOSE: docker compose -p fiqperf -f docker-compose.yml -f test/perf/compose.perf.yml
+          NETWORK: fiqperf_default
+        run: bash test/perf/reliability-faults.sh "$PERF_URL"
+      - name: Stack logs on failure
+        if: failure()
+        run: $PERF_COMPOSE logs --tail 200 app postgres
 
   monthly-rollback-drill:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 1 * *'

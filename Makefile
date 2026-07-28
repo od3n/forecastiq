@@ -107,6 +107,50 @@ obs-reset: ## Destroy observability volumes and restart clean
 .PHONY: stop
 stop: dev-down ## Alias: stop the stack
 
+# ── Performance / reliability (WP-26b; isolated fiqperf project) ─────
+PERF_COMPOSE := $(COMPOSE) -p fiqperf -f docker-compose.yml -f test/perf/compose.perf.yml
+PERF_DB      := postgres://forecastiq:forecastiq@localhost:25432/forecastiq?sslmode=disable
+PERF_URL     := http://localhost:28080
+PERF_PRESET  := base
+
+.PHONY: perf-up
+perf-up: ## Start the isolated perf stack (ports 28080/29090/25432)
+	$(PERF_COMPOSE) up -d --build postgres app
+	@echo "Perf stack: $(PERF_URL)  (PERF_RATE_LIMIT=100000 make perf-up for the k6 env)"
+
+.PHONY: perf-down
+perf-down: ## Destroy the perf stack including volumes
+	$(PERF_COMPOSE) down -v --remove-orphans
+
+.PHONY: perf-seed
+perf-seed: ## Seed the perf dataset (PERF_PRESET=base|extended|analysis)
+	$(GO) run ./test/perf/seeder --preset=$(PERF_PRESET) --reset --db "$(PERF_DB)"
+
+.PHONY: perf-pt3
+perf-pt3: ## PT-3 ingestion burst (NFR-P07)
+	$(GO) run ./test/perf/pt3 --db "$(PERF_DB)"
+
+.PHONY: perf-pt4
+perf-pt4: ## PT-4 analysis batch < 10 min (seed analysis preset first)
+	bash test/perf/pt4-analysis-batch.sh $(PERF_URL)
+
+.PHONY: perf-pt7
+perf-pt7: ## PT-7 query baselines p95 < 100 ms (NFR-P08)
+	$(GO) run ./test/perf/pt7 --db "$(PERF_DB)"
+
+.PHONY: perf-k6
+perf-k6: ## Run one k6 scenario (K6_SCRIPT=pt1-dashboard-mix.js; needs PERF_RATE_LIMIT env)
+	docker run --rm --network fiqperf_default \
+		-e BASE_URL=http://app:8080/api/v1 \
+		-e LOCATION_ID=00000000-0000-0000-0001-000000000000 \
+		-e ADMIN_TOKEN=perf-admin-token \
+		-v "$(PWD)/test/perf/k6:/scripts:ro" grafana/k6:0.57.0 run /scripts/$(K6_SCRIPT)
+
+.PHONY: perf-reliability
+perf-reliability: ## Reliability suites (request-path + fault injection; DEFAULT limiter)
+	ADMIN_TOKEN=perf-admin-token bash test/perf/reliability.sh $(PERF_URL)
+	COMPOSE="$(PERF_COMPOSE)" NETWORK=fiqperf_default bash test/perf/reliability-faults.sh $(PERF_URL)
+
 # ── Database ──────────────────────────────────────────────────────────
 .PHONY: migrate
 migrate: ## Apply all pending migrations

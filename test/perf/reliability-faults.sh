@@ -59,7 +59,9 @@ check() {
 }
 
 status_of() {
-  curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$@" 2>/dev/null || echo "000"
+  # -w already emits 000 when the request fails; no fallback echo (it would
+  # concatenate to "000000").
+  curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$@" 2>/dev/null || true
 }
 
 psqlc() {
@@ -70,7 +72,7 @@ trigger() { # POST /admin/collections/trigger; prints HTTP status
   curl -s -o /dev/null -w "%{http_code}" --max-time "${2:-120}" -X POST \
     -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "Content-Type: application/json" \
     -d "{\"provider_id\":\"${OPEN_METEO_ID}\",\"location_id\":\"${JB_LOCATION_ID}\"}" \
-    "${API_URL}/admin/collections/trigger" 2>/dev/null || echo "000"
+    "${API_URL}/admin/collections/trigger" 2>/dev/null || true
 }
 
 wait_status() { # wait_status <url> <expected> <seconds>
@@ -184,7 +186,7 @@ else
   OLD_PAIRS=$(psqlc "SELECT count(*) FROM matched_evaluations WHERE observation_id = '${OLD_OBS}'")
 
   RECOMPUTE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 600 -X POST \
-    -H "Authorization: Bearer ${ADMIN_TOKEN}" "${API_URL}/admin/recompute" 2>/dev/null || echo "000")
+    -H "Authorization: Bearer ${ADMIN_TOKEN}" "${API_URL}/admin/recompute" 2>/dev/null || true)
   check "recompute 200" "200" "$RECOMPUTE"
 
   NEW_PAIRS=$(psqlc "SELECT count(*) FROM matched_evaluations WHERE observation_id = '${NEW_OBS}'")

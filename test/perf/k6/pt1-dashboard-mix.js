@@ -12,7 +12,8 @@ import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080/api/v1';
-const LOCATION_ID = __ENV.LOCATION_ID || '00000000-0000-0000-0000-000000000001';
+// Default: first seeded perf location (test/perf/seeder; perfids.LocationID(0)).
+const LOCATION_ID = __ENV.LOCATION_ID || '00000000-0000-0000-0001-000000000000';
 
 export const options = {
   stages: [

@@ -145,6 +145,13 @@ func copySnapshots(ctx context.Context, conn *pgx.Conn, d dataset) (int64, error
 		}))
 }
 
+// obsSource is the seeded observation source. Deliberately NOT
+// "openmeteo_historical": the live observation collector (and its missed-slot
+// backfill) writes that source for the perf locations as soon as they exist,
+// and the (source, location, hour) live-row dedup boundary would race the
+// seeder. Serving reads and matching are source-agnostic.
+const obsSource = "perf_synthetic"
+
 // copyObservations writes, per location-hour, the original (superseded) row
 // and the correcting live row — the reanalysis finalization pass (workflow §4).
 func copyObservations(ctx context.Context, conn *pgx.Conn, d dataset) (int64, error) {
@@ -182,7 +189,7 @@ func copyObservations(ctx context.Context, conn *pgx.Conn, d dataset) (int64, er
 				supersededBy = observationID(l, hu, true)
 			}
 			return []any{
-				id, perfLocationID(l), "openmeteo_historical", "reanalysis", at,
+				id, perfLocationID(l), obsSource, "reanalysis", at,
 				temp, w.HumidityPct, w.WindMS, w.PressureHPA, w.PrecipMM,
 				condition(w.PrecipMM), flag, supersededBy,
 			}, nil

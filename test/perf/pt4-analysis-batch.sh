@@ -25,10 +25,13 @@ echo ""
 
 START=$(date +%s)
 BODY_FILE=$(mktemp)
+# curl -w already prints 000 when the request itself fails; do NOT add a
+# fallback echo or the two concatenate ("000000").
 STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" -X POST \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   --max-time "$((BUDGET + 60))" \
-  "${API_URL}/admin/recompute" || echo "000")
+  "${API_URL}/admin/recompute" || true)
+STATUS="${STATUS:-000}"
 END=$(date +%s)
 ELAPSED=$((END - START))
 
