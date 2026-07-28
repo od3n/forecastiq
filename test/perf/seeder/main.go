@@ -37,7 +37,7 @@ var (
 	providers    = flag.Int("providers", 2, "number of providers")
 	days         = flag.Int("days", 30, "days of historical data")
 	seed         = flag.Int64("seed", 42, "random seed for deterministic generation")
-	dbURL        = flag.String("db", "", "database URL (default: FIQ_DATABASE_URL env)")
+	dbURL        = flag.String("db", "", "database URL (default: FIQ_DATABASE_URL env; --reset requires an explicit --db)")
 	estimateOnly = flag.Bool("estimate-only", false, "print volume estimates and exit 0 without writing")
 	reset        = flag.Bool("reset", false, "TRUNCATE perf data tables before seeding (catalog is kept)")
 )
@@ -53,6 +53,18 @@ const (
 
 func main() {
 	flag.Parse()
+
+	// --reset is destructive: never let it ride on the ambient env var (a
+	// developer shell or server host may export FIQ_DATABASE_URL pointing at
+	// real data). The target must be named explicitly (DRB-WP26b-001).
+	if *reset && *dbURL == "" {
+		fmt.Fprintln(os.Stderr, "ERROR: --reset requires an explicit --db (the FIQ_DATABASE_URL fallback is disabled for destructive runs)")
+		os.Exit(1)
+	}
+	if *reset && os.Getenv("FIQ_ENV") == "production" {
+		fmt.Fprintln(os.Stderr, "ERROR: --reset refused: FIQ_ENV=production")
+		os.Exit(1)
+	}
 
 	if *dbURL == "" {
 		*dbURL = os.Getenv("FIQ_DATABASE_URL")
@@ -127,6 +139,24 @@ func run(ctx context.Context) error {
 	defer func() { _ = conn.Close(ctx) }()
 
 	if *reset {
+		// Marker gate (DRB-WP26b-001): truncate only a database that already
+		// carries the perf dataset marker (perf location 0), or — first seed on
+		// a fresh perf stack — one holding nothing beyond incidental scheduler
+		// rows. Anything else (developer history, operator data) is refused.
+		marker, merr := perfMarkerPresent(ctx, conn)
+		if merr != nil {
+			return merr
+		}
+		if !marker {
+			small, serr := smallDataset(ctx, conn)
+			if serr != nil {
+				return serr
+			}
+			if !small {
+				return fmt.Errorf("--reset refused: target has no perf dataset marker (perf location %s) "+
+					"and holds more than incidental data — this does not look like a perf database", perfLocationID(0))
+			}
+		}
 		fmt.Println("Resetting perf data tables (TRUNCATE)...")
 		if rerr := resetData(ctx, conn); rerr != nil {
 			return rerr

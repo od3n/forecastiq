@@ -27,6 +27,17 @@ func Wilson(pHat, n float64) (lower, upper float64) {
 	if upper > 1 {
 		upper = 1
 	}
+	// Floating-point guard (WP-26b reliability finding): the Wilson interval
+	// brackets pHat analytically, but center−margin can land a few ULP on the
+	// wrong side of an exact bound (pHat=0, n=6 ⇒ lower ≈ +2.8e-17), which
+	// violates the accuracy_metrics CHECK (ci_lower <= value <= ci_upper) and
+	// fails the whole aggregation transaction. Clamp to bracket pHat.
+	if lower > pHat {
+		lower = pHat
+	}
+	if upper < pHat {
+		upper = pHat
+	}
 	return lower, upper
 }
 

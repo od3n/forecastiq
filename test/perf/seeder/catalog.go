@@ -148,6 +148,43 @@ func resetData(ctx context.Context, conn *pgx.Conn) error {
 	return nil
 }
 
+// perfMarkerPresent reports whether the target already carries the perf
+// dataset catalog (perf location 0). Used by the --reset marker gate
+// (DRB-WP26b-001).
+func perfMarkerPresent(ctx context.Context, conn *pgx.Conn) (bool, error) {
+	var one int
+	err := conn.QueryRow(ctx, `SELECT 1 FROM locations WHERE id = $1`, perfLocationID(0)).Scan(&one)
+	if err == nil {
+		return true, nil
+	}
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	return false, fmt.Errorf("perf marker probe: %w", err)
+}
+
+// maxIncidentalRows bounds what an unmarked database may hold before --reset
+// refuses to truncate it: a fresh perf stack accumulates at most a few hundred
+// scheduler-collected rows before the first seed, while any real dataset
+// (developer history, production) is far larger.
+const maxIncidentalRows = 10000
+
+// smallDataset reports whether every data table is under maxIncidentalRows.
+func smallDataset(ctx context.Context, conn *pgx.Conn) (bool, error) {
+	for _, tbl := range dataTables {
+		var n int
+		if err := conn.QueryRow(ctx,
+			"SELECT count(*) FROM (SELECT 1 FROM "+tbl+" LIMIT $1) t",
+			maxIncidentalRows+1).Scan(&n); err != nil {
+			return false, fmt.Errorf("size probe %s: %w", tbl, err)
+		}
+		if n > maxIncidentalRows {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // dataPresent reports whether any perf-relevant data table already has rows
 // (guard against duplicate-key COPY failures on accidental re-runs).
 func dataPresent(ctx context.Context, conn *pgx.Conn) (bool, error) {

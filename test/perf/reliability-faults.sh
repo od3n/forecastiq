@@ -17,7 +17,11 @@
 # Reference: docs/reviews/work-packages/WP-26-delivery-review.md (DRB-WP26-001)
 #
 # REQUIREMENTS:
-#   - docker compose stack up (make dev-up) with FIQ_ENV=development
+#   - the ISOLATED perf stack up (make perf-up; compose project fiqperf) with
+#     FIQ_ENV=development — defaults below target it, never the dev stack:
+#     the suite mutates providers.api_base_url, inserts a correcting
+#     observation (scenario 3, intentionally persistent), and restarts/stops
+#     stack services
 #   - perf dataset seeded (go run ./test/perf/seeder --preset=base|analysis):
 #     provides matched pairs (scenario 3) and the perf admin user
 #   - ADMIN_TOKEN (default perf-admin-token, mapped by the dev verifier)
@@ -30,11 +34,14 @@
 # Usage: bash test/perf/reliability-faults.sh [base_url]
 set -euo pipefail
 
-BASE_URL="${1:-http://localhost:8080}"
+BASE_URL="${1:-http://localhost:28080}"
 API_URL="${BASE_URL}/api/v1"
 ADMIN_TOKEN="${ADMIN_TOKEN:-perf-admin-token}"
-COMPOSE="${COMPOSE:-docker compose}"
-NETWORK="${NETWORK:-forecastiq_default}"
+# Defaults address the ISOLATED fiqperf project (DRB-WP26b-002): a bare
+# invocation must never rewrite provider URLs or stop the database of a
+# developer stack.
+COMPOSE="${COMPOSE:-docker compose -p fiqperf -f docker-compose.yml -f test/perf/compose.perf.yml}"
+NETWORK="${NETWORK:-fiqperf_default}"
 FAKE_NAME="fiq-fakeprovider"
 FAKE_URL="http://${FAKE_NAME}:8080"
 OPEN_METEO_ID="00000000-0000-0000-0000-000000000010"
@@ -68,8 +75,8 @@ psqlc() {
   $COMPOSE exec -T postgres psql -U forecastiq -d forecastiq -tAc "$1"
 }
 
-trigger() { # POST /admin/collections/trigger; prints HTTP status
-  curl -s -o /dev/null -w "%{http_code}" --max-time "${2:-120}" -X POST \
+trigger() { # trigger [max-time-seconds] — POST /admin/collections/trigger; prints HTTP status
+  curl -s -o /dev/null -w "%{http_code}" --max-time "${1:-120}" -X POST \
     -H "Authorization: Bearer ${ADMIN_TOKEN}" -H "Content-Type: application/json" \
     -d "{\"provider_id\":\"${OPEN_METEO_ID}\",\"location_id\":\"${JB_LOCATION_ID}\"}" \
     "${API_URL}/admin/collections/trigger" 2>/dev/null || true
@@ -97,6 +104,10 @@ ORIG_PROVIDER_URL=""
 cleanup() {
   if [ -n "$ORIG_PROVIDER_URL" ]; then
     psqlc "UPDATE providers SET api_base_url = '${ORIG_PROVIDER_URL}' WHERE id = '${OPEN_METEO_ID}'" >/dev/null 2>&1 || true
+    # Close the circuit the timeout scenario opened so later runs (and the
+    # stack's own scheduler) start clean.
+    psqlc "UPDATE provider_circuits SET state='closed', consecutive_failures=0, opened_at=NULL, next_probe_at=NULL
+      WHERE provider_id = '${OPEN_METEO_ID}'" >/dev/null 2>&1 || true
   fi
   docker rm -f "$FAKE_NAME" >/dev/null 2>&1 || true
 }
@@ -107,17 +118,31 @@ echo "Target: ${BASE_URL}"
 echo ""
 
 if [ "$(status_of "${BASE_URL}/readyz")" != "200" ]; then
-  echo "ERROR: stack not ready at ${BASE_URL} — run 'make dev-up' first."
+  echo "ERROR: stack not ready at ${BASE_URL} — run 'make perf-up' (and seed) first."
   exit 1
 fi
 ORIG_PROVIDER_URL=$(psqlc "SELECT api_base_url FROM providers WHERE id = '${OPEN_METEO_ID}'")
+# Poisoning guard: if a previous run died between the URL swap and its trap,
+# the "original" we just captured IS the fake URL — restoring it on exit would
+# leave the provider permanently broken. Fall back to the canonical upstream.
+if [ "$ORIG_PROVIDER_URL" = "$FAKE_URL" ]; then
+  ORIG_PROVIDER_URL="https://api.open-meteo.com"
+  echo "WARN: provider URL was left pointing at the fake by a previous run; will restore ${ORIG_PROVIDER_URL}"
+fi
 
 # ── 1. Provider timeout ─────────────────────────────────────────────────────
 echo "[1/5] Provider timeout (hanging upstream)..."
+# Close the circuit first: repeated suite runs open it via FC-09 (consecutive
+# timeout failures), and an open circuit short-circuits the trigger with 409
+# before any collection row is written.
+psqlc "UPDATE provider_circuits SET state='closed', consecutive_failures=0, opened_at=NULL, next_probe_at=NULL
+  WHERE provider_id = '${OPEN_METEO_ID}'" >/dev/null
+MARKER=$(psqlc "SELECT now()")
 start_fake hang
 psqlc "UPDATE providers SET api_base_url = '${FAKE_URL}' WHERE id = '${OPEN_METEO_ID}'" >/dev/null
 
-trigger "$TIMEOUT_SCENARIO_MAX" > /tmp/fiq-timeout-status &
+STATUS_FILE=$(mktemp)
+trigger "$TIMEOUT_SCENARIO_MAX" > "$STATUS_FILE" &
 TRIGGER_PID=$!
 # Health must stay responsive while the collection stalls in retry/backoff.
 HEALTH_OK=true
@@ -128,10 +153,24 @@ done
 wait "$TRIGGER_PID" || true
 check "healthz responsive during provider stall" "true" "$HEALTH_OK"
 
+# Back-to-back suite runs can drain the 6/min provider token bucket, in which
+# case the trigger is refused (429) before any row is written — wait for the
+# refill and re-trigger once.
+if [ "$(cat "$STATUS_FILE")" = "429" ]; then
+  echo "  (provider budget drained by a prior run — waiting 65s and re-triggering)"
+  sleep 65
+  trigger "$TIMEOUT_SCENARIO_MAX" > "$STATUS_FILE" || true
+fi
+rm -f "$STATUS_FILE"
+
+# Assert on the collection created by THIS trigger. NOTE: requested_at is the
+# HOUR-TRUNCATED issuance (domain §4.3), so the marker must compare against
+# created_at (the actual insert instant).
 LAST_STATUS=$(psqlc "SELECT collection_status FROM forecast_collections
   WHERE provider_id = '${OPEN_METEO_ID}' AND location_id = '${JB_LOCATION_ID}'
-  ORDER BY requested_at DESC LIMIT 1")
-check "collection classified 'timeout'" "timeout" "$LAST_STATUS"
+    AND created_at >= '${MARKER}'
+  ORDER BY created_at DESC LIMIT 1")
+check "collection classified 'timeout'" "timeout" "${LAST_STATUS:-no-row}"
 
 # Refill the provider token bucket (6/min) drained by the retry attempts.
 echo "  (waiting 65s for the provider rate budget to refill)"

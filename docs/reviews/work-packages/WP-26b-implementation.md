@@ -31,7 +31,9 @@ WP-26b completes the WP-26 scaffold. All items from the §WP-26b scope table:
 - **Deterministic generation** (`gen.go`): splitmix64-hashed physically plausible
   tropical weather (diurnal 24–33 °C, humid, afternoon convective rain);
   uuid-v5 row ids re-derivable across passes. Same `--seed` + anchor hour ⇒
-  byte-identical dataset (verified via md5 over a re-seed).
+  byte-identical dataset modulo bookkeeping timestamps
+  (`computed_at`/`calculated_at`/catalog `created_at` reflect the run
+  instant; ids + weather values verified identical via md5 over a re-seed).
 - **Volume model** = doc §3 fan-out preserved from the scaffold (24 runs/day ×
   104 forecast rows: hourly to +72 h, 3-hourly to +168 h). Base preset measured:
   **1,497,600 snapshots** (≈1.5 M ✅), **2,712,518 pairs** (≈2× eligible
@@ -150,7 +152,53 @@ a code gap.
 `bash -n` on all suite scripts; six-job CI evidence to be captured on push
 (PR to `main`).
 
-## 9. Deviations / notes
+## 9. DRB adversarial pre-review remediation (2026-07-28)
+
+An adversarial review of the branch prior to DRB submission raised 1 High /
+2 Medium / 2 Low / 3 Informational findings; all actionable ones remediated:
+
+- **DRB-WP26b-001 (High)** — `--reset` could TRUNCATE whatever ambient
+  `FIQ_DATABASE_URL` pointed at. Now: `--reset` requires an explicit `--db`,
+  refuses under `FIQ_ENV=production`, and a marker gate truncates only a
+  database carrying the perf catalog marker (perf location 0) or holding
+  nothing beyond incidental scheduler rows (< 10 K/table).
+- **DRB-WP26b-002 (Medium)** — `reliability-faults.sh` defaults targeted the
+  developer stack. Now defaults to the isolated `fiqperf` project
+  (localhost:28080, `-p fiqperf` compose, `fiqperf_default` network); header
+  documents scenario 3's intentionally persistent data mutation.
+- **DRB-WP26b-003 (Medium)** — `trigger()` read its timeout from `$2` while
+  callers passed `$1` (the 240 s knob was dead). Fixed; unused status file
+  dropped.
+- **DRB-WP26b-004 (Low)** — `frontend.yml` PT-8 comment claimed page
+  auto-discovery while the config pins four screens; comment corrected.
+- **DRB-WP26b-005 (Low)** — "byte-identical dataset" claim qualified (§2):
+  ids + values deterministic; bookkeeping timestamps reflect the run instant.
+- Informational: migration-13 lock note accepted (sub-second at MVP volume,
+  matches doc §1.5 non-partial spec); perf-admin containment verified
+  (dev verifier build-tag-excluded from release; prod rejects dev mode);
+  `scheduled.yml` dispatch comment corrected to four jobs.
+
+Re-exercising the remediated suite surfaced two further defects, both fixed:
+
+- **DRB-WP26b-006 (High, product — WP-13 kernel)** — `eval.Wilson` at p̂=0
+  emitted a lower bound of ≈ +2.8e-17 (a few ULP above the exact bound),
+  violating the `accuracy_metrics` CHECK `ci_lower <= value` and failing the
+  ENTIRE aggregation transaction (scheduled `analysis_batch` and
+  `/admin/recompute` → 500) whenever any cell-period held a p̂=0/1 ratio at
+  small n (first seen: FAR p̂=0, n=6). Data-dependent and latent since WP-13
+  — exactly the defect class this suite exists to catch. Fix: clamp the
+  interval to bracket p̂ (`ci.go`); the pre-existing bracketing property test
+  hid the bug behind a `1e-12` epsilon — now strict, plus an exact-bound
+  regression test (`TestWilson_ZeroPHat_LowerBoundExactlyZero`).
+- **Scenario-1 robustness** — repeated suite runs opened the FC-09 circuit
+  (trigger → 409, no row) and drained the 6/min provider budget (429); the
+  status assertion also compared the hour-truncated `requested_at` against a
+  wall-clock marker. Now: circuit reset + `created_at`-based marker + one
+  budget-refill retry + a provider-URL poisoning guard (restores the canonical
+  upstream if a dead prior run left the fake URL in place). Suite re-verified
+  15/15 green from a bare invocation.
+
+## 10. Deviations / notes
 
 - PT-3 measures the per-collection service latency (which brackets the
   snapshot write) rather than a DB-only write timer; documented in the harness

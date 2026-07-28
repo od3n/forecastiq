@@ -56,9 +56,9 @@ jobs:
             echo "Static export exceeds 4 MB budget" && exit 1
           fi
       - name: Lighthouse CI (PT-8 — paint < 2 s NFR-P04, CLS < 0.1)
-        # Auto-discovers every exported HTML page in out/ so new screens are
-        # gated without workflow edits (perf doc §2 PT-8: every frontend PR).
-        # Config: web/lighthouserc.json (desktop preset, filesystem report).
+        # Gates the four key screens pinned in web/lighthouserc.json (dashboard,
+        # trends, forecast-comparison, methodology — perf doc §2 PT-8: every
+        # frontend PR). Desktop preset, filesystem report only.
         run: npx --yes @lhci/cli@0.15.1 autorun
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

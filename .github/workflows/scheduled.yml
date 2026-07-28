@@ -16,7 +16,7 @@ on:
     - cron: "30 1 * * *" # nightly 01:30 UTC
     - cron: "0 3 * * 1" # weekly Monday 03:00 UTC
     - cron: "0 5 1 * *" # monthly 1st 05:00 UTC
-  workflow_dispatch: {} # runs all three jobs on demand
+  workflow_dispatch: {} # runs all four jobs on demand (incl. the ~45 min perf tier)
 
 jobs:
   nightly-extended:
