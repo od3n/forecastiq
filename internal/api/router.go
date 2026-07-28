@@ -121,6 +121,7 @@ func NewRouter(h *handlers.Handlers, m *metrics.Metrics, logger *slog.Logger, cf
 			admin.POST("/admin/recompute", h.AdminRecompute)
 			admin.GET("/admin/users", h.ListUsers)
 			admin.PATCH("/admin/users/:id/status", h.SetUserStatus)
+			admin.PATCH("/admin/users/:id/role", h.SetUserRole)
 			admin.DELETE("/admin/users/:id", h.DeleteUser)
 			admin.POST("/admin/users/:id/export", h.RequestUserExport)
 		}

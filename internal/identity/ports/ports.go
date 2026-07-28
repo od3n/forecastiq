@@ -60,6 +60,10 @@ type UserRepository interface {
 	List(ctx context.Context, tx dbtx.DBTX, limit int, cursor uuid.UUID) ([]*domain.User, error)
 	// UpdateStatus sets the entity status (active|disabled) for admin lifecycle.
 	UpdateStatus(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, status string) error
+	// UpdateRole sets the application role (user|admin). The database is the
+	// authoritative role source (never a JWT claim), so the change takes
+	// effect on the target's next authenticated request.
+	UpdateRole(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, role string) error
 	// Delete removes a user (AUTH-09). api_keys cascade; audit rows are
 	// anonymized (user_id → NULL) by the FK, which requires the caller to have
 	// set the app.allow_immutable_write GUC for the transaction.

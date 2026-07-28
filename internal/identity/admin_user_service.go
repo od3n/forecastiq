@@ -43,6 +43,13 @@ func (e *statusError) Error() string   { return e.msg }
 func (e *statusError) Field() string   { return "status" }
 func (e *statusError) Message() string { return e.msg }
 
+// roleError is a field-validation error surfaced as 422 by the API layer.
+type roleError struct{ msg string }
+
+func (e *roleError) Error() string   { return e.msg }
+func (e *roleError) Field() string   { return "role" }
+func (e *roleError) Message() string { return e.msg }
+
 // List returns a page of users for the admin surface (S-14).
 func (s *AdminUserService) List(ctx context.Context, limit int, cursor uuid.UUID) ([]*domain.User, error) {
 	if limit <= 0 || limit > 200 {
@@ -90,6 +97,40 @@ func (s *AdminUserService) SetStatus(ctx context.Context, actor Principal, targe
 		return nil, terr
 	}
 	target.Status = status
+	return target, nil
+}
+
+// SetRole changes a target user's application role (S-14). A self-target is
+// refused (409 self-lockout: demoting yourself would strand the operator
+// surface; promoting yourself is a no-op). The role is app-side only — the
+// database is the authoritative role source (never a JWT claim), so no auth
+// provider propagation is involved; the change takes effect on the target's
+// next request. Persisted with an audit record in one transaction.
+func (s *AdminUserService) SetRole(ctx context.Context, actor Principal, targetID uuid.UUID, role, ip string) (*domain.User, error) {
+	if role != "user" && role != "admin" {
+		return nil, &roleError{msg: "role must be one of user|admin"}
+	}
+	if targetID == actor.UserID {
+		return nil, domain.ErrSelfLockout
+	}
+	target, err := s.users.GetByID(ctx, s.pool, targetID)
+	if err != nil {
+		return nil, err // ErrUserNotFound
+	}
+	now := s.clock.Now()
+	if terr := s.tx.Run(ctx, func(ctx context.Context, tx dbtx.DBTX) error {
+		if uerr := s.users.UpdateRole(ctx, tx, targetID, role); uerr != nil {
+			return uerr
+		}
+		return s.audit.Record(ctx, tx, audit.Event{
+			UserID: &actor.UserID, Action: "admin.user_role_changed", ResourceType: "user",
+			ResourceID: &targetID, IPAddress: ip,
+			Details: map[string]any{"target_user_id": targetID.String(), "role": role}, At: now,
+		})
+	}); terr != nil {
+		return nil, terr
+	}
+	target.Role = domain.Role(role)
 	return target, nil
 }
 

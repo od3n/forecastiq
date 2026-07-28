@@ -16,6 +16,11 @@ type SetUserStatusRequest struct {
 	Status string `json:"status" binding:"required"`
 }
 
+// SetUserRoleRequest is the PATCH /admin/users/{id}/role body.
+type SetUserRoleRequest struct {
+	Role string `json:"role" binding:"required"`
+}
+
 // principalActor rebuilds the identity principal from the request principal for
 // the identity use cases (which own the self-lockout + audit-actor logic).
 func principalActor(c *gin.Context) (identity.Principal, bool) {
@@ -106,6 +111,48 @@ func (h *Handlers) SetUserStatus(c *gin.Context) {
 		return
 	}
 	user, err := h.UserAdmin.SetStatus(c.Request.Context(), actor, id, req.Status, c.ClientIP())
+	if err != nil {
+		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	respond.OK(c, gin.H{"user": userToDTO(user)}, respond.Options{RequestID: respond.RequestID(c)})
+}
+
+// SetUserRole godoc
+// @Summary      Change a user's role (S-14, admin)
+// @Description  Sets a user's application role (user|admin). Refuses self-target
+// @Description  (409 self-lockout). The database is the authoritative role
+// @Description  source, so the change takes effect on the target's next request.
+// @Description  Audited. Admin only; no-store.
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Param        id   path string true "user id (UUID)"
+// @Param        body body handlers.SetUserRoleRequest true "role"
+// @Success      200 {object} respond.Envelope
+// @Failure      401 {object} respond.Problem
+// @Failure      403 {object} respond.Problem
+// @Failure      404 {object} respond.Problem
+// @Failure      409 {object} respond.Problem
+// @Failure      422 {object} respond.Problem
+// @Router       /admin/users/{id}/role [patch]
+func (h *Handlers) SetUserRole(c *gin.Context) {
+	actor, ok := principalActor(c)
+	if !ok {
+		respond.Error(c, respond.ErrUnauthorized, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	id, ok := pathUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req SetUserRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respond.Error(c, &fieldErr{field: "role", message: "role is required"}, respond.RequestID(c), c.Request.URL.Path)
+		return
+	}
+	user, err := h.UserAdmin.SetRole(c.Request.Context(), actor, id, req.Role, c.ClientIP())
 	if err != nil {
 		respond.Error(c, err, respond.RequestID(c), c.Request.URL.Path)
 		return

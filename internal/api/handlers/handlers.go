@@ -67,6 +67,7 @@ type APIKeyManager interface {
 type UserAdmin interface {
 	List(ctx context.Context, limit int, cursor uuid.UUID) ([]*identity.User, error)
 	SetStatus(ctx context.Context, actor identity.Principal, targetID uuid.UUID, status, ip string) (*identity.User, error)
+	SetRole(ctx context.Context, actor identity.Principal, targetID uuid.UUID, role, ip string) (*identity.User, error)
 	Delete(ctx context.Context, actor identity.Principal, targetID uuid.UUID, selfService bool, ip string) error
 }
 
