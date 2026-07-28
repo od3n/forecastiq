@@ -1570,6 +1570,81 @@
         }
       }
     },
+    "/admin/users/{id}/role": {
+      "patch": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "setUserRole",
+        "summary": "Change a user's role (S-14, admin)",
+        "description": "Sets a user's application role (user|admin). Refuses self-target (409 self-lockout). The database is the authoritative role source, so the change takes effect on the target's next request. Audited. Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "admin"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/admin/users/{id}": {
       "delete": {
         "tags": [

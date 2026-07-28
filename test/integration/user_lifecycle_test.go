@@ -92,6 +92,49 @@ func TestUserLifecycle_SelfLockoutGuard(t *testing.T) {
 		doRequest(e, http.MethodDelete, "/api/v1/admin/users/"+adminID, adminToken, nil).Code)
 }
 
+// TestUserLifecycle_AdminRoleChange: admin promotes a user to admin (the role
+// comes from the database, so it takes effect on the target's next request),
+// demotes them back, and the change is audited. Invalid roles are 422 and a
+// self-target is refused (409 self-lockout).
+func TestUserLifecycle_AdminRoleChange(t *testing.T) {
+	ctx := context.Background()
+	connStr := startPostgres(ctx, t)
+	migrate(t, connStr)
+	e := newTestEnv(ctx, t, connStr, newSuccessAdapter(1))
+	e.seedCatalog(ctx, t)
+
+	ivyID := meID(t, e, "ivy")
+	adminID := meID(t, e, adminToken)
+
+	// ivy is a plain user: the admin surface is 403.
+	require.Equal(t, http.StatusForbidden, doRequest(e, http.MethodGet, "/api/v1/admin/users", "ivy", nil).Code)
+
+	// Promote ivy → 200 with the updated role; ivy reaches the admin surface.
+	rec := doRequest(e, http.MethodPatch, "/api/v1/admin/users/"+ivyID+"/role", adminToken,
+		map[string]any{"role": "admin"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "admin",
+		decodeEnvelope(t, rec)["data"].(map[string]any)["user"].(map[string]any)["role"])
+	assert.Equal(t, http.StatusOK, doRequest(e, http.MethodGet, "/api/v1/admin/users", "ivy", nil).Code)
+
+	// Demote ivy back → the admin surface is 403 again on the next request.
+	rec = doRequest(e, http.MethodPatch, "/api/v1/admin/users/"+ivyID+"/role", adminToken,
+		map[string]any{"role": "user"})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, http.StatusForbidden, doRequest(e, http.MethodGet, "/api/v1/admin/users", "ivy", nil).Code)
+
+	// Both changes audited.
+	assert.Equal(t, 2, countAudit(ctx, t, e, "admin.user_role_changed"))
+
+	// Invalid role → 422; self-target → 409.
+	assert.Equal(t, http.StatusUnprocessableEntity,
+		doRequest(e, http.MethodPatch, "/api/v1/admin/users/"+ivyID+"/role", adminToken,
+			map[string]any{"role": "superuser"}).Code)
+	assert.Equal(t, http.StatusConflict,
+		doRequest(e, http.MethodPatch, "/api/v1/admin/users/"+adminID+"/role", adminToken,
+			map[string]any{"role": "user"}).Code)
+}
+
 // TestUserLifecycle_AdminDeleteAnonymizesAudit: deleting a user removes the row
 // and cascades api_keys, while audit rows are preserved with user_id anonymized
 // to NULL (audit-requirements §4).

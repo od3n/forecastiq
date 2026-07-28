@@ -151,6 +151,18 @@ func (r *UserRepository) UpdateStatus(ctx context.Context, tx dbtx.DBTX, id uuid
 	return nil
 }
 
+// UpdateRole implements ports.UserRepository (admin role management).
+func (r *UserRepository) UpdateRole(ctx context.Context, tx dbtx.DBTX, id uuid.UUID, role string) error {
+	ct, err := tx.Exec(ctx, `UPDATE users SET role = $2 WHERE id = $1`, id, role)
+	if err != nil {
+		return fmt.Errorf("update user role: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
 // Delete implements ports.UserRepository (AUTH-09). api_keys cascade; audit
 // rows are anonymized by the FK (ON DELETE SET NULL) — the caller must set the
 // app.allow_immutable_write GUC so the immutability trigger permits it.
