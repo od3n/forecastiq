@@ -1,0 +1,8 @@
+# Copy to instances.tfvars (gitignored) and fill in.
+# The deploy public key pairs with the private key held by the operator / set
+# as the GitHub DEPLOY_SSH_KEY secret.
+deploy_public_key = "ssh-ed25519 AAAA... forecastiq-deploy"
+
+# region        = "ap-southeast-1"  # default
+# instance_type = "t3.small"        # default
+# root_volume_gb = 30               # default
