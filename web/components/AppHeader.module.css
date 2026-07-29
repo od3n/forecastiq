@@ -34,9 +34,18 @@
   text-decoration: none;
   font-weight: 500;
   white-space: nowrap;
+  /* Reserve the active underline space so the header height and nav
+     baselines do not shift between routes (DRB-NAV-001). */
+  border-bottom: 2px solid transparent;
 }
 .navLink:hover {
   color: var(--color-text-primary);
+}
+
+/* Current-route nav item (aria-current="page"). */
+.navLinkActive {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-primary);
 }
 
 .spacer {
