@@ -1,0 +1,7 @@
+# Cloudflare Pages rewrites for the ForecastIQ static export.
+# The Next.js export pre-renders dynamic detail routes with a "_" placeholder
+# param (see next.config.mjs); these rules serve that shell for any real id so
+# the client-side router can hydrate and fetch the entity. 200 = rewrite
+# (URL preserved), not a redirect.
+/locations/* /locations/_/ 200
+/providers/* /providers/_/ 200

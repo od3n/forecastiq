@@ -22,4 +22,7 @@ regexes = [
   '''forecastiq:forecastiq''',
   '''EXAMPLE[_-]?KEY''',
   '''test-key''',
+  # Public production hostnames (never secrets) — the generic-api-key rule
+  # matches the dotted default value in deploy/cotenant/cf_setup.py.
+  '''forecastiq(-api)?\.od3n\.com''',
 ]

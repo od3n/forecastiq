@@ -42,8 +42,15 @@ web/.next/
 web/out/
 
 # ── Terraform ─────────────────────────────────────────────────────────
+terraform/**/.terraform/
+terraform/**/*.tfstate
+terraform/**/*.tfstate.backup
+terraform/**/*.tfvars
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/terraform.tfvars
 terraform/.terraform.lock.hcl
+
+# Local database backups (pg_dump artifacts — data, never commit)
+backups/
