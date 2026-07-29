@@ -13,4 +13,4 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   # Next.js static export injects inline <style>; recharts renders inline SVG.
   # script-src stays 'self' (no inline scripts in the export).
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.forecastiq.example https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://forecastiq-api.od3n.com https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
