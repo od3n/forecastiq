@@ -51,3 +51,6 @@ terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/terraform.tfvars
 terraform/.terraform.lock.hcl
+
+# Local database backups (pg_dump artifacts — data, never commit)
+backups/
