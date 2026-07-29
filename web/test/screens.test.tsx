@@ -27,6 +27,12 @@ describe("a11y: S-01/S-02 components", () => {
     expect(getByText(/Provisional/)).toBeTruthy();
     rerender(<StatusBadge status="unranked" sampleCount={10} />);
     expect(getByText(/Insufficient data.*10\/30/)).toBeTruthy();
+    // Coverage-triggered unranked (BR-RANK-04): samples are fine, coverage < 0.5.
+    rerender(<StatusBadge status="unranked" sampleCount={43} coverage={0.42} />);
+    expect(getByText(/Insufficient coverage \(42%\)/)).toBeTruthy();
+    // Sample-driven unranked keeps the sample copy even when coverage is low.
+    rerender(<StatusBadge status="unranked" sampleCount={5} coverage={0.3} />);
+    expect(getByText(/Insufficient data.*5\/30/)).toBeTruthy();
   });
 
   it("MetricTable has no axe violations", async () => {
@@ -42,6 +48,18 @@ describe("a11y: S-01/S-02 components", () => {
     const btn = container.querySelector("button[aria-expanded]") as HTMLElement;
     fireEvent.keyDown(btn, { key: "Enter" });
     expect(getByText("Component breakdown")).toBeTruthy();
+  });
+
+  it("RankingTable shows sample-driven copy when samples AND coverage are both low", () => {
+    // Mirrors the API row for a provider with 5 pairs + coverage 0.30: the
+    // sample floor is the trigger, so the coverage message must not appear.
+    const rows: RankingEntry[] = [
+      ...SAMPLE_RANKINGS,
+      { rank: null, provider_id: "c", provider_name: "PX", composite_score: null, ranking_status: "unranked", sample_count: 5, coverage: 0.3 },
+    ];
+    const { getByText, queryByText } = render(<RankingTable rankings={rows} />);
+    expect(getByText("Insufficient data (5/30)")).toBeTruthy();
+    expect(queryByText(/Insufficient coverage/)).toBeNull();
   });
 });
 
