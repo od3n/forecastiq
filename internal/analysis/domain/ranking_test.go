@@ -118,7 +118,7 @@ func TestRankCohort_CoverageFloorUnranked(t *testing.T) {
 // ("Insufficient data (5/30)") rather than the coverage message.
 func TestRankCohort_LowSamplesUnranked(t *testing.T) {
 	good := workedInput(uuid.New(), 1.0, 0.1, 0.9, 0.5, 1.0, 0.95, 0.99, 100)
-	lowBoth := workedInput(uuid.New(), 0.9, 0.08, 0.92, 0.45, 0.9, 0.30, 0.99, 5)   // 5 pairs AND coverage 0.30
+	lowBoth := workedInput(uuid.New(), 0.9, 0.08, 0.92, 0.45, 0.9, 0.30, 0.99, 5)    // 5 pairs AND coverage 0.30
 	lowSamples := workedInput(uuid.New(), 1.1, 0.20, 0.85, 0.60, 1.2, 0.95, 0.99, 5) // 5 pairs, coverage fine
 	res := domain.RankCohort([]domain.ProviderInput{good, lowBoth, lowSamples})
 	byID := map[uuid.UUID]domain.ProviderRanking{}
