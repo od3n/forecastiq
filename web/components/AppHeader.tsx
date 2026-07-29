@@ -116,9 +116,13 @@ function HeaderInner() {
   }, [isDailyComparison, horizonMinutes, setParams]);
 
   // Highlight the nav item matching the current route: exact match for the
-  // Overview root, prefix match for section pages (e.g. /trends/...).
+  // Overview root; other sections match exactly or on a segment boundary so
+  // sub-pages stay highlighted without sibling-prefix false positives
+  // (DRB-NAV-002).
   const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+    href === "/"
+      ? pathname === "/"
+      : pathname === href || pathname.startsWith(`${href}/`);
   const navLinkClass = (href: string) =>
     isActive(href) ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink;
 
