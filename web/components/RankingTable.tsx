@@ -102,7 +102,7 @@ function RankingRow({ entry: r, isExpanded, onToggle }: { entry: RankingEntry; i
           {r.composite_score !== null ? r.composite_score.toFixed(3) : "—"}
         </td>
         <td style={{ padding: "var(--space-sm)" }}>
-          <StatusBadge status={r.ranking_status} sampleCount={r.sample_count} />
+          <StatusBadge status={r.ranking_status} sampleCount={r.sample_count} coverage={r.coverage} />
         </td>
         <td style={{ padding: "var(--space-sm)", textAlign: "right", fontFamily: "var(--font-data)", color: sampleBelowThreshold ? "var(--color-delayed)" : undefined, fontWeight: sampleBelowThreshold ? 600 : undefined }}>
           {r.sample_count}

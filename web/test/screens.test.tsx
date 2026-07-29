@@ -25,8 +25,22 @@ describe("a11y: S-01/S-02 components", () => {
     expect(getByText("Ranked")).toBeTruthy();
     rerender(<StatusBadge status="provisionally_ranked" sampleCount={15} />);
     expect(getByText(/Provisional/)).toBeTruthy();
+    // ≥ 10 pairs with no coverage value: coverage is provably the trigger
+    // (backend treats nil coverage as 0) — never the wrong-reason sample copy.
     rerender(<StatusBadge status="unranked" sampleCount={10} />);
-    expect(getByText(/Insufficient data.*10\/30/)).toBeTruthy();
+    expect(getByText("Insufficient coverage")).toBeTruthy();
+    // Coverage-triggered unranked (BR-RANK-04): samples are fine, coverage < 0.5.
+    rerender(<StatusBadge status="unranked" sampleCount={43} coverage={0.42} />);
+    expect(getByText("Insufficient coverage (42% / 50% required)")).toBeTruthy();
+    // Floor, not round: 0.499 reads 49%, never a self-contradictory 50%.
+    rerender(<StatusBadge status="unranked" sampleCount={43} coverage={0.499} />);
+    expect(getByText("Insufficient coverage (49% / 50% required)")).toBeTruthy();
+    // Coverage exactly at the floor is not below it: falls back to sample copy.
+    rerender(<StatusBadge status="unranked" sampleCount={43} coverage={0.5} />);
+    expect(getByText(/Insufficient data.*43\/30/)).toBeTruthy();
+    // Sample-driven unranked keeps the sample copy even when coverage is low.
+    rerender(<StatusBadge status="unranked" sampleCount={5} coverage={0.3} />);
+    expect(getByText(/Insufficient data.*5\/30/)).toBeTruthy();
   });
 
   it("MetricTable has no axe violations", async () => {
@@ -42,6 +56,18 @@ describe("a11y: S-01/S-02 components", () => {
     const btn = container.querySelector("button[aria-expanded]") as HTMLElement;
     fireEvent.keyDown(btn, { key: "Enter" });
     expect(getByText("Component breakdown")).toBeTruthy();
+  });
+
+  it("RankingTable shows sample-driven copy when samples AND coverage are both low", () => {
+    // Mirrors the API row for a provider with 5 pairs + coverage 0.30: the
+    // sample floor is the trigger, so the coverage message must not appear.
+    const rows: RankingEntry[] = [
+      SAMPLE_RANKINGS[0],
+      { rank: null, provider_id: "c", provider_name: "PX", composite_score: null, ranking_status: "unranked", sample_count: 5, coverage: 0.3 },
+    ];
+    const { getByText, queryByText } = render(<RankingTable rankings={rows} />);
+    expect(getByText("Insufficient data (5/30)")).toBeTruthy();
+    expect(queryByText(/Insufficient coverage/)).toBeNull();
   });
 });
 
