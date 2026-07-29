@@ -23,20 +23,29 @@ const LABELS: Record<RankingStatus, string> = {
 };
 
 // Ranking status badge (doc 02 §1.5). Text is always present (not color-only;
-// a11y §3). Unranked shows the actual trigger: low coverage (BR-RANK-04) when
-// the sample count is not the problem, otherwise the sample count + threshold.
+// a11y §3). Unranked shows the actual trigger: with ≥ 10 pairs the only
+// backend trigger left is coverage (a value below the floor, or a missing
+// value — the backend treats nil coverage as 0; BR-RANK-04), otherwise the
+// sample count + threshold.
 export function StatusBadge({ status, sampleCount, minSampleCount = 30, coverage }: StatusBadgeProps) {
   const variant =
     status === "ranked" ? "ranked" : status === "provisionally_ranked" ? "provisional" : "unranked";
 
+  // Sample floor takes precedence: < 10 pairs is always sample-driven (§7.2).
+  const samplesLow = sampleCount !== undefined && sampleCount < PROVISIONAL_MIN_SAMPLES;
   const coverageTriggered =
-    coverage != null &&
-    coverage < COVERAGE_FLOOR &&
-    (sampleCount === undefined || sampleCount >= PROVISIONAL_MIN_SAMPLES);
+    !samplesLow &&
+    (coverage != null
+      ? coverage < COVERAGE_FLOOR
+      : sampleCount !== undefined && sampleCount >= PROVISIONAL_MIN_SAMPLES);
 
   let label = LABELS[status];
   if (status === "unranked" && coverageTriggered) {
-    label = `Insufficient coverage (${Math.round(coverage * 100)}%)`;
+    // Floor, not round: 0.499 must read 49%, never a self-contradictory 50%.
+    label =
+      coverage != null
+        ? `Insufficient coverage (${Math.floor(coverage * 100)}% / ${COVERAGE_FLOOR * 100}% required)`
+        : "Insufficient coverage";
   } else if (status === "unranked" && sampleCount !== undefined) {
     label = `Insufficient data (${sampleCount}/${minSampleCount})`;
   } else if (status === "provisionally_ranked" && sampleCount !== undefined) {
