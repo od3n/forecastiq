@@ -142,7 +142,8 @@ func TestAPI_RankingsUnrankedLowSamples(t *testing.T) {
 	// 5 pairs (< 10 provisional floor) and coverage 0.30 (< 0.5): the sample
 	// floor is the trigger the UI must surface (§7.2 / BR-RANK-02).
 	seedWorkedProvider(ctx, t, e.pool, catalogdomain.OpenWeatherProviderID, 1.50, 0.90, 0.710, 1.40, 1.30, 0.30, 0.97, 5, from, to)
-	newRanker(e.pool).RankPeriod(ctx, analysisdomain.Period{Kind: analysisdomain.PeriodMonthly, Start: from, End: to})
+	_, err := newRanker(e.pool).RankPeriod(ctx, analysisdomain.Period{Kind: analysisdomain.PeriodMonthly, Start: from, End: to})
+	require.NoError(t, err)
 
 	rec := doRequest(e, http.MethodGet,
 		"/api/v1/rankings?location_id="+catalogdomain.JohorBahruLocationID.String()+"&horizon_minutes=1440", "", nil)
