@@ -123,6 +123,50 @@ func TestAPI_RankingsPartialResult(t *testing.T) {
 	assert.Equal(t, "provider_unavailable", w["code"])
 }
 
+// TestAPI_RankingsUnrankedLowSamples serves a cohort where one provider has
+// < 10 pairs AND coverage below the 0.5 floor: its row is unranked (rank
+// omitted, composite null) but still carries sample_count + coverage, so the
+// UI attributes the status to samples ("Insufficient data (5/30)") rather
+// than the coverage message.
+func TestAPI_RankingsUnrankedLowSamples(t *testing.T) {
+	ctx := context.Background()
+	connStr := startPostgres(ctx, t)
+	migrate(t, connStr)
+	e := newTestEnv(ctx, t, connStr, newSuccessAdapter(1))
+	e.seedCatalog(ctx, t)
+	insertProvider(ctx, t, e.pool, catalogdomain.OpenWeatherProviderID, "openweather-test")
+
+	from := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	to := from.AddDate(0, 1, 0)
+	seedWorkedProvider(ctx, t, e.pool, catalogdomain.OpenMeteoProviderID, 1.20, 0.30, 0.769, 0.90, 1.10, 0.98, 0.99, 720, from, to)
+	// 5 pairs (< 10 provisional floor) and coverage 0.30 (< 0.5): the sample
+	// floor is the trigger the UI must surface (§7.2 / BR-RANK-02).
+	seedWorkedProvider(ctx, t, e.pool, catalogdomain.OpenWeatherProviderID, 1.50, 0.90, 0.710, 1.40, 1.30, 0.30, 0.97, 5, from, to)
+	newRanker(e.pool).RankPeriod(ctx, analysisdomain.Period{Kind: analysisdomain.PeriodMonthly, Start: from, End: to})
+
+	rec := doRequest(e, http.MethodGet,
+		"/api/v1/rankings?location_id="+catalogdomain.JohorBahruLocationID.String()+"&horizon_minutes=1440", "", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	env := decodeEnvelope(t, rec)
+	data := env["data"].(map[string]any)
+	assert.EqualValues(t, 30, data["min_sample_count"])
+	rankings := data["rankings"].([]any)
+	require.Len(t, rankings, 2)
+
+	// Unranked rows sort last: no rank, no score ordering published.
+	row := rankings[1].(map[string]any)
+	assert.Equal(t, "openweather-test", row["provider"].(map[string]any)["name"])
+	assert.Equal(t, "unranked", row["ranking_status"])
+	_, hasRank := row["rank"]
+	assert.False(t, hasRank, "unranked rows omit rank")
+	assert.Nil(t, row["composite_score"])
+	// The badge inputs: sample_count 5 (→ "Insufficient data (5/30)") with
+	// coverage still present so the UI can tell samples are the trigger.
+	assert.EqualValues(t, 5, row["sample_count"])
+	assert.InDelta(t, 0.30, row["coverage"].(float64), 1e-9)
+}
+
 // TestAPI_RankingsValidation rejects a missing/invalid location_id with 422.
 func TestAPI_RankingsValidation(t *testing.T) {
 	ctx := context.Background()

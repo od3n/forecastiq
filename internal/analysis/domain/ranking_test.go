@@ -112,6 +112,35 @@ func TestRankCohort_CoverageFloorUnranked(t *testing.T) {
 	assert.Equal(t, good.ProviderID, res[groups[0][0]].ProviderID)
 }
 
+// §7.2 / BR-RANK-02: < 10 pairs → unranked, whether or not coverage is also
+// below the 0.5 floor. SampleCount (min of temp/precip pairs) and Coverage
+// both survive on the row so the UI attributes the status to samples
+// ("Insufficient data (5/30)") rather than the coverage message.
+func TestRankCohort_LowSamplesUnranked(t *testing.T) {
+	good := workedInput(uuid.New(), 1.0, 0.1, 0.9, 0.5, 1.0, 0.95, 0.99, 100)
+	lowBoth := workedInput(uuid.New(), 0.9, 0.08, 0.92, 0.45, 0.9, 0.30, 0.99, 5)   // 5 pairs AND coverage 0.30
+	lowSamples := workedInput(uuid.New(), 1.1, 0.20, 0.85, 0.60, 1.2, 0.95, 0.99, 5) // 5 pairs, coverage fine
+	res := domain.RankCohort([]domain.ProviderInput{good, lowBoth, lowSamples})
+	byID := map[uuid.UUID]domain.ProviderRanking{}
+	for _, r := range res {
+		byID[r.ProviderID] = r
+	}
+
+	for _, in := range []domain.ProviderInput{lowBoth, lowSamples} {
+		r := byID[in.ProviderID]
+		assert.Equal(t, domain.StatusUnranked, r.Status)
+		assert.Nil(t, r.CompositeScore)
+		assert.Equal(t, 5, r.SampleCount, "badge count must reflect the low pair count")
+		require.NotNil(t, r.Coverage)
+		assert.InDelta(t, *in.Coverage, *r.Coverage, 1e-9)
+	}
+
+	// Only the good provider participates in the rank order.
+	groups := domain.RankOrder(res)
+	require.Len(t, groups, 1)
+	assert.Equal(t, good.ProviderID, res[groups[0][0]].ProviderID)
+}
+
 // Property 9: the coverage penalty is monotonically non-increasing in score as
 // coverage falls below 0.8 (methodology §11.9).
 func TestRankCohort_PenaltyMonotonic(t *testing.T) {
