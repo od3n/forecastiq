@@ -23,7 +23,7 @@ import urllib.request
 API = "https://api.cloudflare.com/client/v4"
 TOKEN = os.environ["CLOUDFLARE_API_TOKEN"]
 ZONE = os.environ["CLOUDFLARE_ZONE_ID"]
-HOST = os.environ.get("FIQ_API_HOST", "forecastiq-api.od3n.com")
+HOST = os.environ.get("FIQ_API_HOST", "forecastiq-api.od3n.com")  # gitleaks:allow (public hostname, not a secret)
 ORIGIN_IP = os.environ["ORIGIN_IP"]
 ORIGIN_PORT = int(os.environ.get("ORIGIN_PORT", "8080"))
 
