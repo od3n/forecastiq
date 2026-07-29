@@ -115,22 +115,37 @@ function HeaderInner() {
     }
   }, [isDailyComparison, horizonMinutes, setParams]);
 
+  // Highlight the nav item matching the current route: exact match for the
+  // Overview root, prefix match for section pages (e.g. /trends/...).
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const navLinkClass = (href: string) =>
+    isActive(href) ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink;
+
   return (
     <div className={styles.inner}>
       <Link href="/" className={styles.logo}>
         ForecastIQ
       </Link>
       <nav className={styles.nav} aria-label="Primary">
-        <Link href="/" className={styles.navLink}>
+        <Link href="/" className={navLinkClass("/")} aria-current={isActive("/") ? "page" : undefined}>
           Overview
         </Link>
-        <Link href="/trends" className={styles.navLink}>
+        <Link href="/trends" className={navLinkClass("/trends")} aria-current={isActive("/trends") ? "page" : undefined}>
           Trends
         </Link>
-        <Link href="/forecast-comparison" className={styles.navLink}>
+        <Link
+          href="/forecast-comparison"
+          className={navLinkClass("/forecast-comparison")}
+          aria-current={isActive("/forecast-comparison") ? "page" : undefined}
+        >
           Compare
         </Link>
-        <Link href="/methodology" className={styles.navLink}>
+        <Link
+          href="/methodology"
+          className={navLinkClass("/methodology")}
+          aria-current={isActive("/methodology") ? "page" : undefined}
+        >
           Methodology
         </Link>
       </nav>
