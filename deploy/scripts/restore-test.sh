@@ -22,6 +22,9 @@
 #
 # Environment (overridable; defaults match the production host):
 #   FIQ_COMPOSE_DIR / FIQ_BACKUP_DIR / FIQ_BACKUP_STATUS_FILE / FIQ_RCLONE_REMOTE
+#   FIQ_DB_CONTAINER — co-tenant topology: name of an EXTERNAL postgres container
+#                      holding the production DB (e.g. app-postgres-1). When
+#                      unset, uses the compose `db` service (standalone default).
 set -Eeuo pipefail
 
 # ── Configuration ────────────────────────────────────────────────
@@ -29,6 +32,7 @@ COMPOSE_DIR="${FIQ_COMPOSE_DIR:-/opt/forecastiq}"
 BACKUP_DIR="${FIQ_BACKUP_DIR:-/var/lib/forecastiq/backups}"
 STATUS_FILE="${FIQ_BACKUP_STATUS_FILE:-/var/lib/forecastiq/backup-status.json}"
 RCLONE_REMOTE="${FIQ_RCLONE_REMOTE:-b2:forecastiq-backups}"
+DB_CONTAINER="${FIQ_DB_CONTAINER:-}"
 PG_IMAGE="postgres:16-alpine"
 TOLERANCE_PCT=2  # restored may be short of prod by at most this (dump age)
 MIN_VERIFIED=3   # at least this many tables must be actually verified
@@ -38,7 +42,13 @@ SCRATCH_NAME="fiq-restore-test-$$"
 TMP_DIR=""
 
 compose() { docker compose --project-directory "$COMPOSE_DIR" "$@"; }
-prod_psql() { compose exec -T db psql -U forecastiq -d forecastiq -t -A "$@"; }
+prod_psql() {
+  if [ -n "$DB_CONTAINER" ]; then
+    docker exec -i "$DB_CONTAINER" psql -U forecastiq -d forecastiq -t -A "$@"
+  else
+    compose exec -T db psql -U forecastiq -d forecastiq -t -A "$@"
+  fi
+}
 scratch_psql() { docker exec "$SCRATCH_NAME" psql -U postgres -d verify -t -A "$@"; }
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -69,7 +79,9 @@ EOF
 }
 
 cleanup() {
-  docker rm -f "$SCRATCH_NAME" >/dev/null 2>&1 || true
+  # -v: postgres:16-alpine declares an anonymous data volume; without -v every
+  # scratch run leaks ~the DB size and eventually fills the shared disk.
+  docker rm -fv "$SCRATCH_NAME" >/dev/null 2>&1 || true
   if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then rm -rf "$TMP_DIR"; fi
 }
 
@@ -84,7 +96,12 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found."
   write_restore_status "failed"; exit 1
 fi
-if ! compose ps --status running db --quiet 2>/dev/null | grep -q .; then
+if [ -n "$DB_CONTAINER" ]; then
+  if ! docker ps --filter "name=^${DB_CONTAINER}$" --filter status=running --quiet | grep -q .; then
+    echo "ERROR: co-tenant db container '${DB_CONTAINER}' is not running."
+    write_restore_status "failed"; exit 1
+  fi
+elif ! compose ps --status running db --quiet 2>/dev/null | grep -q .; then
   echo "ERROR: db service is not running under ${COMPOSE_DIR}."
   write_restore_status "failed"; exit 1
 fi
@@ -116,7 +133,7 @@ echo "  Using: ${DUMP_FILE}"
 
 # ── 2. Restore into a scratch container ──────────────────────────
 echo "[2/5] Restoring into scratch ${PG_IMAGE} container..."
-docker rm -f "$SCRATCH_NAME" >/dev/null 2>&1 || true
+docker rm -fv "$SCRATCH_NAME" >/dev/null 2>&1 || true
 docker run -d --name "$SCRATCH_NAME" -e POSTGRES_PASSWORD=scratch "$PG_IMAGE" >/dev/null
 for i in $(seq 1 30); do
   if docker exec "$SCRATCH_NAME" pg_isready -U postgres >/dev/null 2>&1; then break; fi

@@ -26,6 +26,12 @@
 #   FIQ_BACKUP_DIR          — dump directory (default /var/lib/forecastiq/backups)
 #   FIQ_BACKUP_STATUS_FILE  — status JSON path (default /var/lib/forecastiq/backup-status.json)
 #   FIQ_RCLONE_REMOTE       — offsite remote (default b2:forecastiq-backups)
+#   FIQ_DB_CONTAINER        — co-tenant topology: name of an EXTERNAL postgres
+#                             container to dump through (e.g. app-postgres-1).
+#                             When unset, uses the compose `db` service (ADR-033
+#                             standalone default).
+#   FIQ_RETENTION_DAYS      — local dump retention (default 30; co-tenant hosts
+#                             with tight disks may shorten this — offsite keeps 90d)
 #
 # On failure: non-zero exit + status file written as "failed" → alert A10
 # fires (forecastiq_backup_status != 1). -E ensures the ERR trap fires inside
@@ -38,7 +44,8 @@ COMPOSE_DIR="${FIQ_COMPOSE_DIR:-/opt/forecastiq}"
 BACKUP_DIR="${FIQ_BACKUP_DIR:-/var/lib/forecastiq/backups}"
 STATUS_FILE="${FIQ_BACKUP_STATUS_FILE:-/var/lib/forecastiq/backup-status.json}"
 RCLONE_REMOTE="${FIQ_RCLONE_REMOTE:-b2:forecastiq-backups}"
-RETENTION_DAYS=30
+DB_CONTAINER="${FIQ_DB_CONTAINER:-}"
+RETENTION_DAYS="${FIQ_RETENTION_DAYS:-30}"
 OFFSITE_RETENTION_DAYS=90
 PG_IMAGE="postgres:16-alpine"
 
@@ -49,6 +56,16 @@ SCRATCH_NAME="fiq-backup-verify-$$"
 DUMP_OK=0
 
 compose() { docker compose --project-directory "$COMPOSE_DIR" "$@"; }
+
+# DB access is topology-dependent: compose `db` service (standalone) or an
+# external co-tenant container named by FIQ_DB_CONTAINER.
+db_exec() {
+  if [ -n "$DB_CONTAINER" ]; then
+    docker exec -i "$DB_CONTAINER" "$@"
+  else
+    compose exec -T db "$@"
+  fi
+}
 
 # ── Helpers ──────────────────────────────────────────────────────
 write_status() {
@@ -85,7 +102,9 @@ EOF
 }
 
 cleanup_scratch() {
-  docker rm -f "$SCRATCH_NAME" >/dev/null 2>&1 || true
+  # -v: postgres:16-alpine declares an anonymous data volume; without -v every
+  # scratch run leaks ~the DB size and eventually fills the shared disk.
+  docker rm -fv "$SCRATCH_NAME" >/dev/null 2>&1 || true
 }
 
 on_error() {
@@ -110,7 +129,13 @@ if ! command -v docker >/dev/null 2>&1; then
   write_status "failed"
   exit 1
 fi
-if ! compose ps --status running db --quiet 2>/dev/null | grep -q .; then
+if [ -n "$DB_CONTAINER" ]; then
+  if ! docker ps --filter "name=^${DB_CONTAINER}$" --filter status=running --quiet | grep -q .; then
+    echo "ERROR: co-tenant db container '${DB_CONTAINER}' is not running."
+    write_status "failed"
+    exit 1
+  fi
+elif ! compose ps --status running db --quiet 2>/dev/null | grep -q .; then
   echo "ERROR: db service is not running under ${COMPOSE_DIR}."
   write_status "failed"
   exit 1
@@ -123,8 +148,8 @@ echo "Target: ${DUMP_FILE}"
 echo ""
 
 # ── 1. Dump via the db container (atomic: .tmp, mv on success) ───
-echo "[1/5] Running pg_dump (db container)..."
-compose exec -T db pg_dump -U forecastiq -Fc --no-owner --no-acl forecastiq > "$DUMP_TMP"
+echo "[1/5] Running pg_dump (${DB_CONTAINER:-db service})..."
+db_exec pg_dump -U forecastiq -Fc --no-owner --no-acl forecastiq > "$DUMP_TMP"
 mv "$DUMP_TMP" "$DUMP_FILE"
 DUMP_SIZE=$(stat -c%s "$DUMP_FILE" 2>/dev/null || stat -f%z "$DUMP_FILE")
 echo "  Dump complete: ${DUMP_SIZE} bytes"
